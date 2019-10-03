@@ -1,0 +1,21 @@
+
+August 4, 2008
+
+Step 1:  Run the routines in GUI_TopoFlow (GUI_main.pro) that load the
+         structures with defaults.
+          
+         Get_Run_Vars, Get_Grid_Vars, etc.
+
+Step 2:  Put all these into a "bunch" called "mstate", as done in (1).
+         Don't worry about vars in "mstate" related to GUI yet.
+
+Step 3:  (Optionally)  Override all of the defaults in the structures
+         with a call to "load_all_tf_vars" (save_load.py).  This function
+         needs mstate as an argument.  (Using this will require an input
+         file from Scott generated with the IDL GUI.)  Would need to
+         replace "dialog_pickfile" call with prompt for a filename at
+         the command line.
+
+Step 4:  Call Route_Flow (route.pro) with all the structures as input
+         arguments and a few 1D arrays as (optional) output variables.
+

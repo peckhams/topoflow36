@@ -1,0 +1,84 @@
+
+<process proc_name="Groundwater" method_name="Darcy Surface Layers">
+<proc_name> Groundwater </proc_name>
+<method_name> Darcy Surface Layers </method_name>
+
+<box name="Grids">
+    <name> Grids </name>
+    <variable>
+        <name> Seepage rate </name>
+        <label> seep_rate </label>
+        <units> mm/day </units>
+        <value> Case1_2D-seeprate.rts </value>
+    </variable>
+
+    <variable>
+        <name> Elev. of water table </name>
+        <label> h_table </label>
+        <units> m </units>
+        <value> Case1_2D-htable.rts </value>
+    </variable>
+
+    <variable>
+        <name> Depth of freeze </name>
+        <label> h_freeze </label>
+        <units> m </units>
+        <value> Case1_2D-hfreeze.rts </value>
+    </variable>
+
+    <variable>
+        <name> Depth of thaw </name>
+        <label> h_thaw </label>
+        <units> m </units>
+        <value> Case1_2D-hthaw.rts </value>
+    </variable>
+
+    <timestep>
+        <label> At this timestep </label>
+        <value> 1.0 </value>
+        <units> minute </units>
+    </timestep>
+</box>
+
+
+<box name="Values">
+    <name> Values </name>
+    <variable>
+        <name> Seepage rate </name>
+        <label> seep_rate </label>
+        <units> mm/day </units>
+        <value> Case1_0D-seeprate.txt </value>
+    </variable>
+
+    <variable>
+        <name> Elev. of water table </name>
+        <label> h_table </label>
+        <units> m </units>
+        <value> Case1_0D-htable.txt </value>
+    </variable>
+
+    <variable>
+        <name> Depth of freeze </name>
+        <label> h_freeze </label>
+        <units> m </units>
+        <value> Case1_0D-hfreeze.txt </value>
+    </variable>
+
+    <variable>
+        <name> Depth of thaw </name>
+        <label> h_thaw </label>
+        <units> m </units>
+        <value> Case1_0D-hthaw.txt </value>
+    </variable>
+
+    <timestep>
+        <label> At this timestep </label>
+        <value> 1.0 </value>
+        <units> minute </units>
+    </timestep>
+</box>
+    
+    <help_file> /Applications/TopoFlow/help/infil_output_choices.htm
+    </help_file>
+
+</process>

@@ -1,0 +1,348 @@
+
+<process proc_name="Infiltration" method_name="Richards 1D">
+<proc_name> Infiltration </proc_name>
+<method_name> Richards 1D </method_name>
+
+<layer name="Soil Layer 1">
+    <name> Soil Layer 1 </name>
+    <variable>
+        <name> saturated hydraulic conductivity </name>
+        <label> K_s </label>
+        <units> m/s </units>
+        <value> 7.20e-06 </value>
+        <type> Scalar </type>
+        <type_choices> Scalar, Time series, Grid, Grid sequence </type_choices>
+    </variable>
+
+    <variable>
+        <name> initial hydraulic conductivity </name>
+        <label> K_i </label>
+        <units> m/s </units>
+        <value> 9.849e-08 </value>
+        <type> Scalar </type>
+        <type_choices> Scalar, Time series, Grid, Grid sequence </type_choices>
+    </variable>
+
+    <variable>
+        <name> saturated soil water content </name>
+        <label> theta_s </label>
+        <units> none </units>
+        <value> 0.485 </value>
+        <type> Scalar </type>
+        <type_choices> Scalar, Time series, Grid, Grid sequence </type_choices>
+    </variable>
+
+    <variable>
+        <name> initial soil water content </name>
+        <label> theta_i </label>
+        <units> none </units>
+        <value> 0.3758 </value>
+        <type> Scalar </type>
+        <type_choices> Scalar, Time series, Grid, Grid sequence </type_choices>
+    </variable>
+
+    <variable>
+        <name> residual soil water content </name>
+        <label> theta_r </label>
+        <units> none </units>
+        <value> 0.0815 </value>
+        <type> Scalar </type>
+        <type_choices> Scalar, Time series, Grid, Grid sequence </type_choices>
+    </variable>
+
+    <variable>
+        <name> bubbling pressure head </name>
+        <label> psi_B </label>
+        <units> m </units>
+        <value> -0.786 </value>
+        <type> Scalar </type>
+        <type_choices> Scalar, Time series, Grid, Grid sequence </type_choices>
+    </variable>
+
+    <variable>
+        <name> pressure head offset parameter </name>
+        <label> psi_A </label>
+        <units> m </units>
+        <value> 0.0 </value>
+        <type> Scalar </type>
+        <type_choices> Scalar, Time series, Grid, Grid sequence </type_choices>
+    </variable>
+
+    <variable>
+        <name> pore-size distribution parameter </name>
+        <label> lambda </label>
+        <units> none </units>
+        <value> 0.18868 </value>
+        <type> Scalar </type>
+        <type_choices> Scalar, Time series, Grid, Grid sequence </type_choices>
+    </variable>
+
+    <variable>
+        <name> transitional Brooks-Corey curvature parameter </name>
+        <label> c </label>
+        <units> none </units>
+        <value> 1.0 </value>
+        <type> Scalar </type>
+        <type_choices> Scalar, Time series, Grid, Grid sequence </type_choices>
+    </variable>
+
+    <variable>
+        <name> vertical distance between nodes </name>
+        <label> dz_nodes </label>
+        <units> m </units>
+        <value> 0.03 </value>
+        <type> Scalar </type>
+        <type_choices> Scalar, Time series, Grid, Grid sequence </type_choices>
+    </variable>
+
+    <variable>
+        <name> number of subsurface vertical nodes </name>
+        <label> n_nodes </label>
+        <units> none </units>
+        <value> 20 </value>
+        <type> Scalar </type>
+        <type_choices> Scalar, Time series, Grid, Grid sequence </type_choices>
+    </variable>
+
+    <droplist>
+        <label> Closest standard soil type </label>
+        <value> Silt loam </value>
+        <choices> Sand, Loamy sand, Sandy loam, Silt loam, Loam, 
+                  Sandy clay loam, Silty clay loam, Clay loam,
+                  Sandy clay, Silty clay, Clay </choices>
+    </droplist>
+</layer>
+
+
+<layer name="Soil Layer 2">
+    <variable>
+        <name> saturated hydraulic conductivity </name>
+        <label> K_s </label>
+        <units> m/s </units>
+        <value> 6.95e-06 </value>
+        <type> Scalar </type>
+        <type_choices> Scalar, Time series, Grid, Grid sequence </type_choices>
+    </variable>
+
+    <variable>
+        <name> initial hydraulic conductivity </name>
+        <label> K_i </label>
+        <units> m/s </units>
+        <value> 3.293e-08 </value>
+        <type> Scalar </type>
+        <type_choices> Scalar, Time series, Grid, Grid sequence </type_choices>
+    </variable>
+
+    <variable>
+        <name> saturated soil water content </name>
+        <label> theta_s </label>
+        <units> none </units>
+        <value> 0.4510 </value>
+        <type> Scalar </type>
+        <type_choices> Scalar, Time series, Grid, Grid sequence </type_choices>
+    </variable>
+
+    <variable>
+        <name> initial soil water content </name>
+        <label> theta_i </label>
+        <units> none </units>
+        <value> 0.3288 </value>
+        <type> Scalar </type>
+        <type_choices> Scalar, Time series, Grid, Grid sequence </type_choices>
+    </variable>
+
+    <variable>
+        <name> residual soil water content </name>
+        <label> theta_r </label>
+        <units> none </units>
+        <value> 0.0712 </value>
+        <type> Scalar </type>
+        <type_choices> Scalar, Time series, Grid, Grid sequence </type_choices>
+    </variable>
+
+    <variable>
+        <name> bubbling pressure head </name>
+        <label> psi_B </label>
+        <units> m </units>
+        <value> -0.4780 </value>
+        <type> Scalar </type>
+        <type_choices> Scalar, Time series, Grid, Grid sequence </type_choices>
+    </variable>
+
+    <variable>
+        <name> pressure head offset parameter </name>
+        <label> psi_A </label>
+        <units> m </units>
+        <value> 0.0 </value>
+        <type> Scalar </type>
+        <type_choices> Scalar, Time series, Grid, Grid sequence </type_choices>
+    </variable>
+
+    <variable>
+        <name> pore-size distribution parameter </name>
+        <label> lambda </label>
+        <units> none </units>
+        <value> 0.1855 </value>
+        <type> Scalar </type>
+        <type_choices> Scalar, Time series, Grid, Grid sequence </type_choices>
+    </variable>
+
+    <variable>
+        <name> transitional Brooks-Corey curvature parameter </name>
+        <label> c </label>
+        <units> none </units>
+        <value> 1.0 </value>
+        <type> Scalar </type>
+        <type_choices> Scalar, Time series, Grid, Grid sequence </type_choices>
+    </variable>
+
+    <variable>
+        <name> vertical distance between nodes </name>
+        <label> dz_nodes </label>
+        <units> m </units>
+        <value> 0.03 </value>
+        <type> Scalar </type>
+        <type_choices> Scalar, Time series, Grid, Grid sequence </type_choices>
+    </variable>
+
+    <variable>
+        <name> number of subsurface vertical nodes </name>
+        <label> n_nodes </label>
+        <units> none </units>
+        <value> 20 </value>
+        <type> Scalar </type>
+        <type_choices> Scalar, Time series, Grid, Grid sequence </type_choices>
+    </variable>
+
+    <droplist>
+        <label> Closest standard soil type </label>
+        <value> Loam </value>
+        <choices> Sand, Loamy sand, Sandy loam, Silt loam, Loam, 
+                  Sandy clay loam, Silty clay loam, Clay loam,
+                  Sandy clay, Silty clay, Clay </choices>
+    </droplist>
+</layer>
+
+
+<layer name="Soil Layer 3">
+    <variable>
+        <name> saturated hydraulic conductivity </name>
+        <label> K_s </label>
+        <units> m/s </units>
+        <value> 2.450e-06 </value>
+        <type> Scalar </type>
+        <type_choices> Scalar, Time series, Grid, Grid sequence </type_choices>
+    </variable>
+
+    <variable>
+        <name> initial hydraulic conductivity </name>
+        <label> K_i </label>
+        <units> m/s </units>
+        <value> 3.115e-08 </value>
+        <type> Scalar </type>
+        <type_choices> Scalar, Time series, Grid, Grid sequence </type_choices>
+    </variable>
+
+    <variable>
+        <name> saturated soil water content </name>
+        <label> theta_s </label>
+        <units> none </units>
+        <value> 0.4760 </value>
+        <type> Scalar </type>
+        <type_choices> Scalar, Time series, Grid, Grid sequence </type_choices>
+    </variable>
+
+    <variable>
+        <name> initial soil water content </name>
+        <label> theta_i </label>
+        <units> none </units>
+        <value> 0.4128 </value>
+        <type> Scalar </type>
+        <type_choices> Scalar, Time series, Grid, Grid sequence </type_choices>
+    </variable>
+
+    <variable>
+        <name> residual soil water content </name>
+        <label> theta_r </label>
+        <units> none </units>
+        <value> 0.1530 </value>
+        <type> Scalar </type>
+        <type_choices> Scalar, Time series, Grid, Grid sequence </type_choices>
+    </variable>
+
+    <variable>
+        <name> bubbling pressure head </name>
+        <label> psi_B </label>
+        <units> m </units>
+        <value> -0.630 </value>
+        <type> Scalar </type>
+        <type_choices> Scalar, Time series, Grid, Grid sequence </type_choices>
+    </variable>
+
+    <variable>
+        <name> pressure head offset parameter </name>
+        <label> psi_A </label>
+        <units> m </units>
+        <value> 0.0 </value>
+        <type> Scalar </type>
+        <type_choices> Scalar, Time series, Grid, Grid sequence </type_choices>
+    </variable>
+
+    <variable>
+        <name> pore-size distribution parameter </name>
+        <label> lambda </label>
+        <units> none </units>
+        <value> 0.1174 </value>
+        <type> Scalar </type>
+        <type_choices> Scalar, Time series, Grid, Grid sequence </type_choices>
+    </variable>
+
+    <variable>
+        <name> transitional Brooks-Corey curvature parameter </name>
+        <label> c </label>
+        <units> none </units>
+        <value> 1.0 </value>
+        <type> Scalar </type>
+        <type_choices> Scalar, Time series, Grid, Grid sequence </type_choices>
+    </variable>
+
+    <variable>
+        <name> vertical distance between nodes </name>
+        <label> dz_nodes </label>
+        <units> m </units>
+        <value> 0.03 </value>
+        <type> Scalar </type>
+        <type_choices> Scalar, Time series, Grid, Grid sequence </type_choices>
+    </variable>
+
+    <variable>
+        <name> number of subsurface vertical nodes </name>
+        <label> n_nodes </label>
+        <units> none </units>
+        <value> 20 </value>
+        <type> Scalar </type>
+        <type_choices> Scalar, Time series, Grid, Grid sequence </type_choices>
+    </variable>
+
+    <droplist>
+        <label> Closest standard soil type </label>
+        <value> Clay loam </value>
+        <choices> Sand, Loamy sand, Sandy loam, Silt loam, Loam, 
+                  Sandy clay loam, Silty clay loam, Clay loam,
+                  Sandy clay, Silty clay, Clay </choices>
+    </droplist>
+</layer>
+
+    <timestep>
+        <label> Infiltration process timestep </label>
+        <value> 6.0 </value>
+        <units> seconds </units>
+    </timestep>
+    
+    <help_file> /Applications/TopoFlow/help/infil_Richards_1D.htm
+    </help_file>
+
+    <note_label> Note: Timestep must not exceed min precip duration.
+    </note_label>
+
+</process>

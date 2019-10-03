@@ -1,0 +1,159 @@
+
+<process proc_name="Infiltration" method_name="Richards 1D">
+<proc_name> Infiltration </proc_name>
+<method_name> Richards 1D </method_name>
+
+<box name="Grids">
+    <name> Grids </name>
+    <variable>
+        <name> Infiltration rate </name>
+        <label> infil_rate </label>
+        <units> m/s </units>
+        <value> Case1_2D-v0.rts </value>
+    </variable>
+
+    <variable>
+        <name> Total infiltrated depth </name>
+        <label> I </label>
+        <units> m </units>
+        <value> Case1_2D-I.rts </value>
+    </variable>
+
+    <variable>
+        <name> Surface soil moisture </name>
+        <label> theta_0 </label>
+        <units> none </units>
+        <value> Case1_2D_q0.rts </value>
+    </variable>
+
+    <variable>
+        <name> Wetting front depth </name>
+        <label> Zw </label>
+        <units> m </units>
+        <value> Case1_2D_Zw.rts </value>
+    </variable>
+
+    <timestep>
+        <label> At this timestep </label>
+        <value> 1.0 </value>
+        <units> minute </units>
+    </timestep>
+</box>
+
+
+<box name="Values">
+    <name> Values </name>
+    <variable>
+        <name> Infiltration rate </name>
+        <label> infil_rate </label>
+        <units> m/s </units>
+        <value> Case1_0D-v0.txt </value>
+    </variable>
+
+    <variable>
+        <name> Total infiltrated depth </name>
+        <label> I </label>
+        <units> m </units>
+        <value> Case1_0D-I.txt </value>
+    </variable>
+
+    <variable>
+        <name> Surface soil moisture </name>
+        <label> theta_0 </label>
+        <units> none </units>
+        <value> Case1_0D_q0.txt </value>
+    </variable>
+
+    <variable>
+        <name> Wetting front depth </name>
+        <label> Zw </label>
+        <units> m </units>
+        <value> Case1_0D_Zw.txt </value>
+    </variable>
+
+    <timestep>
+        <label> At this timestep </label>
+        <value> 1.0 </value>
+        <units> minute </units>
+    </timestep>
+</box>
+
+<box name="Stacks">
+    <name> Stacks </name>
+    <variable>
+        <name> Infiltration rate </name>
+        <label> infil_rate </label>
+        <units> m/s </units>
+        <value> Case1_3D-v0.rt3 </value>
+    </variable>
+
+    <variable>
+        <name> Total infiltrated depth </name>
+        <label> I </label>
+        <units> m </units>
+        <value> Case1_3D-I.rt3 </value>
+    </variable>
+
+    <variable>
+        <name> Surface soil moisture </name>
+        <label> theta_0 </label>
+        <units> none </units>
+        <value> Case1_3D_q0.rt3 </value>
+    </variable>
+
+    <variable>
+        <name> Wetting front depth </name>
+        <label> Zw </label>
+        <units> m </units>
+        <value> Case1_3D_Zw.rt3 </value>
+    </variable>
+
+    <timestep>
+        <label> At this timestep </label>
+        <value> 1.0 </value>
+        <units> minute </units>
+    </timestep>
+</box>
+
+
+<box name="Z-Profiles">
+    <name> Z-Profiles </name>
+    <variable>
+        <name> Infiltration rate </name>
+        <label> infil_rate </label>
+        <units> m/s </units>
+        <value> Case1_1D-v0.txt </value>
+    </variable>
+
+    <variable>
+        <name> Total infiltrated depth </name>
+        <label> I </label>
+        <units> m </units>
+        <value> Case1_1D-I.txt </value>
+    </variable>
+
+    <variable>
+        <name> Surface soil moisture </name>
+        <label> theta_0 </label>
+        <units> none </units>
+        <value> Case1_1D_q0.txt </value>
+    </variable>
+
+    <variable>
+        <name> Wetting front depth </name>
+        <label> Zw </label>
+        <units> m </units>
+        <value> Case1_1D_Zw.txt </value>
+    </variable>
+
+    <timestep>
+        <label> At this timestep </label>
+        <value> 1.0 </value>
+        <units> minute </units>
+    </timestep>
+</box>
+    
+    <help_file> /Applications/TopoFlow/help/infil_output_choices.htm
+    </help_file>
+
+</process>

@@ -1,0 +1,80 @@
+
+<process proc_name="Channel" method_name="Dynamic Wave - Law of Wall">
+<proc_name> Channel </proc_name>
+<method_name> Dynamic Wave - Law of Wall </method_name>
+
+<layer>
+    <variable>
+        <name> D8 flow direction codes </name>
+        <label> flow_codes </label>
+        <units> none </units>
+        <value> Treynor_flow.rtg </value>
+        <type> Grid </type>
+        <type_choices> Grid </type_choices>
+    </variable>
+
+    <variable>
+        <name> channel bed slope </name>
+        <label> bed_slope </label>
+        <units> m/m </units>
+        <value> Treynor_slope.rtg </value>
+        <type> Grid </type>
+        <type_choices> Grid </type_choices>
+    </variable>
+
+    <variable>
+        <name> law of wall roughness coefficient </name>
+        <label> z0_roughness </label>
+        <units> meters </units>
+        <value> Treynor_chan-z0.rtg </value>
+        <type> Grid </type>
+        <type_choices> Scalar, Grid </type_choices>
+    </variable>
+
+    <variable>
+        <name> channel bed bottom width </name>
+        <label> bed_width </label>
+        <units> meters </units>
+        <value> Treynor_chan-w.rtg </value>
+        <type> Grid </type>
+        <type_choices> Scalar, Grid </type_choices>
+    </variable>
+
+    <variable>
+        <name> channel bank angle </name>
+        <label> bank_angle </label>
+        <units> deg </units>
+        <value> Treynor_chan-a.rtg </value>
+        <type> Grid </type>
+        <type_choices> Scalar, Grid </type_choices>
+    </variable>
+
+    <variable>
+        <name> channel sinuosity </name>
+        <label> sinuosity </label>
+        <units> none </units>
+        <value> 1.0 </value>
+        <type> Scalar </type>
+        <type_choices> Scalar, Grid </type_choices>
+    </variable>
+
+    <variable>
+        <name> initial water depth </name>
+        <label> init_depth </label>
+        <units> meters </units>
+        <value> 0.0 </value>
+        <type> Scalar </type>
+        <type_choices> Scalar, Grid </type_choices>
+    </variable>
+    
+    <timestep>
+        <label> Channel process timestep </label>
+        <value> 6.0 </value>
+        <units> seconds </units>
+    </timestep>
+    
+    <help_file> /Applications/TopoFlow/help/channel_dyn_wave.htm
+    </help_file>
+
+</layer>
+</process>

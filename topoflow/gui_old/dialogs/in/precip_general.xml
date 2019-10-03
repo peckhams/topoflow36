@@ -1,0 +1,38 @@
+
+<process proc_name="Precipitation" method_name="General Data Types">
+<proc_name> Precipitation </proc_name>
+<method_name> General Data Types </method_name>
+
+<layer>
+    <variable>
+        <name> precipitation rate </name>
+        <label> rate </label>
+        <units> mm/hr </units>
+        <value> 180.0 </value>
+        <type> Scalar </type>
+        <type_choices> Scalar, Time series, Grid, Grid sequence </type_choices>
+    </variable>
+
+    <variable>
+        <name> precip. duration at a given rate </name>
+        <label> duration </label>
+        <units> min </units>
+        <value> 60 </value>
+        <type> Scalar </type>
+        <type_choices> Scalar, Time series, Grid, Grid sequence </type_choices>
+    </variable>
+
+    <variable>
+        <name> air temperature </name>
+        <label> T_air </label>
+        <units> deg_C </units>
+        <value> 20.0 </value>
+        <type> Scalar </type>
+        <type_choices> Scalar, Time series, Grid, Grid sequence </type_choices>
+    </variable>
+    
+    <help_file> /Applications/TopoFlow/help/precip_general.htm
+    </help_file>
+
+</layer>
+</process>

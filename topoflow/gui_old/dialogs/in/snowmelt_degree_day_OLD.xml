@@ -1,0 +1,16 @@
+<!-- <?xml version="1.0" encoding="UTF-8"?>  -->
+
+<!-- S.D. Peckham -->
+<!-- August 11, 2008 -->
+<!-- XML Test document -->
+
+<process name="Snowmelt" method="Degree-Day">
+    <variable>
+        <long_name> degree-day coefficient </long_name>
+        <short_name> c0 </short_name>
+        <label> c0 </label>
+        <unit_string> mm/day/deg_C </unit_string>
+        <default_value> 1.0 </default_value>
+        <type_choices> Scalar, Time series, Grid, Grid sequence </type_choices>
+    </variable>
+</process>

@@ -1,0 +1,71 @@
+
+<process proc_name="Snowmelt" method_name="Degree-Day">
+<proc_name> Snowmelt </proc_name>
+<method_name> Degree-Day </method_name>
+
+<layer>
+    <variable>
+        <name> degree-day coefficient </name>
+        <label> c0 </label>
+        <units> mm/day/deg_C </units>
+        <value> 1.0 </value>
+        <type> Scalar </type>
+        <type_choices> Scalar, Time series, Grid, Grid sequence </type_choices>
+    </variable>
+
+    <variable>
+        <name> surface temperature </name>
+        <label> T0 </label>
+        <units> deg_C </units>
+        <value> 20.0 </value>
+        <type> Scalar </type>
+        <type_choices> Scalar, Time series, Grid, Grid sequence </type_choices>
+    </variable>
+
+    <variable>
+        <name> air temperature </name>
+        <label> T_air </label>
+        <units> deg_C </units>
+        <value> 25.0 </value>
+        <type> Scalar </type>
+        <type_choices> Scalar, Time series, Grid, Grid sequence </type_choices>
+    </variable>
+
+    <variable>
+        <name> snow density </name>
+        <label> rho_snow </label>
+        <units> kg/m^3 </units>
+        <value> 300.0 </value>
+        <type> Scalar </type>
+        <type_choices> Scalar, Time series, Grid, Grid sequence </type_choices>
+    </variable>
+
+    <variable>
+        <name> initial snow depth </name>
+        <label> h0_snow </label>
+        <units> m </units>
+        <value> 0.5 </value>
+        <type> Scalar </type>
+        <type_choices> Scalar, Time series, Grid, Grid sequence </type_choices>
+    </variable>
+
+    <variable>
+        <name> initial snow water equivalent </name>
+        <label> h0_swe </label>
+        <units> m </units>
+        <value> 0.15 </value>
+        <type> Scalar </type>
+        <type_choices> Scalar, Time series, Grid, Grid sequence </type_choices>
+    </variable>
+    
+    <timestep>
+        <label> Snowmelt process timestep </label>
+        <value> 3600.0 </value>
+        <units> seconds </units>
+    </timestep>
+    
+    <help_file> /Applications/TopoFlow/help/snowmelt_degree_day.htm
+    </help_file>
+
+</layer>
+</process>

@@ -1,0 +1,152 @@
+
+<process proc_name="Snowmelt" method_name="Energy Balance">
+<proc_name> Snowmelt </proc_name>
+<method_name> Energy Balance </method_name>
+
+<layer>
+    <variable>
+        <name> net shortwave radiation </name>
+        <label> Qnet_SW </label>
+        <units> W/m**2 </units>
+        <value> 100.0 </value>
+        <type> Scalar </type>
+        <type_choices> Scalar, Time series, Grid, Grid sequence </type_choices>
+    </variable>
+
+    <variable>
+        <name> net longwave radiation </name>
+        <label> Qnet_LW </label>
+        <units> W/m**2 </units>
+        <value> 10.0 </value>
+        <type> Scalar </type>
+        <type_choices> Scalar, Time series, Grid, Grid sequence </type_choices>
+    </variable>
+
+    <variable>
+        <name> air temperature </name>
+        <label> T_air </label>
+        <units> deg_C </units>
+        <value> 20.0 </value>
+        <type> Scalar </type>
+        <type_choices> Scalar, Time series, Grid, Grid sequence </type_choices>
+    </variable>
+
+    <variable>
+        <name> surface temperature </name>
+        <label> T_surf </label>
+        <units> deg_C </units>
+        <value> 5.0 </value>
+        <type> Scalar </type>
+        <type_choices> Scalar, Time series, Grid, Grid sequence </type_choices>
+    </variable>
+
+    <variable>
+        <name> relative humidity </name>
+        <label> RH </label>
+        <units> none ( in [0,1] ) </units>
+        <value> 0.5 </value>
+        <type> Scalar </type>
+        <type_choices> Scalar, Time series, Grid, Grid sequence </type_choices>
+    </variable>
+
+    <variable>
+        <name> atmospheric pressure </name>
+        <label> p0 </label>
+        <units> mbar </units>
+        <value> 1000.0 </value>
+        <type> Scalar </type>
+        <type_choices> Scalar, Time series, Grid, Grid sequence </type_choices>
+    </variable>
+
+    <variable>
+        <name> air velocity at height z </name>
+        <label> uz </label>
+        <units> m/s </units>
+        <value> 3.0 </value>
+        <type> Scalar </type>
+        <type_choices> Scalar, Time series, Grid, Grid sequence </type_choices>
+    </variable>
+
+    <variable>
+        <name> reference height </name>
+        <label> z </label>
+        <units> m </units>
+        <value> 10.0 </value>
+        <type> Scalar </type>
+        <type_choices> Scalar, Time series, Grid, Grid sequence </type_choices>
+    </variable>
+
+    <variable>
+        <name> roughness parameter, air </name>
+        <label> z0_air </label>
+        <units> m </units>
+        <value> 0.02 </value>
+        <type> Scalar </type>
+        <type_choices> Scalar, Time series, Grid, Grid sequence </type_choices>
+    </variable>
+
+    <variable>
+        <name> initial snow depth </name>
+        <label> h0_snow </label>
+        <units> m </units>
+        <value> 0.5 </value>
+        <type> Scalar </type>
+        <type_choices> Scalar, Time series, Grid, Grid sequence </type_choices>
+    </variable>
+
+    <variable>
+        <name> initial snow water equivalent </name>
+        <label> h0_swe </label>
+        <units> m </units>
+        <value> 0.15 </value>
+        <type> Scalar </type>
+        <type_choices> Scalar, Time series, Grid, Grid sequence </type_choices>
+    </variable>
+
+    <variable>
+        <name> snow density </name>
+        <label> rho_snow </label>
+        <units> kg/m**3 </units>
+        <value> 300.0 </value>
+        <type> Scalar </type>
+        <type_choices> Scalar, Time series, Grid, Grid sequence </type_choices>
+    </variable>
+
+    <variable>
+        <name> heat capacity of snow </name>
+        <label> Cp_snow </label>
+        <units> J/(kg deg_C) </units>
+        <value> 2090.0 </value>
+        <type> Scalar </type>
+        <type_choices> Scalar, Time series, Grid, Grid sequence </type_choices>
+    </variable>
+
+    <variable>
+        <name> air density </name>
+        <label> rho_air </label>
+        <units> kg/m**3 </units>
+        <value> 1.26140 </value>
+        <type> Scalar </type>
+        <type_choices> Scalar, Time series, Grid, Grid sequence </type_choices>
+    </variable>
+
+    <variable>
+        <name> heat capacity of air </name>
+        <label> Cp_air </label>
+        <units> J/(kg deg_C) </units>
+        <value> 1005.70 </value>
+        <type> Scalar </type>
+        <type_choices> Scalar, Time series, Grid, Grid sequence </type_choices>
+    </variable>
+    
+    <timestep>
+        <label> Snowmelt process timestep </label>
+        <value> 3600.0 </value>
+        <units> seconds </units>
+    </timestep>
+    
+    <help_file> /Applications/TopoFlow/help/snowmelt_energy_balance.htm
+    </help_file>
+
+</layer>
+</process>

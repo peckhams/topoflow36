@@ -1,0 +1,83 @@
+
+<process proc_name="Channel" method_name="All">
+<proc_name> Channel </proc_name>
+
+<box name="Grids">
+    <name> Grids </name>
+    <variable>
+        <name> Discharge </name>
+        <label> Q </label>
+        <units> m**3/s </units>
+        <value> Case1_2D-Q.rts </value>
+    </variable>
+
+    <variable>
+        <name> Velocity </name>
+        <label> v </label>
+        <units> m/s </units>
+        <value> Case1_2D-v.rts </value>
+    </variable>
+
+    <variable>
+        <name> Flow depth </name>
+        <label> d </label>
+        <units> meters </units>
+        <value> Case1_2D-d.rts </value>
+    </variable>
+
+    <variable>
+        <name> Friction factor </name>
+        <label> f </label>
+        <units> none </units>
+        <value> Case1_2D-f.rts </value>
+    </variable>
+
+    <timestep>
+        <label> At this timestep </label>
+        <value> 1.0 </value>
+        <units> minute </units>
+    </timestep>
+</box>
+
+
+<box name="Values">
+    <name> Values </name>
+    <variable>
+        <name> Discharge </name>
+        <label> Q </label>
+        <units> m**3/s </units>
+        <value> Case1_0D-Q.txt </value>
+    </variable>
+
+    <variable>
+        <name> Velocity </name>
+        <label> v </label>
+        <units> m/s </units>
+        <value> Case1_0D-v.txt </value>
+    </variable>
+
+    <variable>
+        <name> Flow depth </name>
+        <label> d </label>
+        <units> meters </units>
+        <value> Case1_0D-d.txt </value>
+    </variable>
+
+    <variable>
+        <name> Friction factor </name>
+        <label> f </label>
+        <units> none </units>
+        <value> Case1_0D-f.txt </value>
+    </variable>
+
+    <timestep>
+        <label> At this timestep </label>
+        <value> 1.0 </value>
+        <units> minute </units>
+    </timestep>
+</box>
+    
+    <help_file> /Applications/TopoFlow/help/channel_output_choices.htm
+    </help_file>
+
+</process>

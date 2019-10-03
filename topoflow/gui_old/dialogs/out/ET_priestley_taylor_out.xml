@@ -1,0 +1,42 @@
+
+<process proc_name="Evaporation" method_name="Priestley-Taylor">
+<proc_name> Evaporation </proc_name>
+<method_name> Priestley-Taylor </method_name>
+
+<box name="Grids">
+    <name> Grids </name>
+    <variable>
+        <name> Evaporation rate </name>
+        <label> evap_rate </label>
+        <units> mm/day </units>
+        <value> Case1_2D-ETrate.rts </value>
+    </variable>
+
+    <timestep>
+        <label> At this timestep </label>
+        <value> 1.0 </value>
+        <units> minute </units>
+    </timestep>
+</box>
+
+
+<box name="Values">
+    <name> Values </name>
+    <variable>
+        <name> Evaporation rate </name>
+        <label> evap_rate </label>
+        <units> mm/day </units>
+        <value> Case1_0D-ETrate.txt </value>
+    </variable>
+
+    <timestep>
+        <label> At this timestep </label>
+        <value> 1.0 </value>
+        <units> minute </units>
+    </timestep>
+</box>
+    
+    <help_file> /Applications/TopoFlow/help/ET_output_choices.htm
+    </help_file>
+
+</process>

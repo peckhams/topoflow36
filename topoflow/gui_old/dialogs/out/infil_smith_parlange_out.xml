@@ -1,0 +1,56 @@
+
+<process proc_name="Infiltration" method_name="Smith-Parlange">
+<proc_name> Infiltration </proc_name>
+<method_name> Smith-Parlange </method_name>
+
+<box name="Grids">
+    <name> Grids </name>
+    <variable>
+        <name> Infiltration rate </name>
+        <label> infil_rate </label>
+        <units> m/s </units>
+        <value> Case1_2D-v0.rts </value>
+    </variable>
+
+    <variable>
+        <name> Total infiltrated depth </name>
+        <label> I </label>
+        <units> m </units>
+        <value> Case1_2D-I.rts </value>
+    </variable>
+
+    <timestep>
+        <label> At this timestep </label>
+        <value> 1.0 </value>
+        <units> minute </units>
+    </timestep>
+</box>
+
+
+<box name="Values">
+    <name> Values </name>
+    <variable>
+        <name> Infiltration rate </name>
+        <label> infil_rate </label>
+        <units> m/s </units>
+        <value> Case1_0D-v0.txt </value>
+    </variable>
+
+    <variable>
+        <name> Total infiltrated depth </name>
+        <label> I </label>
+        <units> m </units>
+        <value> Case1_0D-I.txt </value>
+    </variable>
+
+    <timestep>
+        <label> At this timestep </label>
+        <value> 1.0 </value>
+        <units> minute </units>
+    </timestep>
+</box>
+    
+    <help_file> /Applications/TopoFlow/help/infil_output_choices.htm
+    </help_file>
+
+</process>

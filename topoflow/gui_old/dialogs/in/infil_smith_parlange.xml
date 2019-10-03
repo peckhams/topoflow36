@@ -1,0 +1,82 @@
+
+<process proc_name="Infiltration" method_name="Smith-Parlange">
+<proc_name> Infiltration </proc_name>
+<method_name> Smith-Parlange </method_name>
+
+<layer>
+    <variable>
+        <name> saturated hydraulic conductivity </name>
+        <label> K_s </label>
+        <units> m/s </units>
+        <value> 7.20e-06 </value>
+        <type> Scalar </type>
+        <type_choices> Scalar, Time series, Grid, Grid sequence </type_choices>
+    </variable>
+
+    <variable>
+        <name> initial hydraulic conductivity </name>
+        <label> K_i </label>
+        <units> m/s </units>
+        <value> 9.849e-08 </value>
+        <type> Scalar </type>
+        <type_choices> Scalar, Time series, Grid, Grid sequence </type_choices>
+    </variable>
+
+    <variable>
+        <name> saturated soil water content </name>
+        <label> theta_s </label>
+        <units> none </units>
+        <value> 0.485 </value>
+        <type> Scalar </type>
+        <type_choices> Scalar, Time series, Grid, Grid sequence </type_choices>
+    </variable>
+
+    <variable>
+        <name> initial soil water content </name>
+        <label> theta_i </label>
+        <units> none </units>
+        <value> 0.3758 </value>
+        <type> Scalar </type>
+        <type_choices> Scalar, Time series, Grid, Grid sequence </type_choices>
+    </variable>
+
+    <variable>
+        <name> capillary length scale </name>
+        <label> G </label>
+        <units> m </units>
+        <value> 0.724 </value>
+        <type> Scalar </type>
+        <type_choices> Scalar, Time series, Grid, Grid sequence </type_choices>
+    </variable>
+
+    <variable>
+        <name> Smith-Parlange parameter </name>
+        <label> gamma </label>
+        <units> none (in [0,1]) </units>
+        <value> 0.82 </value>
+        <type> Scalar </type>
+        <type_choices> Scalar, Time series, Grid, Grid sequence </type_choices>
+    </variable>
+
+    <droplist>
+        <label> Closest standard soil type: </label>
+        <value> Silt loam </value>
+        <choices> Sand, Loamy sand, Sandy loam, Silt loam, Loam, 
+                  Sandy clay loam, Silty clay loam, Clay loam,
+                  Sandy clay, Silty clay, Clay </choices>
+    </droplist>
+
+    <timestep>
+        <label> Infiltration process timestep </label>
+        <value> 60.0 </value>
+        <units> seconds </units>
+    </timestep>
+    
+    <help_file> /Applications/TopoFlow/help/infil_Smith-Parlange.htm
+    </help_file>
+
+    <note_label> Note: Timestep must not exceed min precip duration.
+    </note_label>
+
+</layer>
+</process>

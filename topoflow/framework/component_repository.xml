@@ -1,0 +1,452 @@
+
+<repository>
+
+<!-- =================================== TopoFlow Components ===================================== -->
+<component>
+    <comp_name>      tf_channels_kin_wave </comp_name>
+    <module_path>    ./topoflow/components/ </module_path>
+    <module_name>    channels_kinematic_wave </module_name>
+    <class_name>     channels_component </class_name>
+    <model_name>     Channels_Kinematic_Wave </model_name>
+    <model_family>   TopoFlow </model_family>
+    <version>        3.5 </version>
+    <language>       python </language>
+    <author>         Scott D. Peckham </author>
+    <help_url>       http://csdms.colorado.edu/wiki/Model_help:TopoFlow-Channels-Kinematic_Wave </help_url>
+    <cfg_template>   Channels_Kinematic_Wave.cfg.in </cfg_template>
+    <time_step_type> fixed </time_step_type>
+    <time_units>     minutes </time_units>
+    <grid_type>      uniform </grid_type>
+    <description>    None </description>
+    <comp_type>      channels </comp_type>
+    <uses_types>     meteorology,snow,evap,infil,satzone,ice,diversions,ppf </uses_types>
+</component>
+
+<component>
+    <comp_name>      tf_channels_diff_wave </comp_name>
+    <module_path>    ./topoflow/components/ </module_path>
+    <module_name>    channels_diffusive_wave </module_name>
+    <class_name>     channels_component </class_name>
+    <model_name>     Channels_Diffusive_Wave </model_name>
+    <model_family>   TopoFlow </model_family>
+    <version>        3.5 </version>
+    <language>       python </language>
+    <author>         Scott D. Peckham </author>
+    <help_url>       http://csdms.colorado.edu/wiki/Model_help:TopoFlow-Channels-Diffusive_Wave </help_url>
+    <cfg_template>   Channels_Diffusive_Wave.cfg.in </cfg_template>
+    <time_step_type> fixed </time_step_type>
+    <time_units>     minutes </time_units>
+    <grid_type>      uniform </grid_type>
+    <description>    None </description>
+    <comp_type>      channels </comp_type>
+    <uses_types>     meteorology, snow, evap, infil, satzone, ice, diversions </uses_types>
+</component>
+
+<component>
+    <comp_name>      tf_channels_dynam_wave </comp_name>
+    <module_path>    ./topoflow/components/ </module_path>
+    <module_name>    channels_dynamic_wave </module_name>
+    <class_name>     channels_component </class_name>
+    <model_name>     Channels_Dynamic_Wave </model_name>
+    <model_family>   TopoFlow </model_family>
+    <version>        3.5 </version>
+    <language>       python </language>
+    <author>         Scott D. Peckham </author>
+    <help_url>       http://csdms.colorado.edu/wiki/Model_help:TopoFlow-Channels-Dynamic_Wave </help_url>
+    <cfg_template>   Channels_Dynamic_Wave.cfg.in </cfg_template>
+    <time_step_type> fixed </time_step_type>
+    <time_units>     minutes </time_units>
+    <grid_type>      uniform </grid_type>
+    <description>    None </description>
+    <comp_type>      channels </comp_type>
+    <uses_types>     meteorology, snow, evap, infil, satzone, ice, diversions </uses_types>
+</component>
+
+<component>
+    <comp_name>      tf_data_his </comp_name>
+    <module_path>    ./topoflow/components/ </module_path>
+    <module_name>    HIS_base </module_name>
+    <class_name>     HIS_component </class_name>
+    <model_name>     Data_HIS </model_name>
+    <model_family>   TopoFlow </model_family>
+    <version>        3.5 </version>
+    <language>       python </language>
+    <author>         Scott D. Peckham </author>
+    <help_url>       http://csdms.colorado.edu/wiki/Model_help:TopoFlow-Data-HIS </help_url>
+    <cfg_template>   Data_HIS.cfg.in </cfg_template>
+    <time_step_type> fixed </time_step_type>
+    <time_units>     unknown </time_units>
+    <grid_type>      none </grid_type>
+    <description>    None </description>
+    <comp_type>      data </comp_type>
+    <uses_types>     None </uses_types>
+</component>
+
+<component>
+    <comp_name>      tf_diversions_fraction_method </comp_name>
+    <module_path>    ./topoflow/components/ </module_path>
+    <module_name>    diversions_fraction_method </module_name>
+    <class_name>     diversions_component </class_name>
+    <model_name>     Diversions_Fraction_Method </model_name>
+    <model_family>   TopoFlow </model_family>
+    <version>        3.5 </version>
+    <language>       python </language>
+    <author>         Scott D. Peckham </author>
+    <help_url>       http://csdms.colorado.edu/wiki/Model_help:TopoFlow-Diversions </help_url>
+    <cfg_template>   Diversions_Fraction_Method.cfg.in </cfg_template>
+    <time_step_type> fixed </time_step_type>
+    <time_units>     minutes </time_units>
+    <grid_type>      uniform </grid_type>
+    <description>    None </description>
+    <comp_type>      diversions </comp_type>
+    <uses_types>     channels </uses_types>
+</component>
+
+<component>
+    <comp_name>      tf_evap_energy_balance </comp_name>
+    <module_path>    ./topoflow/components/ </module_path>
+    <module_name>    evap_energy_balance </module_name>
+    <class_name>     evap_component </class_name>
+    <model_name>     Evaporation_Energy_Balance </model_name>
+    <model_family>   TopoFlow </model_family>
+    <version>        3.5 </version>
+    <language>       python </language>
+    <author>         Scott D. Peckham </author>
+    <help_url>       http://csdms.colorado.edu/wiki/Model_help:TopoFlow-Evaporation-Energy_Balance </help_url>
+    <cfg_template>   Evap_Energy_Balance.cfg.in </cfg_template>
+    <time_step_type> fixed </time_step_type>
+    <time_units>     minutes </time_units>
+    <grid_type>      uniform </grid_type>
+    <description>    None </description>
+    <comp_type>      evap </comp_type>
+    <uses_types>     meteorology, channels, snow, infil, satzone </uses_types>
+</component>
+
+<component>
+    <comp_name>      tf_evap_priestley_taylor </comp_name>
+    <module_path>    ./topoflow/components/ </module_path>
+    <module_name>    evap_priestley_taylor </module_name>
+    <class_name>     evap_component </class_name>
+    <model_name>     Evaporation_Priestley_Taylor </model_name>
+    <model_family>   TopoFlow </model_family>
+    <version>        3.5 </version>
+    <language>       python </language>
+    <author>         Scott D. Peckham </author>
+    <help_url>       http://csdms.colorado.edu/wiki/Model_help:TopoFlow-Evaporation-Priestley_Taylor </help_url>
+    <cfg_template>   Evap_Priestley_Taylor.cfg.in </cfg_template>
+    <time_step_type> fixed </time_step_type>
+    <time_units>     minutes </time_units>
+    <grid_type>      uniform </grid_type>
+    <description>    None </description>
+    <comp_type>      evap </comp_type>
+    <uses_types>     meteorology, channels, snow, infil, satzone  </uses_types>
+</component>
+
+<component>
+    <comp_name>      tf_evap_read_file </comp_name>
+    <module_path>    ./topoflow/components/ </module_path>
+    <module_name>    evap_read_file </module_name>
+    <class_name>     evap_component </class_name>
+    <model_name>     Evaporation_Read_File </model_name>
+    <model_family>   TopoFlow </model_family>
+    <version>        3.5 </version>
+    <language>       python </language>
+    <author>         Scott D. Peckham </author>
+    <help_url>       http://csdms.colorado.edu/wiki/Model_help:TopoFlow-Evaporation-Read_File </help_url>
+    <cfg_template>   Evap_Read_File.cfg.in </cfg_template>
+    <time_step_type> fixed </time_step_type>
+    <time_units>     minutes </time_units>
+    <grid_type>      uniform </grid_type>
+    <description>    None </description>
+    <comp_type>      evap </comp_type>
+    <uses_types>     meteorology, channels, snow, infil, satzone  </uses_types>
+</component>
+
+<!-- Note: There are "valley_glacier" and "ice_sheet" versions of GC2D. -->
+
+<component>
+    <comp_name>      tf_ice_gc2d </comp_name>
+    <module_path>    ./topoflow/components/ </module_path>
+    <module_name>    ice_base </module_name>
+    <class_name>     ice_component </class_name>
+    <model_name>     Evaporation_Read_File </model_name>
+    <model_family>   TopoFlow </model_family>
+    <version>        3.5 </version>
+    <language>       python </language>
+    <author>         Mark Kessler, Eric Hutton, Scott D. Peckham </author>
+    <help_url>       http://csdms.colorado.edu/wiki/Model_help:Gc2d </help_url>
+    <cfg_template>   Ice_GC2D.cfg.in </cfg_template>
+    <time_step_type> adaptive </time_step_type>
+    <time_units>     years </time_units>
+    <grid_type>      uniform </grid_type>
+    <description>    None </description>
+    <comp_type>      ice </comp_type>
+    <uses_types>     meteorology, snow </uses_types>
+</component>
+
+<component>
+    <comp_name>      tf_infil_green_ampt </comp_name>
+    <module_path>    ./topoflow/components/ </module_path>
+    <module_name>    infil_green_ampt </module_name>
+    <class_name>     infil_component </class_name>
+    <model_name>     Infiltration_Green_Ampt </model_name>
+    <model_family>   TopoFlow </model_family>
+    <version>        3.5 </version>
+    <language>       python </language>
+    <author>         Scott D. Peckham </author>
+    <help_url>       http://csdms.colorado.edu/wiki/Model_help:TopoFlow-Infiltration-Green-Ampt </help_url>
+    <cfg_template>   Infil_Green_Ampt.cfg.in </cfg_template>
+    <time_step_type> fixed </time_step_type>
+    <time_units>     minutes </time_units>
+    <grid_type>      uniform </grid_type>
+    <description>    None </description>
+    <comp_type>      infil </comp_type>
+    <uses_types>     meteorology, channels, snow, evap, satzone </uses_types>
+</component>
+
+<component>
+    <comp_name>      tf_infil_smith_parlange </comp_name>
+    <module_path>    ./topoflow/components/ </module_path>
+    <module_name>    infil_smith_parlange </module_name>
+    <class_name>     infil_component </class_name>
+    <model_name>     Infiltration_Smith_Parlange </model_name>
+    <model_family>   TopoFlow </model_family>
+    <version>        3.5 </version>
+    <language>       python </language>
+    <author>         Scott D. Peckham </author>
+    <help_url>       http://csdms.colorado.edu/wiki/Model_help:TopoFlow-Infiltration-Smith-Parlange </help_url>
+    <cfg_template>   Infil_Smith_Parlange.cfg.in </cfg_template>
+    <time_step_type> fixed </time_step_type>
+    <time_units>     minutes </time_units>
+    <grid_type>      uniform </grid_type>
+    <description>    None </description>
+    <comp_type>      infil </comp_type>
+    <uses_types>     meteorology, channels, snow, evap, satzone </uses_types>
+</component>
+
+<component>
+    <comp_name>      tf_infil_beven </comp_name>
+    <module_path>    ./topoflow/components/ </module_path>
+    <module_name>    infil_beven </module_name>
+    <class_name>     infil_component </class_name>
+    <model_name>     Infiltration_Beven </model_name>
+    <model_family>   TopoFlow </model_family>
+    <version>        3.5 </version>
+    <language>       python </language>
+    <author>         Scott D. Peckham </author>
+    <help_url>       http://csdms.colorado.edu/wiki/Model_help:TopoFlow-Infiltration-Beven </help_url>
+    <cfg_template>   Infil_Beven.cfg.in </cfg_template>
+    <time_step_type> fixed </time_step_type>
+    <time_units>     minutes </time_units>
+    <grid_type>      uniform </grid_type>
+    <description>    None </description>
+    <comp_type>      infil </comp_type>
+    <uses_types>     meteorology, channels, snow, evap, satzone </uses_types>
+</component>
+
+<component>
+    <comp_name>      tf_infil_richards_1d </comp_name>
+    <module_path>    ./topoflow/components/ </module_path>
+    <module_name>    infil_richards_1D </module_name>
+    <class_name>     infil_component </class_name>
+    <model_name>     Infiltration_Richards_1D </model_name>
+    <model_family>   TopoFlow </model_family>
+    <version>        3.5 </version>
+    <language>       python </language>
+    <author>         Scott D. Peckham </author>
+    <help_url>       http://csdms.colorado.edu/wiki/Model_help:TopoFlow-Infiltration-Richards_1D </help_url>
+    <cfg_template>   Infil_Richards_1D.cfg.in </cfg_template>
+    <time_step_type> fixed </time_step_type>
+    <time_units>     minutes </time_units>
+    <grid_type>      uniform </grid_type>
+    <description>    None </description>
+    <comp_type>      infil </comp_type>
+    <uses_types>     meteorology, channels, snow, evap, satzone </uses_types>
+</component>
+
+<component>
+    <comp_name>      tf_meteorology </comp_name>
+    <module_path>    ./topoflow/components/ </module_path>
+    <module_name>    met_base </module_name>
+    <class_name>     met_component </class_name>
+    <model_name>     Meteorology </model_name>
+    <model_family>   TopoFlow </model_family>
+    <version>        3.5 </version>
+    <language>       python </language>
+    <author>         Scott D. Peckham </author>
+    <help_url>       http://csdms.colorado.edu/wiki/Model_help:TopoFlow-Meteorology </help_url>
+    <cfg_template>   Meteorology.cfg.in </cfg_template>
+    <time_step_type> fixed </time_step_type>
+    <time_units>     minutes </time_units>
+    <grid_type>      uniform </grid_type>
+    <description>    None </description>
+    <comp_type>      meteorology </comp_type>
+    <uses_types>     snow </uses_types>
+</component>
+
+<component>
+    <comp_name>      tf_satzone_darcy_layers </comp_name>
+    <module_path>    ./topoflow/components/ </module_path>
+    <module_name>    satzone_darcy_layers </module_name>
+    <class_name>     satzone_component </class_name>
+    <model_name>     Saturated_Zone_Darcy_Layers </model_name>
+    <model_family>   TopoFlow </model_family>
+    <version>        3.5 </version>
+    <language>       python </language>
+    <author>         Scott D. Peckham </author>
+    <help_url>       http://csdms.colorado.edu/wiki/Model_help:TopoFlow-Saturated_Zone-Darcy_Layers </help_url>
+    <cfg_template>   Satzone_Darcy_Layers.cfg.in </cfg_template>
+    <time_step_type> fixed </time_step_type>
+    <time_units>     minutes </time_units>
+    <grid_type>      uniform </grid_type>
+    <description>    None </description>
+    <comp_type>      satzone </comp_type>
+    <uses_types>     channels, infil </uses_types>
+</component>
+
+<component>
+    <comp_name>      tf_snow_degree_day </comp_name>
+    <module_path>    ./topoflow/components/ </module_path>
+    <module_name>    snow_degree_day </module_name>
+    <class_name>     snow_component </class_name>
+    <model_name>     Snow_Degree_Day </model_name>
+    <model_family>   TopoFlow </model_family>
+    <version>        3.5 </version>
+    <language>       python </language>
+    <author>         Scott D. Peckham </author>
+    <help_url>       http://csdms.colorado.edu/wiki/Model_help:TopoFlow-Snowmelt-Degree-Day </help_url>
+    <cfg_template>   Snow_Degree_Day.cfg.in </cfg_template>
+    <time_step_type> fixed </time_step_type>
+    <time_units>     minutes </time_units>
+    <grid_type>      uniform </grid_type>
+    <description>    None </description>
+    <comp_type>      snow </comp_type>
+    <uses_types>     meteorology </uses_types>
+</component>
+
+<component>
+    <comp_name>      tf_snow_energy_balance </comp_name>
+    <module_path>    ./topoflow/components/ </module_path>
+    <module_name>    snow_energy_balance </module_name>
+    <class_name>     snow_component </class_name>
+    <model_name>     Snow_Energy_Balance </model_name>
+    <model_family>   TopoFlow </model_family>
+    <version>        3.5 </version>
+    <language>       python </language>
+    <author>         Scott D. Peckham </author>
+    <help_url>       http://csdms.colorado.edu/wiki/Model_help:TopoFlow-Snowmelt-Energy_Balance </help_url>
+    <cfg_template>   Snow_Energy_Balance.cfg.in </cfg_template>
+    <time_step_type> fixed </time_step_type>
+    <time_units>     minutes </time_units>
+    <grid_type>      uniform </grid_type>
+    <description>    None </description>
+    <comp_type>      snow </comp_type>
+    <uses_types>     meteorology </uses_types>
+</component>
+
+<component>
+    <comp_name>      topoflow_driver </comp_name>
+    <module_path>    ./topoflow/components/ </module_path>
+    <module_name>    topoflow_driver </module_name>
+    <class_name>     topoflow_driver </class_name>
+    <model_name>     TopoFlow_Driver </model_name>
+    <model_family>   TopoFlow </model_family>
+    <version>        3.5 </version>
+    <language>       python </language>
+    <author>         Scott D. Peckham </author>
+    <help_url>       http://csdms.colorado.edu/wiki/Model_help:TopoFlow </help_url>
+    <cfg_template>   TopoFlow.cfg.in </cfg_template>
+    <time_step_type> fixed </time_step_type>
+    <time_units>     minutes </time_units>
+    <grid_type>      uniform </grid_type>
+    <description>    None </description>
+    <comp_type>      hydro_model </comp_type>
+    <uses_types>     meteorology, channels, snow, evap, infil, satzone, ice, diversions </uses_types>
+</component>
+
+<!-- =================================== Erode Components ===================================== -->
+
+<component>
+    <comp_name>      erode_d8_global </comp_name>
+    <module_path>    ./topoflow/components/ </module_path>
+    <module_name>    erode_d8_global </module_name>
+    <class_name>     erosion_component </class_name>
+    <model_name>     Erode_D8_Global </model_name>
+    <model_family>   Erode </model_family>
+    <version>        3.5 </version>
+    <language>       python </language>
+    <author>         Scott D. Peckham </author>
+    <help_url>       http://csdms.colorado.edu/wiki/Model_help:Erode-D8-Global </help_url>
+    <cfg_template>   Erode_Global.cfg.in </cfg_template>
+    <time_step_type> adaptive </time_step_type>
+    <time_units>     years </time_units>
+    <grid_type>      uniform </grid_type>
+    <description>    None </description>
+    <comp_type>      LEM </comp_type>
+    <uses_types>     d8, meteorology, uplift </uses_types>
+</component>
+
+<component>
+    <comp_name>      erode_d8_local </comp_name>
+    <module_path>    ./topoflow/components/ </module_path>
+    <module_name>    erode_d8_local </module_name>
+    <class_name>     erosion_component </class_name>
+    <model_name>     Erode_D8_Local </model_name>
+    <model_family>   Erode </model_family>
+    <version>        3.5 </version>
+    <language>       python </language>
+    <author>         Scott D. Peckham </author>
+    <help_url>       http://csdms.colorado.edu/wiki/Model_help:Erode-D8-Local </help_url>
+    <cfg_template>   Erode_Local.cfg.in </cfg_template>
+    <time_step_type> local_des </time_step_type>
+    <time_units>     years </time_units>
+    <grid_type>      uniform </grid_type>
+    <description>    None </description>
+    <comp_type>      LEM </comp_type>
+    <uses_types>     d8, meteorology, uplift </uses_types>
+</component>
+
+<component>
+    <comp_name>      d8_global </comp_name>
+    <module_path>    ./topoflow/components/ </module_path>
+    <module_name>    d8_global </module_name>
+    <class_name>     d8_component </class_name>
+    <model_name>     D8_Global </model_name>
+    <model_family>   Erode </model_family>
+    <version>        3.5 </version>
+    <language>       python </language>
+    <author>         Scott D. Peckham </author>
+    <help_url>       http://csdms.colorado.edu/wiki/Model_help:D8-Global </help_url>
+    <cfg_template>   D8_Global.cfg.in </cfg_template>
+    <time_step_type> adaptive </time_step_type>
+    <time_units>     years </time_units>
+    <grid_type>      uniform </grid_type>
+    <description>    None </description>
+    <comp_type>      D8 </comp_type>
+    <uses_types>     ppf </uses_types>
+</component>
+
+<component>
+    <comp_name>      dem_smoother </comp_name>
+    <module_path>    ./topoflow/components/ </module_path>
+    <module_name>    smooth_DEM </module_name>
+    <class_name>     DEM_smoother </class_name>
+    <model_name>     DEM_Profile_Smoother </model_name>
+    <model_family>   TopoFlow </model_family>
+    <version>        3.5 </version>
+    <language>       python </language>
+    <author>         Scott D. Peckham </author>
+    <help_url>       http://csdms.colorado.edu/wiki/Model_help:TopoFlow-DEM_Smoother </help_url>
+    <cfg_template>   DEM_Smoother.cfg.in </cfg_template>
+    <time_step_type> adaptive </time_step_type>
+    <time_units>     years </time_units>
+    <grid_type>      uniform </grid_type>
+    <description>    None </description>
+    <comp_type>      LEM </comp_type>
+    <uses_types>     D8 </uses_types>
+</component>
+
+</repository>
+
+
+
