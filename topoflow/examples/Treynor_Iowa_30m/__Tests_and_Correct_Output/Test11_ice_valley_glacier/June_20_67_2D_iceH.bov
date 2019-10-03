@@ -1,0 +1,9 @@
+TIME:          0.0
+DATA_FILE:     /Users/peckhams/TF_Output/Treynor/June_20_67_2D_iceH.rts
+DATA_SIZE:     29 44 1
+DATA_FORMAT:   FLOAT
+VARIABLE:      hi
+DATA_ENDIAN:   LITTLE
+CENTERING:     zonal
+BRICK_ORIGIN:  277850.358 4560090.42 0.0
+BRICK_SIZE:    29 44 1
