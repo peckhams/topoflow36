@@ -1,0 +1,50 @@
+------------------------------------------------------------
+TopoFlow Version 3.5 (2/20/17)
+Wed Feb 22 16:20:36 2017
+ 
+Input directory:      /Users/peckhams/Dropbox/TopoFlow_3.5/topoflow/examples/Treynor_Iowa_30m/
+Output directory:     /Users/peckhams/TF_Output/Treynor/
+Site prefix:          Treynor
+Case prefix:          June_20_67
+ 
+Simulated time:      157.9 [min]
+Program run time:    7.2048470974 [sec]
+ 
+Number of timesteps: 1579
+Number of columns:   29
+Number of rows:      44
+ 
+Main outlet ID:    (34, 16) (row, col)
+Basin_area:        0.396 [km^2] 
+ 
+Min Manning's n:   0.0299999993294
+Max Manning's n:   0.159999996424
+ 
+Q_final:           0.263687815959 [m^3/s]
+Q_peak:            5.28790973693 [m^3/s]
+Q_peak_time:       82.7 [min]
+u_peak:            1.4706543677 [m/s]
+u_peak_time:       82.6333333333 [min]
+d_peak:            0.380272518229 [m]
+d_peak_time:       82.6666666667 [min]
+ 
+Max(precip rate):  165.861999512 [mm/hr]
+ 
+Total accumulated volumes over entire DEM:
+vol_P   (rainfall):      178341.464805 [m^3]   (snowfall excluded)
+vol_Q   (discharge):     16652.4578871 [m^3]   (main basin outlet)
+vol_SM  (snowmelt):      0.0 [m^3]
+vol_MR  (icemelt):       0.0 [m^3]
+vol_ET  (evaporation):   0.0 [m^3]
+vol_IN  (infiltration):  127765.416935 [m^3]
+vol_Rg  (recharge):      127765.416935 [m^3]   (to water table)
+vol_GW  (baseflow):      0.0 [m^3]
+vol_R   (runoff):        50631.3076002 [m^3]   R = (P+SM+MR+GW) - (ET+IN)
+ 
+Final grid mins and maxes:
+Min(Q), Max(Q):   0.0001, 0.3884 [m^3/s]
+Min(u), Max(u):   0.0099, 0.8552 [m/s]
+Min(d), Max(d):   0.0002, 0.1097 [m]
+ 
+Finished. (June_20_67)
+
