@@ -1,0 +1,7 @@
+n_canals:       1
+canal_in_col:   16
+canal_in_row:   10
+canal_out_col:  3
+canal_out_row:  10          
+Q_fraction:     1.0
+travel_time:    240.0  [seconds]

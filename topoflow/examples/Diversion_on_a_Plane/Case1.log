@@ -1,0 +1,52 @@
+------------------------------------------------------------
+TopoFlow Version 3.5 (2/16/17)
+Sat Feb 18 15:32:32 2017
+ 
+Input directory:      /Users/peckhams/Dropbox/TopoFlow_3.5/topoflow/examples/Test_Plane_Canal/
+Output directory:     /Users/peckhams/Dropbox/TopoFlow_3.5/topoflow/examples/Test_Plane_Canal/
+Site prefix:          plane
+Case prefix:          Case1
+ 
+Simulated time:      60.0 [min]
+Program run time:    4.27119493484 [sec]
+ 
+Number of timesteps: 600
+Number of columns:   20
+Number of rows:      20
+ 
+T_stop:            60.0 [min]
+ 
+Main outlet ID:    (10, 18) (row, col)
+Basin_area:        0.0 [km^2] 
+ 
+Min Manning's n:   0.3
+Max Manning's n:   0.3
+ 
+Q_final:           0.0249999800906 [m^3/s]
+Q_peak:            0.0249999800906 [m^3/s]
+Q_peak_time:       59.9 [min]
+u_peak:            0.0761126185805 [m/s]
+u_peak_time:       59.9 [min]
+d_peak:            0.032846039452 [m]
+d_peak_time:       59.9 [min]
+ 
+Max(precip rate):  100.000001112 [mm/hr]
+ 
+Total accumulated volumes over entire DEM:
+vol_P   (rainfall):      3000.00003335 [m^3]   (snowfall excluded)
+vol_Q   (discharge):     70.0297714014 [m^3]   (main basin outlet)
+vol_SM  (snowmelt):      0.0 [m^3]
+vol_MR  (icemelt):       0.0 [m^3]
+vol_ET  (evaporation):   0.0 [m^3]
+vol_IN  (infiltration):  0.0 [m^3]
+vol_Rg  (recharge):      0.0 [m^3]   (to water table)
+vol_GW  (baseflow):      0.0 [m^3]
+vol_R   (runoff):        1800.00002001 [m^3]   R = (P+SM+MR) - (ET+IN)
+ 
+Final grid mins and maxes:
+Min(Q), Max(Q):   0.0000, 0.0500 [m^3/s]
+Min(u), Max(u):   0.0000, 0.1003 [m/s]
+Min(d), Max(d):   0.0000, 0.0499 [m]
+ 
+Finished. (Case1)
+

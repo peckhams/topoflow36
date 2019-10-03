@@ -1,0 +1,9 @@
+TIME:          0.0
+DATA_FILE:     /Users/peckhams/Dropbox/TopoFlow_3.5/topoflow/examples/Test_Plane_Canal/Case1_2D-Q.rts
+DATA_SIZE:     20 20 1
+DATA_FORMAT:   FLOAT
+VARIABLE:      Q
+DATA_ENDIAN:   LITTLE
+CENTERING:     zonal
+BRICK_ORIGIN:  0.0 0.0 0.0
+BRICK_SIZE:    20 20 1
