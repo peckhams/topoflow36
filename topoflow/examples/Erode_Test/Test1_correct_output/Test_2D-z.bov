@@ -1,0 +1,9 @@
+TIME:          0.0
+DATA_FILE:     /Users/peckhams/Erode_Tests/Test1/Test_2D-z.rts
+DATA_SIZE:     100 100 1
+DATA_FORMAT:   FLOAT
+VARIABLE:      z
+DATA_ENDIAN:   LITTLE
+CENTERING:     zonal
+BRICK_ORIGIN:  0.0 0.0 0.0
+BRICK_SIZE:    100 100 1
