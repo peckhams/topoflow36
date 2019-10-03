@@ -1,0 +1,224 @@
+
+Scotts-Mac-Pro:~ peckhams$ python -m topoflow
+Importing TopoFlow 3.5 packages:
+   topoflow.utils
+   topoflow.utils.tests
+   topoflow.components
+   topoflow.components.tests
+   topoflow.framework
+   topoflow.framework.tests
+ 
+Paths for this package:
+framework_dir = /Users/peckhams/Dropbox/TopoFlow_3.5/topoflow/framework/
+parent_dir    = /Users/peckhams/Dropbox/TopoFlow_3.5/topoflow/
+examples_dir  = /Users/peckhams/Dropbox/TopoFlow_3.5/topoflow/examples/
+__file__      = /Users/peckhams/Dropbox/TopoFlow_3.5/topoflow/framework/emeli.pyc
+__name__      = topoflow.framework.emeli
+ 
+Reading info from provider_file:
+    /Users/peckhams/Dropbox/TopoFlow_3.5/topoflow/examples/Treynor_Iowa_30m/June_20_67_providers.txt
+Reading info from comp_repo_file:
+    /Users/peckhams/Dropbox/TopoFlow_3.5/topoflow/framework/component_repository.xml
+ 
+Instantiated component: tf_meteorology
+Instantiated component: tf_diversions_fraction_method
+Instantiated component: tf_channels_kin_wave
+Instantiated component: tf_snow_degree_day
+Instantiated component: tf_satzone_darcy_layers
+Instantiated component: tf_evap_priestley_taylor
+Instantiated component: tf_infil_smith_parlange
+Instantiated component: tf_ice_gc2d
+Instantiated component: topoflow_driver
+ 
+Meteorology component: Initializing...
+In read_input_files():
+   min(P) = 5.58799982071  [mmph]
+   max(P) = 5.58799982071  [mmph]
+ 
+SORRY: Cannot yet create lon and lat grids for
+       this DEM because it uses UTM coordinates.
+       Will use lat/lon for Denver, Colorado.
+ 
+Imported netCDF4 version: 1.2.4
+Initialized component: tf_meteorology.
+ 
+Diversions component: Initializing...
+Diversions component: Disabled in CFG file.
+Initialized component: tf_diversions_fraction_method.
+ 
+Channels component: Initializing...
+Calling initialize_d8_vars()...
+Reading grid values...
+Finished reading grid from:
+  /Users/peckhams/Dropbox/TopoFlow_3.5/topoflow/examples/Treynor_Iowa_30m/Treynor_DEM.rtg
+  min(DEM), max(DEM) = 335.051 , 380.181 [m]
+Imported netCDF4 version: 1.2.4
+D8 component: Updating...
+Updating D8 flow grid...
+   update_d8_codes(): Initializing grid...
+   --------------------------------------------
+   Data type of flow grid at start = int16
+   Number of flats         = 2
+   Number of 1-pixel pits  = 5
+   Number of nodata/NaN    = 0
+   min(codes), max(codes)  = -8 128
+   --------------------------------------------
+   update_d8_codes(): Breaking ties...
+   update_d8_codes(): Linking flats...
+   Number of iterations = 1  (in link_flats())
+Updating flow width grid...
+    min(dw), max(dw) = 30.0, 42.4264 [m]
+Updating flow length grid...
+    min(ds), max(ds) = 30.0, 42.4264 [m]
+Calling read_input_files()...
+Calling initialize_computed_vars()...
+    min(nval) = 0.0299999993294
+    max(nval) = 0.159999996424
+    min(width)      = 2.0239880085
+    max(width)      = 42.4264068604
+    min(sinuosity)  = 1.0
+    max(sinuosity)  = 1.0
+    min(init_depth) = 0.0
+    max(init_depth) = 0.0
+Initializing u, f, d grids...
+------------------------------------------------------
+WARNING:  Found grid cells with invalid slope.
+  144 grid cells have slope = 0.
+  0 grid cells have slope < 0.
+  0 grid cells have slope of NaN or Inf.
+  For Kinematic Wave routing, these grid cells would
+  have an invalid flow velocity.  Replacing them with
+  smallest positive slope as work-around.
+    min(S) = 0.000559488951694
+    max(S) = 0.196467086673
+  Recommend using "Profile smoothing tool" instead
+  to create new DEM with nonzero slopes.
+------------------------------------------------------
+ 
+Imported netCDF4 version: 1.2.4
+Initialized component: tf_channels_kin_wave.
+ 
+Snow component: Initializing...
+Snow component: Disabled in CFG file.
+Initialized component: tf_snow_degree_day.
+ 
+Groundwater component: Initializing...
+Groundwater component: Disabled in CFG file.
+Initialized component: tf_satzone_darcy_layers.
+ 
+Evaporation component: Initializing...
+Evaporation component: Disabled in CFG file.
+Initialized component: tf_evap_priestley_taylor.
+ 
+Infiltration component: Initializing...
+Imported netCDF4 version: 1.2.4
+Initialized component: tf_infil_smith_parlange.
+ 
+Ice component: Initializing...
+Ice component: Disabled in CFG file.
+Initialized component: tf_ice_gc2d.
+TopoFlow component: Initializing...
+Setting stop method to: Q_peak_fraction
+Opening log file:
+    log_file = /Users/peckhams/TF_Output/Treynor/June_20_67.log
+ 
+Starting TopoFlow model run...
+------------------------------------------------------------
+Initialized component: topoflow_driver.
+Driver component name = topoflow_driver
+ 
+Original component time step sizes =
+    tf_meteorology =  60.0 [seconds]
+    tf_diversions_fraction_method =  6.0 [seconds]
+    tf_channels_kin_wave =  2.0 [seconds]
+    tf_snow_degree_day =  3600.0 [seconds]
+    tf_satzone_darcy_layers =  3600.0 [seconds]
+    tf_evap_priestley_taylor =  3600.0 [seconds]
+    tf_infil_smith_parlange =  60.0 [seconds]
+    tf_ice_gc2d =  0.1 [years]
+    topoflow_driver =  6.0 [seconds]
+Converting all time step units to seconds...
+Component with smallest time step is: tf_channels_kin_wave
+ 
+Time interpolation method = Linear
+ 
+Will print values every 0.5 seconds.
+Time =      10.90 [min],  Q_out =    0.00222 [m^3/s]
+Time =      22.00 [min],  Q_out =    0.01146 [m^3/s]
+Time =      33.00 [min],  Q_out =    0.18442 [m^3/s]
+Time =      44.00 [min],  Q_out =    4.06826 [m^3/s]
+Time =      55.00 [min],  Q_out =    4.26090 [m^3/s]
+Time =      66.10 [min],  Q_out =    4.13537 [m^3/s]
+Time =      77.30 [min],  Q_out =    4.19761 [m^3/s]
+Time =      88.40 [min],  Q_out =    4.32106 [m^3/s]
+Time =      99.70 [min],  Q_out =    2.60757 [m^3/s]
+Time =     110.90 [min],  Q_out =    1.88445 [m^3/s]
+Time =     122.20 [min],  Q_out =    1.78683 [m^3/s]
+Time =     133.70 [min],  Q_out =    0.87627 [m^3/s]
+Time =     145.00 [min],  Q_out =    0.52388 [m^3/s]
+Time =     156.60 [min],  Q_out =    0.31188 [m^3/s]
+Stopping: Reached Q_peak fraction.
+
+Meteorology component: Finished.
+Diversions component: Finished.
+Channels component: Finished.
+Snow component: Finished.
+Groundwater component: Finished.
+Evaporation component: Finished.
+Infiltration component: Finished.
+Ice component: Finished.
+=======================
+Simulation complete.
+=======================
+ 
+------------------------------------------------------------
+TopoFlow Version 3.5 (2/20/17)
+Wed Feb 22 16:07:02 2017
+ 
+Input directory:      /Users/peckhams/Dropbox/TopoFlow_3.5/topoflow/examples/Treynor_Iowa_30m/
+Output directory:     /Users/peckhams/TF_Output/Treynor/
+Site prefix:          Treynor
+Case prefix:          June_20_67
+ 
+Simulated time:      157.3 [min]
+Program run time:    7.07136297226 [sec]
+ 
+Number of timesteps: 1573
+Number of columns:   29
+Number of rows:      44
+ 
+Main outlet ID:    (34, 16) (row, col)
+Basin_area:        0.396 [km^2] 
+ 
+Min Manning's n:   0.0299999993294
+Max Manning's n:   0.159999996424
+ 
+Q_final:           0.304746894935 [m^3/s]
+Q_peak:            6.12447663442 [m^3/s]
+Q_peak_time:       83.0333333333 [min]
+u_peak:            1.26414724416 [m/s]
+u_peak_time:       83.0 [min]
+d_peak:            0.512375724383 [m]
+d_peak_time:       83.0 [min]
+ 
+Max(precip rate):  165.861999512 [mm/hr]
+ 
+Total accumulated volumes over entire DEM:
+vol_P   (rainfall):      178341.464805 [m^3]   (snowfall excluded)
+vol_Q   (discharge):     19639.1728633 [m^3]   (main basin outlet)
+vol_SM  (snowmelt):      0.0 [m^3]
+vol_MR  (icemelt):       0.0 [m^3]
+vol_ET  (evaporation):   0.0 [m^3]
+vol_IN  (infiltration):  118893.454692 [m^3]
+vol_Rg  (recharge):      118893.454692 [m^3]   (to water table)
+vol_GW  (baseflow):      0.0 [m^3]
+vol_R   (runoff):        59503.2698434 [m^3]   R = (P+SM+MR+GW) - (ET+IN)
+ 
+Final grid mins and maxes:
+Min(Q), Max(Q):   0.0001, 0.4582 [m^3/s]
+Min(u), Max(u):   0.0104, 0.8996 [m/s]
+Min(d), Max(d):   0.0003, 0.1651 [m]
+ 
+Finished.  (June_20_67)
+ 
+Scotts-Mac-Pro:~ peckhams$ 
