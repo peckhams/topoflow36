@@ -1,0 +1,9 @@
+ 
+----------------------------------------------
+Architecture:        x86
+Operating System:    Win32
+IDL Version:         5.4
+RiverTools Version:  2.4 SP1
+Creation date/time:  Wed Jan 22 17:26:30 2003
+----------------------------------------------
+ 
