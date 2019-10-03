@@ -1,0 +1,58 @@
+
+TopoFlow Problems and/or Issues
+
+
+Everywhere:
+=============
+* Move any remaining "unit_test" functions into separate files
+  within components/tests or framework/tests.
+  
+* Rewrite the component instantiation tests so that each one
+  is treated as the driver and the framework connects all of
+  the required components.  This will mean creating a separate
+  provider file for each component.
+
+* Remove all calls to "set_grid_double";  see:
+     diversions_base.py
+     satzone_base.py
+     
+* Replace "np.size(" with "var.size" ??
+     But make sure this works for all array dimensions, etc.
+     Note that if: a=np.float(0), there is no size method,
+     but for a=np.float64(0) there is.
+* See if we can replace most "np.float64(value)" with the value.
+* Check how float64 scalars are handled, and whether they are
+  preserved as a reference, etc.  (0d numpy arrays, etc., use
+  of [:] or ".fill", etc.
+* Does Python have an "array" command, or just numpy?
+* NetCDF writer needs to use CSDMS standard names.
+* Clean up the way "model_output" works?
+
+In channels_base.py:
+=======================
+* channels_base.py used to call diversions.update(), but now commented out.
+
+In diversions.py:
+====================
+* self.cp.set_grid_double  still appears in update().
+* Use of idl_func.eof() (This code is old: see diversions_fraction_method.)
+
+In diversions_fraction_method:
+================================
+* Calls to self.cp.get_values_in_grid_double()
+* Calls to self.cp.set_values_in_grid_double()
+
+In evap_base.py:
+==================
+* Calls to "set_port_data"
+
+In met_base.py:
+=================
+* There are commented calls to "set_port_data"
+
+In satzone_darcy_layers.py:
+=============================
+* All code seems to be commented out?
+
+
+

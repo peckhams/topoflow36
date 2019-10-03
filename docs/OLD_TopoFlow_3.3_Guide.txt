@@ -1,0 +1,236 @@
+
+November 6, 2013
+S.D. Peckham
+
+==========================================================================
+            User Guide for the TopoFlow 3.3 Python Package
+==========================================================================
+
+===========
+ Overview
+===========
+
+For version 3.3, TopoFlow has been converted to a Python package.
+This should make it much easier for users to install and use TopoFlow.
+Another advantage is that the TopoFlow code, unit tests and sample
+data are now organized into a much cleaner and easier-to-understand
+directory tree, as shown here:
+
+TopoFlow               : The top-level TopoFlow package (contains setup.py)
+  - docs
+  - topoflow           : The topoflow package.
+    - components       : TopoFlow & Erode component source code (Python)
+      - tests          : Unit tests for each component. (Python)
+    - examples         : Relatively small data sets for testing.
+      - Erode_Test
+      - Treynor_Iowa
+    - framework        : New Framework source code (Python)
+      - tests          : Unit tests for each component. (Python)
+    - utils            : All shared utilities (Python)  (was py_utils)
+      - tests          : Unit test for each utility.
+  - topoflow.egg-info
+  - LICENSE.txt
+  - setup.py           : Need this at top level of a Python package.
+  - ez_setup.py        : pip needs this also.
+
+While it may later be desirable to create separate packages for TopoFlow,
+Erode, the new, unnamed Framework and the supporting python utilities
+to be distributed as separate Python packages in the future (some of
+which require others) they are all contained in one package for this
+release.
+
+Almost all components in this version of TopoFlow + Erode have a fully
+compliant BMI (Basic Model Interface) interface and use the current
+CSDMS Standard Names.
+
+=========================================================
+ How to Install a "Developer's Version" of TopoFlow 3.3
+=========================================================
+
+Developers of a package like TopoFlow need to install the package
+differently so that they can edit the source code and then see
+the effects of their edits.  This can be done using an application
+called "pip".  Note that pip is not a Python package, but requires
+a Python package called "setuptools".
+
+It is possible that pip is already installed on your system. You
+can check by typing "which pip".  Note that pip is included with
+the Canopy Python distribution from Enthought.
+
+To check if the setuptools package is available, start python at
+a command prompt and then type "import setuptools" at the Python
+prompt.
+
+If you don't have the setuptools package, you can install it by
+downloading and running "ez_setup.py".  For more information on
+setuptools, see:
+    http://pypi.python.org/pypi/setuptools
+
+Once you have the setuptools package, you can then install the pip
+application by downloading and running "get-pip.py".  For more
+information on pip, see:
+    http://www.pip-installer.org/en/latest
+
+Once pip has been installed, you can install a developer's version
+of TopoFlow as follows:
+
+1. Change to the top-level TopoFlow package directory that contains
+   the file "setup.py".  This top-level directory will contain a
+   directory called "topoflow" which contains the Python source
+   code for the package.  (Bob, we will later want this folder to
+   be code "checked out" via subversion.)  For example:
+   % cd ~/Dropbox/TopoFlow_3.3
+
+2. Install the package in "editable" mode. (Notice the "." at the
+   end of this command!):
+   % pip install -e .
+
+3. Note that a directory called: "topoflow.egg-info" is created
+   with information about the package.
+
+4. You can now import the TopoFlow package using:
+   >>> import topoflow
+
+   This will automatically import some of the subpackages and
+   print an info message.
+
+5. You can now edit the source code contained in the directory
+   you installed from, e.g. "~/Dropbox/TopoFlow_3.3"
+   To see the effects of your edits during the same Python session,
+   you may need to reload the package with Python's built-in "reload"
+   function, e.g. by typing "reload(topoflow.utils)" at the Python
+   prompt.   However, edits will automatically appear (without reload)
+   when you start a new Python session. (e.g. exit and restart)
+
+6. Another application that has overlap with pip is called "virtualenv".
+   See: www.virtualenv.org/en/latest for more information.
+
+===========================================================
+ How to Uninstall a "Developer's Version" of TopoFlow 3.3
+===========================================================
+% pip uninstall topoflow
+
+==============================================
+ Notes on Using TopoFlow as a Python Package
+==============================================
+
+1. Python packages and subpackages must contain a file called
+   "__init__.py" in order for Python to see them as a package.
+   That file may be empty or contain some Python code.
+
+2. Python "import" statements need to be modified in order
+   to import modules that are stored in another subpackage
+   (and directory) within the TopoFlow package.  That is,
+   modules in the same package folder can simply import each
+   other by name, but if a module in "components" needs to
+   import something from "utils", the import command must be
+   changed to: "import topoflow.utils.BMI_base" (e.g.)
+   For examples, see the "import" statements in the source
+   code in the "components" folder.
+
+3. For some reason, this new approach doesn't yet work together
+   with the Python shell IDLE.  So you must start a Python
+   session by typing "python" at a command prompt.
+
+4. The framework's "run_model()" method takes both cfg_prefix
+   and cfg_directory arguments.  The "run_model()" method
+   changes the cwd to the cfg_directory where CFG files for
+   the current run are found.  This is essentially a bootstrapping
+   step.
+
+   Each component's "initialize()" function takes a cfg_prefix
+   argument, which it gets from the framework.  It uses this
+   prefix to construct the filenames for component CFG files
+   that will be needed for the current run.
+
+   Component CFG files contain in_directory, out_directory,
+   site_prefix and case_prefix which the component uses to
+   find all of its input files and write its output files.
+
+=================================
+ Writing and Running Unit Tests
+=================================
+1. Unit tests can now be written so as to use sample data that
+   is installed as part of the TopoFlow package in the "examples"
+   directory.  The components, framework and utils directories
+   each contain a subdirectory called tests and all (or most)
+   unit tests have been moved into these subdirectories.
+
+2. In TopoFlow 3.3, the CFG files in the "examples" folder use
+   relative paths and user paths for the input and output
+   directories.  For the tests to work, you will therefore need
+   to create some directories in your home directory.  The tests
+   currently require these directories:
+
+   1.  TopoFlow_Tests/Test1
+   2.  Erode_Tests/Test1
+   3.  Erode_Tests/Bob_LCP
+       This last test requires you to copy the required input
+       files into this directory first.
+
+   Later on, we could use the Python package called "tempfile"
+   to safely create temporary files on a user's computer for the
+   tests.  I've also written a new utility that we could use
+   called "template_files.py", in "topoflow/utils".  It can take
+   a template of a CFG file and replace placeholders with values
+   from a Python dictionary.  This may get moved into the "framework"
+   folder later on.  The tool would allow us to create CFG files that
+   have appropriate (local) names for "input directory" and
+   "output directory".
+
+3. Most unit tests will not quite work yet because they need
+   changes to their import statements, etc.  Note that they now
+   exist *outside* of the file that contains the functions and
+   classes that they use.  These will be fixed ASAP.
+
+4. After typing:
+       % python
+       >>> import topoflow
+   here are some framework "unit tests" that you can run:
+       >>> topoflow.framework.tests.test_framework.topoflow_test()
+       >>> topoflow.framework.tests.test_framework.erode_test()
+       >>> topoflow.framework.tests.test_framework.bobs_erode_test()
+       >>> topoflow.framework.tests.test_framework.framework_test1()
+       >>> topoflow.framework.tests.test_framework.framework_test2()
+       >>> topoflow.framework.tests.test_framework.ref_test()
+   
+   By default, "topoflow_test()" uses "driver_port_name='hydro_model'.
+   However, you can also run it with any other valid port_name as
+   the driver, e.g.
+       >>> topoflow.framework.tests.test_framework.topoflow_test('channels')
+       >>> topoflow.framework.tests.test_framework.topoflow_test('snow')
+       >>> topoflow.framework.tests.test_framework.topoflow_test('infil')
+
+   These commands are kind of long, and I am still looking into
+   how best to run them with a shorter command since this is my
+   first Python package.
+
+   Since all of the TopoFlow and Erode components are now contained
+   in "topoflow/components" and use the same utilities in
+   "topoflow/utils", it should be straight-forward to link TopoFlow
+   and Erode components by including both in a provider_file.
+
+===========================
+ Changes to the Framework
+===========================
+1. It is now assumed that the file "component_repository.xml" is
+   contained in the framework directory with framework.py.  This
+   means that the "repo_file" line should be removed from all
+   provider files.
+
+2. A new "service component" for time interpolation has been added
+   to this version that supports "None" and "Linear" methods.
+   The source code is topoflow/framework/time_interpolation.py.
+   The current default is "Linear", which can be changed in that
+   file.
+
+3. Later, a new service component for unit conversion will be added.
+
+
+
+
+
+
+
+
+

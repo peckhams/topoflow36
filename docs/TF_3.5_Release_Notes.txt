@@ -1,0 +1,128 @@
+
+TopoFlow 3.5 Release Notes
+February 14, 2017
+
+===============================
+  Enhancements & New Features
+===============================
+* Improved installation instructions (in docs folder).
+
+* Added "__main__.py" in the "topoflow" package folder which allows
+  TopoFlow model runs to be launched at a terminal prompt with a
+  much shorter command.  See the new installation instructions.
+
+* New "path info configuration files":  [cfg_prefix]_path_info.cfg
+  Previously, four "path info variables":  in_directory, out_directory,
+  site_prefix and case_prefix were repeated in the CFG file for every
+  component in topoflow/components.  Now, these four variables are
+  listed in a single, new "path info CFG file".  Since the new CFG
+  file is read by the "read_path_info()" method in BMI_base.py *before*
+  reading a component's CFG file with "read_config_file()", it is
+  important to remove these four lines from pre-existing CFG files.
+
+  This greatly simplifies the preparation of CFG files for new model runs,
+  but now all components must use the same in_directory and out_directory.
+  (These 2 directories can still be different, allowing the same input files
+  to be shared by multiple users without making copies, while output files
+  are saved in a user-owned directory with write permission.)
+
+* Previously, TopoFlow relied on a module for computing D8 flow directions
+  and derived grids in /topoflow/utils/tf_d8_base.py, while the Erode
+  landscape evolution model in /topoflow/components/erode_d8_global.py
+  used a different D8 module in /topoflow/components/d8_global.py.
+  Now the latter (and better) D8 module is used for both TopoFlow and Erode.
+  This module is written as a component and is therefore configured with its
+  own CFG file:  [cfg_prefix]_d8_global.cfg.  TopoFlow model runs now
+  require this additional CFG file.
+
+* Addition of initialize_var() and update_var() methods to utils/BMI_base.py.
+  The initialize_var() method calls either the initialize_grid() or
+  initialize_scalar() method.
+  initialize_var() is only called in channels_base.py, so far.
+  update_var() is now called in:
+      topoflow/components/channels_base.py
+      topoflow/components/met_base.py
+      topoflow/utils/model_input.py 
+  Inclusion in model_input.py reduces runtime for every case where a
+  time-varying input variable is read from a file into memory by any
+  component.   Using these new methods ensures that references to numpy
+  arrays, including "0d arrays", are preserved and properly updated and
+  this results in shorter runtimes.  See comments in the code for details.
+
+* Improved the output printed to the console at the end of a TopoFlow
+  model run by the component "topoflow_driver.py".  Note that any component
+  can be the "driver" of a model run, by setting the driver_comp_name
+  flag.  However, the "topoflow_driver" component collects information
+  from all of the other process components in the model run and then prints
+  a nice report at the end of the model run.
+
+* Added a mediator for automatic unit conversion to EMELI that uses
+  the cfunits Python package that requires first installing the UDUNITS2
+  library from Unidata.  However, since installing UDUNITS2 on MacOS, and
+  especially on Windows, can be a difficult process, and since existing
+  components do not require unit conversion, by default this release uses
+  a version of EMELI that does not require cfunits:
+     topoflow/framework/emeli.py
+  but also includes a version that does use cfunits:
+     topoflow/framework/emeli_with_cfunits.py
+
+* Added a new infiltration process component (infil_beven.py).
+  This hydrologic infiltration component implements the model introduced
+  by Beven (1984) where saturated hydraulic conductivity, Ks, decreases
+  exponentially with subsurface depth, z.
+
+* Note that CSDMS introduced some small changes to the Basic Model Interface
+  (BMI) in the past few years, which could be called BMI v2.  Most of these
+  have to do with functions that describe the computational grid used by
+  each variable in the model.  These new methods/functions are:
+      get_grid_type(), get_grid_rank(), get_grid_size(),
+      get_var_grid(), get_var_nbytes() and get_var_itemsize().
+  These are not yet implemented in this release.  Additional changes in
+  BMI v2 are: (1)  removal of the "get_attribute()" method, and
+  (2) addition of the "update_until()" method.
+
+* Fixed some "array ordering" bugs in topoflow/utils/BMI_base.py:
+    In get_grid_shape(),   ordering is now [nz, ny, nx].
+    In get_grid_spacing(), ordering is now [dz, dy, dx].
+    In get_grid_origin(),  ordering is now [z0, y0, x0].
+
+* New initialize_basin_vars() in BMI_base.py that uses outlets.py.
+
+* Removed "feature" where the midpoint of a DEM was used for the basin
+  outlet in the absence of an outlet_file: [case_prefix]_outlets.txt.
+  This resulted in strange behavior and very small discharge values.
+
+* Removed numerous, obsolete code blocks that had been commented out.
+
+* Updated EMELI to remove references to the obsolete "port" concept.
+
+====================================
+  Remaining Issues & Possible Bugs
+====================================
+
+* Many components & utilities do not have "triple quote" help strings.
+
+* Most of the component unit tests are broken or missing.
+
+* Calls to the obsolete "set_port_data()" method are commented out in 
+  evap_base.py, but are still not handled correctly.
+
+* channels_base.py and topoflow_driver.py components used to call diversions.update(),
+  but these calls are now commented out.  (Diversion functionality may be broken.)
+
+* NetCDF writing utilities (LIST THEM) do not yet write CSN names to output files.
+
+* There is still a call to obsolete "set_grid_double" in satzone_base.py.
+ 
+* There are still numerous calls to "idl_func" methods that should be updated.
+
+* Calls to self.cp.get_values_in_grid_double() and self.cp.set_values_in_grid_double()
+  are commented out in diversions_fraction_method.py component, but check that the
+  code still works.
+
+* Check that all issues in 00_PROBLEMS.txt have been included here.
+
+* Add more detail to the README.md file in the package.
+
+
+
