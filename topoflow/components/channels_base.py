@@ -527,6 +527,8 @@ class channels_component( BMI_base.BMI_component ):
         # (2019-10-03) Added FLOOD_OPTION flag to CFG file.
         # If not(FLOOD_OPTION), don't write flood depths (all zeros).
         #--------------------------------------------------------------
+        if (self.FLOOD_OPTION is None):
+            self.FLOOD_OPTION = False
         if not(self.FLOOD_OPTION):
             self.SAVE_DF_GRIDS  = False
             self.SAVE_DF_PIXELS = False
