@@ -3,7 +3,7 @@ TopoFlow version 3.6 is an update to version 3.5 that runs in Python 3.7.
 TopoFlow 3.5 is in the "topoflow" repository and runs in Python 2.7. 
 Both are Python packages that consist of over 72,000 lines of code.
 
-The best way to learn about TopoFlow --- including its history, capabilities, input data preparation and an example application --- is to read the paper in the "docs" folder called:  "Peckham_et_al_2017_GPF.pdf", along with its appendices "Peckham_et_al_2017_GPF_Appendices.pdf".
+The best way to learn about TopoFlow --- including its history, capabilities, input data preparation and an example application --- is to read the paper in the "docs" folder called:  "Peckham_et_al_2017_GPF.pdf", along with its appendices "Peckham_et_al_2017_GPF_Appendices.pdf".  One of the appendices explains how to install the Python package and run a test.  It is convenient to first install the Anaconda Python distribution, create a conda environment like "tf36", and then install the netCDF4 package dependency in that environment.
 
 Detailed information on each TopoFlow model component --- including its variables and the equations used --- can be found on the CSDMS wiki website at:  https://csdms.colorado.edu/wiki/Model:TopoFlow.  Each component has its own very detailed HTML Help Page.  Links to these can be found near the bottom of the main CSDMS page for TopoFlow.  For example, the HTML Help Page for the TopoFlow Meteorology component can be found here:  https://csdms.colorado.edu/wiki/Model_help:TopoFlow-Meteorology.
 
