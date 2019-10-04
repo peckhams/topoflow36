@@ -122,7 +122,7 @@ def TF_Build_Date():
     #---------------------------------------------------------
     # Notes:  Update this whenever a new version is released
     #---------------------------------------------------------
-    return '9/19/19'
+    return '10/4/19'
     ## return '2/14/17'
     ## return '11/16/16'
     ## return '9/22/14'  ## (3.4)
