@@ -1411,8 +1411,6 @@ class satzone_component( infil_base.infil_component ):
         if (self.d_thaw_file    != ''): self.d_thaw_unit.close()
         
         for j in range(self.n_layers):
-            print('Ks_type[j] = ' + str(self.Ks_type[j]) )
-            ##########################################
             if (self.Ks_type[j] != 'Scalar'): self.Ks_unit[j].close()        
             if (self.qs_type[j] != 'Scalar'): self.qs_unit[j].close()
             if (self.th_type[j] != 'Scalar'): self.th_unit[j].close()
