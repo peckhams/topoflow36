@@ -5,7 +5,7 @@ use_setuptools()
 from setuptools import setup
 
 setup(name='topoflow',
-      version='3.5',
+      version='3.6',
       description='d8-based, spatial hydrologic model',
       author='Scott D. Peckham',
       author_email='Scott.Peckham@colorado.edu',
@@ -18,7 +18,7 @@ setup(name='topoflow',
                 'topoflow.examples',
                 'topoflow.framework',
                 'topoflow.framework.tests',
-                'topoflow.gui',
+                'topoflow.gui_old',
                 'topoflow.utils',
                 'topoflow.utils.tests'], 
       install_requires=['numpy', 'scipy', 'h5py', 'netCDF4', 'cfunits'],
