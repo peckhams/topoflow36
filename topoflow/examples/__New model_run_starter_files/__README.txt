@@ -67,6 +67,8 @@ Step 7.
 - Each CFG file also has a setting that allows the component to be Disabled.
 - The CFG file called: [case_prefix]_path_info.cfg can be edited to change
   the path to TopoFlow's input and output directories.
+- When TopoFlow is used with a GUI, the GUI collects the necessary
+  information from the user and writes a set of CFG files like this.
 
 Step 8.
 Edit the file "Test1_providers.txt" to select which components to use for
