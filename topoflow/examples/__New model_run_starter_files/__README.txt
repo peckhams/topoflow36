@@ -9,7 +9,7 @@ Step 1.
 Obtain a DEM for the region to be modeled.
    -- elevation grid                 [site_prefix]_DEM0.rtg
 
-Step 1b.
+Step 1b. (Optional, but recommended)
 Use topoflow/components/smooth_DEM.py to create "profile-smoothed" DEM.
    -- elevation grid                 [site_prefix]_DEM.rtg
 
@@ -19,7 +19,7 @@ Use topoflow/components/d8_global.py to create set of D8 files from DEM.
    -- channel slope grid             [site_prefix]_slope.rtg
    -- total contributing area grid   [site_prefix]_area.rtg
    -- D8 flow width grid             [site_prefix]_dw.rtg
-   -- monitored basin outlets        [site_prefix]_outlets.txt  May need GIS.
+   -- monitored basin outlets        [case_prefix]_outlets.txt  May need GIS.
 
 Step 3.
 Use topoflow/utils/parameterize.py to create:
@@ -61,9 +61,12 @@ Use topoflow/utils/pedotransfer.py to create soil hydraulic property grids.
    -- residual soil water volume fraction     [site_prefix]_qr.rtg
 
 Step 7.
-Copy all of the component "configuration files" (CFG files) from the folder "component_cfg_files" into the model's working directory.
-Edit the CFG files o choose options.
-Each CFG file also has a setting that allows the component to be Disabled.
+- Copy all of the component "configuration files" (CFG files) from the folder
+  "component_cfg_files" into the model's working directory.
+- Edit the CFG files o choose options.
+- Each CFG file also has a setting that allows the component to be Disabled.
+- The CFG file called: [case_prefix]_path_info.cfg can be edited to change
+  the path to TopoFlow's input and output directories.
 
 Step 8.
 Edit the file "Test1_providers.txt" to select which components to use for
