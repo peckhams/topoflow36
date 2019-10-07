@@ -23,8 +23,6 @@
 #
 #-------------------------------------------------------------------
 
-## from numpy import *
-
 import numpy as np
 
 from .tf_utils import TF_Print
@@ -114,7 +112,7 @@ def get_sizes_by_row(rti, REPORT=False, METERS=False):
         # Compute lats
         #---------------
         DTORD   = (np.pi / np.float64(180))
-        ycoords = arange(rti.nrows, dtype='Int16')
+        ycoords = np.arange(rti.nrows, dtype='int16')
         yresdeg = (rti.yres / np.float64(3600))    #(arcsecs -> degrees)
         lats = (rti.y_north_edge - (yresdeg * (ycoords + np.float64(1))))
         
@@ -138,10 +136,10 @@ def get_sizes_by_row(rti, REPORT=False, METERS=False):
         #-------------------------------
         # Return dx, dy, etc. as grids
         #-------------------------------
-        dx = np.zeros([rti.nrows], dtype='Float64') + dx
-        dy = np.zeros([rti.nrows], dtype='Float64') + dy
-        dd = np.zeros([rti.nrows], dtype='Float64') + dd
-        da = np.zeros([rti.nrows], dtype='Float64') + da
+        dx = np.zeros([rti.nrows], dtype='float64') + dx
+        dy = np.zeros([rti.nrows], dtype='float64') + dy
+        dd = np.zeros([rti.nrows], dtype='float64') + dd
+        da = np.zeros([rti.nrows], dtype='float64') + da
     
     #------------------
     # Optional report
