@@ -194,7 +194,6 @@ def open_new_gs_file(self, file_name, info=None,
     except:
         print('ERROR: Unable to open new netCDF file:')
         print( '      ' + ncgs_file_str )
-        ### exec( "print '      '," + ncgs_file_str )
         print(' ')
         print('Will write grid stack in generic RTS format.')
         print(' ')
@@ -247,7 +246,6 @@ def open_new_gs_file(self, file_name, info=None,
         except:
             print('ERROR: Unable to open new RTS file:')
             print('      ' + rts_file_str )
-            #### exec( "print '      '," + rts_file_str )
             print(' ')
     
 #   open_new_gs_file()
@@ -347,7 +345,8 @@ def open_new_ts_file(self, file_name, IDs, ####
         MAKE_TTS = False
     except:
         print('ERROR: Unable to open new netCDF file:')
-        exec( "print '      ', self." + var_name + "_ncts_file" )
+        vstr = 'self.' + var_name + '_ncts_file'
+        exec( "print('      ' + " + vstr + ")" )
         print(' ')
         print('Will write time series to multi-column text file.')
         print(' ')
@@ -375,7 +374,8 @@ def open_new_ts_file(self, file_name, IDs, ####
                   "time_units=time_units)" )
         except:
             print('ERROR: Unable to open new text file:')
-            exec( "print '      ', self." + var_name + "_tts_file" )
+            vstr = 'self.' + var_name + '_tts_file'
+            exec( "print('      ' + " + vstr + ")" )
             print(' ')
     
 #   open_new_ts_file()
@@ -498,7 +498,8 @@ def open_new_ps_file(self, file_name, IDs, ####
     except:
         # pass
         print('ERROR: Unable to open new netCDF file:')
-        exec( "print '      ', self." + var_name + "_ncps_file" )
+        vstr = 'self.' + var_name + '_ncps_file'
+        exec( "print('      ' + " + vstr + ")" )
         print(' ')
 ##        print 'Will write profile series to text file.'
 ##        print ' '
@@ -525,9 +526,10 @@ def open_new_ps_file(self, file_name, IDs, ####
 ##                  "dtype=dtype, " +
 ##                  "time_units=time_units)" )
 ##        except:
-##            print 'ERROR: Unable to open new text file:'
-##            exec( "print '      ', self." + var_name + "_tps_file" )
-##            print ' '
+##            print('ERROR: Unable to open new text file:')
+##            vstr = 'self.' + var_name + '_tps_file'
+##            exec( "print('      ' + " + vstr + ")" )
+##            print(' ')
     
 #   open_new_ps_file()
 #-------------------------------------------------------------------
@@ -630,7 +632,8 @@ def open_new_cs_file(self, file_name, info=None,
         MAKE_RT3 = False
     except:
         print('ERROR: Unable to open new netCDF file:')
-        exec( "print '      ', self." + var_name + "_nccs_file" )
+        vstr = 'self.' + var_name + '_nccs_file'
+        exec( "print('      ' + " + vstr + ")" )
         print(' ')
         print('Will write cube stack in generic RT3 format.')
         print(' ')
@@ -658,9 +661,10 @@ def open_new_cs_file(self, file_name, info=None,
 ##                  "dtype=dtype, " +
 ##                  "MAKE_BOV=True)" )
 ##        except:
-##            print 'ERROR: Unable to open new RT3 file:'
-##            exec( "print '      ', self." + var_name + "_rt3_file" )
-##            print ' '
+##            print('ERROR: Unable to open new RT3 file:')
+##            vstr = 'self.' + var_name + '_rt3_file'
+##            exec( "print('      ' + " + vstr + ")" )
+##            print(' ')
     
 #   open_new_gs_file()
 #-------------------------------------------------------------------
