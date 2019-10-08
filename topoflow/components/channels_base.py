@@ -535,6 +535,12 @@ class channels_component( BMI_base.BMI_component ):
             self.df_gs_file = ''
             self.df_ts_file = ''
 
+        #------------------------------------------------------
+        # (2019-10-08) Added CHECK_STABILITY flag to CFG file
+        #------------------------------------------------------
+        if not(hasattr(self, 'CHECK_STABILITY')):
+             self.CHECK_STABILITY = True
+
         #------------------------------------------------------------
         # Must call read_grid_info() after initialize_config_vars()
         #------------------------------------------------------------
@@ -746,12 +752,15 @@ class channels_component( BMI_base.BMI_component ):
         #---------------------------------------------
         ## self.update_mins_and_maxes()
 
-        #------------------------
-        # Check computed values
-        #------------------------
-        D_OK = self.check_flow_depth()
-        U_OK = self.check_flow_velocity()
-        OK   = (D_OK and U_OK)
+        #--------------------------------------------------
+        # Check computed values (but not if known stable)
+        #--------------------------------------------------
+        if (self.CHECK_STABILITY):
+            D_OK = self.check_flow_depth()
+            U_OK = self.check_flow_velocity()
+            OK   = (D_OK and U_OK)
+        else:
+            OK = True
 
         #-------------------------------------------
         # Read from files as needed to update vars 
@@ -1056,6 +1065,11 @@ class channels_component( BMI_base.BMI_component ):
         #-------------------------------------------
         if (self.KINEMATIC_WAVE):    
             self.remove_bad_slopes()      #(3/8/07. Only Kin Wave case)
+            #----------------------------------------------
+            # Use "get_new_slope_grid()" in new_slopes.py
+            # instead of "remove_bad_slopes()".
+            # Or change "slope_grid" in the CFG file.
+            #----------------------------------------------
             ## self.get_new_slope_grid()
             
         #----------------------------------------
@@ -1924,8 +1938,8 @@ class channels_component( BMI_base.BMI_component ):
         # free-surface gradient (DEM + d_flood), we should not
         # set it to zero at interior noflow_IDs.
         #----------------------------------------------------------- 
-        ## d[ self.d8.noflow_IDs ] = 0.0
-        d[ self.d8.edge_IDs ] = 0.0
+        d[ self.d8.noflow_IDs ] = 0.0
+        ## d[ self.d8.edge_IDs ] = 0.0
 
         #------------------------------------------------
         # 4/19/06.  Force flow depth to be positive ?
@@ -3399,207 +3413,73 @@ class channels_component( BMI_base.BMI_component ):
 
     #   print_status_report() 
     #-------------------------------------------------------------------
-    def get_new_slope_grid0(self):
-
-        #---------------------------------------------------------
-        # NB!  The iteration of D8 parent IDs will only terminate
-        #      if we have pID[0]=0.   See d8_global.py.
-        #---------------------------------------------------------
-        slope = self.initialize_grid( 0, dtype='float64' )  
-         
-        z2   = self.d8.DEM
-        pIDs = self.d8.parent_IDs
-        z1   = self.d8.DEM[ pIDs ]  
-        dz   = (z2 - z1)
-        wg   = (dz > 0)   # (array of True or False)
-        ng   = wg.sum()   # (number of cells with True)
-        wb   = np.invert( wg )
-        nb   = wb.sum()  # (number of cells with True)
-        L    = self.d8.ds.copy()
-        if (ng > 0):
-            slope[ wg ] = (dz[wg] / L[wg])
-
-        print('Computing slope grid...')
-        Spmin = slope[ slope > 0 ].min()
-        print('   initial min slope     = ' + str(slope.min()) )
-        print('   initial min pos slope = ' + str(Spmin) )
-        print('   initial max slope     = ' + str(slope.max()) )
-        
-        #-----------------------------------------------------
-        # Get a grid which for each grid cell contains the
-        # calendar-style index (or ID) of the grid cell that
-        # its D8 code says it flows to.
-        #-----------------------------------------------------
-        pID_grid = self.d8.parent_ID_grid
-        
-        #-----------------------------------------
-        # Save IDs as a tuple of row indices and
-        # column indices, "np.where" style
-        # divmod() is builtin and not in numpy.
-        #-----------------------------------------
-        # self.parent_IDs = divmod(pID_grid, self.nx)
-        
-        max_reps = 500  #######
-        n_reps = 0                   
-        DONE = (nb == 0)
-        while not(DONE):
-            #-----------------------------------
-            # Get IDs for "parents of parents"
-            #-----------------------------------
-            pID_grid = pID_grid[ pIDs ]
-            pIDs = divmod( pID_grid, self.nx )
-            z1   = self.d8.DEM[ pIDs ]
-            ds   = self.d8.ds[ pIDs ]
-            L    += ds
-            
-            dz = (z2 - z1)
-             # (array of True or False)
-            wg = np.logical_and(dz > 0, slope == 0) 
-            ng = wg.sum()  # (number of cells with True)
-            wb = np.invert( wg )
-            nb = wb.sum()  ########## (nb = npixels - ng)
-            if (ng > 0):
-                slope[ wg ] = dz[wg] / L[wg]
-            
-            n_reps += 1
-            if (n_reps == max_reps):
-                print('Aborting after ' + str(max_reps) + ' reps.')     
-            DONE = (nb == 0) or (n_reps == max_reps) or \
-                   (pID_grid.max() == 0)   ######################
-        
-        self.slope = slope    
-        print('Finished computing slope grid.')
-        Spmin = slope[ slope > 0 ].min()
-        print('   n_reps        = ' + str(n_reps) )
-        print('   min slope     = ' + str(slope.min()) )
-        print('   min pos slope = ' + str(Spmin) )
-        print('   max slope     = ' + str(slope.max()) )
-        print(' ')
-              
-    #   get_new_slope_grid0()
-    #-------------------------------------------------------------------
-    def get_new_slope_grid(self):
-
-        #---------------------------------------------------------
-        # NB!  The iteration of D8 parent IDs will only terminate
-        #      if we have pID[0]=0.   See d8_global.py.
-        #---------------------------------------------------------
-        # Idea2: If your D8 parent cell (downstream) has S=0,
-        #        then iterate to parent of parent until you
-        #        reach a cell whose D8 parent has S > 0.
-        #        This cell can now be assigned a slope based
-        #        on start z and stop z and distance.
-        #        Connected cells upstream with S=0 should be
-        #        assigned this same slope.
-        #        Or, at this point, could compute a new z,
-        #        then repeat the process.
-        #---------------------------------------------------------
-        slope = self.initialize_grid( 0, dtype='float64' )  
-         
-        z2   = self.d8.DEM
-        pIDs = self.d8.parent_IDs
-        z1   = self.d8.DEM[ pIDs ]  
-        dz   = (z2 - z1)
-        wg   = (dz > 0)   # (array of True or False)
-        ng   = wg.sum()   # (number of cells with True)
-        wb   = np.invert( wg )
-        nb   = wb.sum()  # (number of cells with True)
-        L    = self.d8.ds.copy()
-        if (ng > 0):
-            slope[ wg ] = (dz[wg] / L[wg])
-
-        print('Computing slope grid...')
-        Spmin = slope[ slope > 0 ].min()
-        print('   initial min slope     = ' + str(slope.min()) )
-        print('   initial min pos slope = ' + str(Spmin) )
-        print('   initial max slope     = ' + str(slope.max()) )
-        
-        #-----------------------------------------------------
-        # Get a grid which for each grid cell contains the
-        # calendar-style index (or ID) of the grid cell that
-        # its D8 code says it flows to.
-        #-----------------------------------------------------
-        pID_grid = self.d8.parent_ID_grid.copy()
-        
-        #-----------------------------------------
-        # Save IDs as a tuple of row indices and
-        # column indices, "np.where" style
-        # divmod() is builtin and not in numpy.
-        #-----------------------------------------
-        # self.parent_IDs = divmod(pID_grid, self.nx)
-
-        #-------------------------------           
-        # Get slopes of the D8 parents
-        #-------------------------------
-        S0 = slope.copy()
-        pslope = slope[ pIDs ]
-        w1 = np.logical_and( slope > 0, pslope == 0 )
-        n1 = w1.sum()
-                    
-        max_reps = 500  #######
-        n_reps = 0                   
-        DONE = (n1 == 0)
-        while not(DONE):
-            
-            #-----------------------------------
-            # Get IDs for "parents of parents"
-            #-----------------------------------
-            pID_grid = pID_grid[ pIDs ]
-            pIDs = divmod( pID_grid, self.nx )
-
-            z1 = self.d8.DEM[ pIDs ]
-            dz = (z2 - z1)
-            ds = self.d8.ds[ pIDs ]
-            L  += ds
-    
-            p_slope = slope[ pIDs ]
-            wg = (p_slope > 0)        ###############
-            ng = wg.sum()
-            if (ng > 0):
-                slope[ wg ] = dz[ wg ] / L[ wg ]
-            
-            n_reps += 1
-            if (n_reps == max_reps):
-                print('Aborting after ' + str(max_reps) + ' reps.')     
-            DONE = (n_reps == max_reps) or (pID_grid.max() == 0)   ########
-
-        #--------------------------------------------------------------    
-        # Step 2.  Assign slope to the in-between grid cells with S=0
-        #--------------------------------------------------------------
-        # If D8 parent was assigned a slope in Step 1, then any of
-        # its D8 kids with S=0 should be assigned the same slope.
-        # Iterate until all cells with S=0 are assigned a slope.
-        #--------------------------------------------------------------
-        pIDs = self.d8.parent_IDs
-        ## pID_grid = self.d8.parent_ID_grid.copy()   
-        # w1 = (slope == 0)
-        # n1 = w1.sum()
-        # DONE = (n1 == 0)
-        DONE = False
-        while not(DONE): 
-            pslope = slope[ pIDs ]
-            w2 = np.logical_and( slope == 0, pslope > 0 )
-            n2 = w2.sum()
-            if (n2 > 0):
-                slope[ w2 ] = pslope[ w2 ]
-            DONE = (n2 == 0)
-            #-----------------------------------
-            # Get IDs for "parents of parents"
-            #-----------------------------------
-            ## pID_grid = pID_grid[ pIDs ]
-            ## pIDs = divmod( pID_grid, self.nx )
-
-        #--------------------------------------------------------------             
-        self.slope = slope    
-        print('Finished computing slope grid.')
-        Spmin = slope[ slope > 0 ].min()
-        print('   n_reps        = ' + str(n_reps) )
-        print('   min slope     = ' + str(slope.min()) )
-        print('   min pos slope = ' + str(Spmin) )
-        print('   max slope     = ' + str(slope.max()) )
-        print(' ')
-              
-    #   get_new_slope_grid()     
+#     def remove_bad_slopes0(self, FLOAT=False):
+# 
+#         #------------------------------------------------------------
+#         # Notes: The main purpose of this routine is to find
+#         #        pixels that have nonpositive slopes and replace
+#         #        then with the smallest value that occurs anywhere
+#         #        in the input slope grid.  For example, pixels on
+#         #        the edges of the DEM will have a slope of zero.
+# 
+#         #        With the Kinematic Wave option, flow cannot leave
+#         #        a pixel that has a slope of zero and the depth
+#         #        increases in an unrealistic manner to create a
+#         #        spike in the depth grid.
+# 
+#         #        It would be better, of course, if there were
+#         #        no zero-slope pixels in the DEM.  We could use
+#         #        an "Imposed gradient DEM" to get slopes or some
+#         #        method of "profile smoothing".
+# 
+#         #        It is possible for the flow code to be nonzero
+#         #        at a pixel that has NaN for its slope. For these
+#         #        pixels, we also set the slope to our min value.
+# 
+#         #        7/18/05. Broke this out into separate procedure.
+#         #------------------------------------------------------------
+# 
+#         #-----------------------------------
+#         # Are there any "bad" pixels ?
+#         # If not, return with no messages.
+#         #-----------------------------------  
+#         wb = np.where(np.logical_or((self.slope <= 0.0), \
+#                               np.logical_not(np.isfinite(self.slope))))
+#         nbad = np.size(wb[0])
+#         print('size(slope) = ' + str(np.size(self.slope)) )
+#         print('size(wb) = ' + str(nbad) )
+#         
+#         wg = np.where(np.invert(np.logical_or((self.slope <= 0.0), \
+#                                      np.logical_not(np.isfinite(self.slope)))))
+#         ngood = np.size(wg[0])
+#         if (nbad == 0) or (ngood == 0):
+#             return
+#         
+#         #---------------------------------------------
+#         # Find smallest positive value in slope grid
+#         # and replace the "bad" values with smin.
+#         #---------------------------------------------
+#         print('-------------------------------------------------')
+#         print('WARNING: Zero or negative slopes found.')
+#         print('         Replacing them with smallest slope.')
+#         print('         Use "Profile smoothing tool" instead.')
+#         S_min = self.slope[wg].min()
+#         S_max = self.slope[wg].max()
+#         print('         min(S) = ' + str(S_min))
+#         print('         max(S) = ' + str(S_max))
+#         print('-------------------------------------------------')
+#         print(' ')
+#         self.slope[wb] = S_min
+#         
+#         #--------------------------------
+#         # Convert data type to double ?
+#         #--------------------------------
+#         if (FLOAT):    
+#             self.slope = np.float32(self.slope)
+#         else:    
+#             self.slope = np.float64(self.slope)
+#         
+#     #   remove_bad_slopes0()
     #-------------------------------------------------------------------
     def remove_bad_slopes(self, FLOAT=False):
 
@@ -3627,38 +3507,60 @@ class channels_component( BMI_base.BMI_component ):
         #        7/18/05. Broke this out into separate procedure.
         #------------------------------------------------------------
 
-        #-----------------------------------
-        # Are there any "bad" pixels ?
-        # If not, return with no messages.
-        #-----------------------------------  
-        wb = np.where(np.logical_or((self.slope <= 0.0), \
-                              np.logical_not(np.isfinite(self.slope))))
-        nbad = np.size(wb[0])
-        print('size(slope) = ' + str(np.size(self.slope)) )
-        print('size(wb) = ' + str(nbad) )
-        
-        wg = np.where(np.invert(np.logical_or((self.slope <= 0.0), \
-                                     np.logical_not(np.isfinite(self.slope)))))
-        ngood = np.size(wg[0])
-        if (nbad == 0) or (ngood == 0):
+        #------------------------
+        # Are any slopes Nans ?
+        #------------------------
+        wnan = np.where( np.isnan( self.slope ) )
+        nnan = np.size( wnan[0] )
+        #-------------------------------
+        # Are any slopes nonpositive ?
+        #-------------------------------
+        wneg = np.where( self.slope <= 0.0 )
+        nneg = np.size( wneg[0] )
+        #-------------------------------
+        # Are any slopes infinite ?
+        #-------------------------------
+        winf = np.where( np.isinf( self.slope ) )
+        ninf = np.size( winf[0] )
+        #----------------------------
+        nbad = (nnan + nneg + ninf)
+        if (nbad == 0):
             return
-        
+
+        #---------------------------       
+        # Merge "wheres" into wbad
+        #---------------------------
+        S_shape = self.slope.shape
+        bad = np.zeros( S_shape, dtype='bool' )
+        if (nnan > 0): bad[ wnan ] = True
+        if (nneg > 0): bad[ wneg ] = True
+        if (ninf > 0): bad[ winf ] = True
+        good = np.invert( bad )
+           
+        #--------------------
+        # Print information
+        #--------------------
+        print('Total number of slope values = ' + str(np.size(self.slope)) )
+        print('Number of nonpositive values = ' + str(nneg) )
+        print('Number of NaN values         = ' + str(nnan) )
+        print('Number of infinite values    = ' + str(ninf) )
+
         #---------------------------------------------
         # Find smallest positive value in slope grid
         # and replace the "bad" values with smin.
         #---------------------------------------------
         print('-------------------------------------------------')
-        print('WARNING: Zero or negative slopes found.')
+        print('WARNING: Zero, negative or NaN slopes found.')
         print('         Replacing them with smallest slope.')
-        print('         Use "Profile smoothing tool" instead.')
-        S_min = self.slope[wg].min()
-        S_max = self.slope[wg].max()
+        print('         Use "new_slopes.py" instead.')
+        S_min = self.slope[ good ].min()
+        S_max = self.slope[ good ].max()
         print('         min(S) = ' + str(S_min))
         print('         max(S) = ' + str(S_max))
         print('-------------------------------------------------')
         print(' ')
-        self.slope[wb] = S_min
-        
+        self.slope[ bad ] = S_min
+
         #--------------------------------
         # Convert data type to double ?
         #--------------------------------
@@ -3669,7 +3571,7 @@ class channels_component( BMI_base.BMI_component ):
         
     #   remove_bad_slopes
     #-------------------------------------------------------------------
-
+    
 #-------------------------------------------------------------------
 def Trapezoid_Rh(d, wb, theta):
 
