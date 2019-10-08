@@ -158,18 +158,36 @@ def get_grid_from_TCA( site_prefix=None, cfg_dir=None,
         print('Power-law parameters are:')
         print('c = ' + str(c) )
         print('p = ' + str(p) )
- 
+
+    #-------------------------------------------- 
+    # Find cells that have TCA = 0 (e.g. edges)
+    #--------------------------------------------
+    w1 = (A <= 0)  # (array of True or False)
+            
     #-------------------------------------------
     # Compute the new grid as power law of TCA
     #-------------------------------------------
+    # The TCA area grid has zeros on the edges
+    #-------------------------------------------
     if (p < 0):
-        w1 = (A <= 0)
+        #--------------------------------------
+        # Need to avoid NaNs in computed grid
+        #--------------------------------------
         Ac = A.copy()
-        Ac[ w1 ] = np.nan  #######
+        Ac[ w1 ] = 1.0    # (temporary, to avoid warnings)
         grid = c * Ac**p
     else:
         grid = c * A**p
 
+    #-------------------------------------------------------------
+    # Zero is okay for some variables, but is not okay for width
+    # or Manning's n because we'll get a divide-by-zero error.
+    #-------------------------------------------------------------
+    ## grid[ w1 ] = np.nan    # (TopoFlow doesn't like these.)
+    ## grid[ w1 ] = -1.0
+    ## grid[ w1 ] = 0.0
+    grid[ w1 ] = 1.0
+    
     #----------------------------------
     # Write computed grid to out_file
     #----------------------------------
