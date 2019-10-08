@@ -934,27 +934,33 @@ class channels_component( BMI_base.BMI_component ):
             self.nval_max  = self.initialize_scalar(-1, dtype='float64')
 
         #-----------------------------------------------
+        # Convert bank angles from degrees to radians. 
+        #-------------------------------------------------
+        # When bank angles are given as a GRID, this is
+        # done in read_input_files().  Then realized that
+        # that conversion didn't occur for SCALAR angle.
+        # This caused "denom" later to be negative.
+        # (Fixed on: 2019-10-08.)
+        #-------------------------------------------------
+        ### if (np.size( self.angle ) == 1):
+        if (self.angle_type.lower() == 'scalar'):
+            self.angle *= self.deg_to_rad   # [radians]   
+
+        #-----------------------------------------------
         # Print mins and maxes of some other variables
         # that were initialized by read_input_files().
         #-----------------------------------------------
-#         print '    min(slope)      =', self.slope.min()
-#         print '    max(slope)      =', self.slope.max()
+#         print('    min(slope)      = ' + str(self.slope.min()) )
+#         print('    max(slope)      = ' + str(self.slope.max()) )
         print('    min(width)      = ' + str(self.width.min()) )
         print('    max(width)      = ' + str(self.width.max()) )
-#         print '    min(angle)      = ' + str(self.angle.min() * self.rad_to_deg) + ' [deg]')
-#         print '    max(angle)      = ' + str(self.angle.max() * self.rad_to_deg) + ' [deg]')
+        print('    min(angle)      = ' + str(self.angle.min() * self.rad_to_deg) + ' [deg]')
+        print('    max(angle)      = ' + str(self.angle.max() * self.rad_to_deg) + ' [deg]')
         print('    min(sinuosity)  = ' + str(self.sinu.min()) )
         print('    max(sinuosity)  = ' + str(self.sinu.max()) )
         print('    min(init_depth) = ' + str(self.d0.min()) )
         print('    max(init_depth) = ' + str(self.d0.max()) )
-            
-        #-----------------------------------------------
-        # Convert bank angles from degrees to radians. 
-        #-------------------------------------------------
-        # Already done in read_input_files().  (11/16/16)
-        #-------------------------------------------------
-        ## self.angle = self.angle * self.deg_to_rad  # [radians]
-        
+
         #------------------------------------------------
         # 8/29/05.  Multiply ds by (unitless) sinuosity
         # Orig. ds is used by subsurface flow
@@ -1050,7 +1056,8 @@ class channels_component( BMI_base.BMI_component ):
         #-------------------------------------------
         if (self.KINEMATIC_WAVE):    
             self.remove_bad_slopes()      #(3/8/07. Only Kin Wave case)
-        
+            ## self.get_new_slope_grid()
+            
         #----------------------------------------
         # Initial volume of water in each pixel
         #-----------------------------------------------------------
@@ -1876,6 +1883,16 @@ class channels_component( BMI_base.BMI_component ):
                 arg   = 2.0 * denom * self.vol / self.d8.ds
                 arg  += width**(2.0)
                 d     = (np.sqrt(arg) - width) / denom
+                
+                # For debugging
+#                 print('angle       = ' + str(angle) )
+#                 print('denom.min() = ' + str(denom.min()) ) 
+#                 print('denom.max() = ' + str(denom.max()) ) 
+#                 print('ds.min()    = ' + str(self.d8.ds.min()) ) 
+#                 print('ds.max()    = ' + str(self.d8.ds.max()) )                
+#                 print('arg.min()   = ' + str(arg.min()) )
+#                 print('arg.max()   = ' + str(arg.max()) )
+#                 d     = (np.sqrt(arg) - width) / denom
         else:
             #-----------------------------------------------------
             # Pixels where angle is 0 must be handled separately
@@ -2479,7 +2496,7 @@ class channels_component( BMI_base.BMI_component ):
         
     #   update_total_land_water_volume()
     #-------------------------------------------------------------------
-    def check_flow_depth(self):
+    def check_flow_depth_LAST(self):
 
         OK = True
         d  = self.d
@@ -2488,7 +2505,7 @@ class channels_component( BMI_base.BMI_component ):
         
         #---------------------------------
         # All all flow depths positive ?
-        #---------------------------------
+        #---------------------------------  
         wbad = np.where( np.logical_or( d < 0.0, np.logical_not(np.isfinite(d)) ))
         nbad = np.size( wbad[0] )       
         if (nbad == 0):    
@@ -2500,7 +2517,7 @@ class channels_component( BMI_base.BMI_component ):
         
         msg = [ star_line, \
                'ERROR: Simulation aborted.', ' ', \
-               'Negative depth found: ' + str(dmin), \
+               'Negative or NaN depth found: ' + str(dmin), \
                'Time step may be too large.', \
                'Time step:      ' + str(dt) + ' [s]' ]
 
@@ -2529,9 +2546,97 @@ class channels_component( BMI_base.BMI_component ):
 
         return OK
 
-    #   check_flow_depth
+    #   check_flow_depth_LAST()
     #-------------------------------------------------------------------
-    def check_flow_velocity(self):
+    def check_flow_depth(self):
+
+        OK = True
+        d  = self.d
+        dt = self.dt
+        nx = self.nx   #################
+        
+        #---------------------------------
+        # Are any flow depths negative ?
+        #---------------------------------
+        wneg = np.where( d < 0.0 )
+        nneg = np.size( wneg[0] )
+        #-----------------------------
+        # Are any flow depths NaNs ?
+        #-----------------------------
+        wnan = np.where( np.isnan(d) )
+        nnan = np.size( wnan[0] )
+        #-----------------------------
+        # Are any flow depths Infs ?
+        #-----------------------------
+        winf = np.where( np.isinf(d) )
+        ninf = np.size( winf[0] )
+        #----------------------------------
+        # Option to allow NaN but not Inf
+        #----------------------------------
+        if (nneg == 0) and (ninf == 0):
+            return OK
+        OK = False
+        #-------------------------------------------------- 
+#         if (nneg == 0) and (nnan == 0) and (ninf == 0):
+#             return OK
+#         OK = False
+
+        #----------------------------------
+        # Print informative error message
+        #----------------------------------
+        star_line = '*******************************************'
+        print( star_line )           
+        print('ERROR: Simulation aborted.')
+        print(' ')
+        #--------------------------------------------------------        
+        if (nneg > 0):
+            dmin = d[ wneg ].min()
+            str1 = 'Found ' + str(nneg) + ' negative depths.'
+            str2 = '  Smallest negative depth = ' + str(dmin)
+            print( str1 )
+            print( str2 )
+        #--------------------------------------------------------
+        if (nnan > 0):
+            str3 = 'Found ' + str(nnan) + ' NaN depths.'
+            print( str3 )
+        #--------------------------------------------------------
+        if (ninf > 0):
+            str4 = 'Found ' + str(ninf) + ' infinite depths.'
+            print( str4 )
+        #------------------------------------
+        # Option to allow NaNs on the edges
+        #------------------------------------
+        print( 'Time step may be too large for stability.' )
+        print( 'Time step:      ' + str(dt) + ' [s]' )
+        print( 'Try reducing timestep in channels CFG file.' )
+        print( star_line )
+        print( ' ' )
+            
+        #-------------------------------------------
+        # If not too many, print actual depths
+        #-------------------------------------------
+#         if (nbad < 30):          
+#             brow = wbad[0][0]
+#             bcol = wbad[1][0]
+# ##            badi = wbad[0]
+# ##            bcol = (badi % nx)
+# ##            brow = (badi / nx)
+#             crstr = str(bcol) + ', ' + str(brow)
+# 
+#             msg = [' ', '(Column, Row):  ' + crstr, \
+#                    'Flow depth:     ' + str(d[brow, bcol])]
+#             for k in range(len(msg)):
+#                 print(msg[k])
+#         print(star_line) 
+#         print(' ')
+
+        raise RuntimeError('Negative or NaN depth found.')  # (11/16/16)
+
+        return OK
+
+    #   check_flow_depth()
+    #-------------------------------------------------------------------
+    def check_flow_velocity_LAST(self):
 
         OK = True
         u  = self.u
@@ -2600,7 +2705,98 @@ class channels_component( BMI_base.BMI_component ):
 ##        return OK                          
 
 
-    #   check_flow_velocity
+    #   check_flow_velocity_LAST()
+    #-------------------------------------------------------------------
+    def check_flow_velocity(self):
+
+        OK = True
+        u  = self.u
+        dt = self.dt
+        nx = self.nx
+        
+        #---------------------------------
+        # Are any flow depths negative ?
+        #---------------------------------
+        wneg = np.where( u < 0.0 )
+        nneg = np.size( wneg[0] )
+        #-----------------------------
+        # Are any flow depths NaNs ?
+        #-----------------------------
+        wnan = np.where( np.isnan(u) )
+        nnan = np.size( wnan[0] )
+        #-----------------------------
+        # Are any flow depths Infs ?
+        #-----------------------------
+        winf = np.where( np.isinf(u) )
+        ninf = np.size( winf[0] )
+        #----------------------------------
+        # Option to allow NaN but not Inf
+        #----------------------------------
+        if (nneg == 0) and (ninf == 0):
+            return OK
+        OK = False
+        #-------------------------------------------------- 
+#         if (nneg == 0) and (nnan == 0) and (ninf == 0):
+#             return OK
+#         OK = False
+
+        #----------------------------------
+        # Print informative error message
+        #----------------------------------
+        star_line = '*******************************************'
+        print( star_line )           
+        print('ERROR: Simulation aborted.')
+        print(' ')
+        #--------------------------------------------------------        
+        if (nneg > 0):
+            umin = u[ wneg ].min()
+            str1 = 'Found ' + str(nneg) + ' negative velocities.'
+            str2 = '  Smallest negative velocity = ' + str(umin)
+            print( str1 )
+            print( str2 )
+        #--------------------------------------------------------
+        if (nnan > 0):
+            str3 = 'Found ' + str(nnan) + ' NaN velocities.'
+            print( str3 )
+        #--------------------------------------------------------
+        if (ninf > 0):
+            str4 = 'Found ' + str(ninf) + ' infinite velocities.'
+            print( str4 )
+        #------------------------------------
+        # Option to allow NaNs on the edges
+        #------------------------------------
+        print( 'Time step may be too large for stability.' )
+        print( 'Time step:      ' + str(dt) + ' [s]' )
+        print( 'Try reducing timestep in channels CFG file.' )
+        print( star_line )
+        print( ' ' )
+        
+        raise RuntimeError('Negative or NaN velocity found.')  # (11/16/16)
+
+        return OK
+
+
+##        umin = u[wbad].min()
+##        badi = wbad[0]
+##        bcol = (badi % nx)
+##        brow = (badi / nx)
+##        crstr = str(bcol) + ', ' + str(brow)
+##        msg = np.array([' ', \
+##                     '*******************************************', \
+##                     'ERROR: Simulation aborted.', ' ', \
+##                     'Negative velocity found: ' + str(umin), \
+##                     'Time step may be too large.', ' ', \
+##                     '(Column, Row):  ' + crstr, \
+##                     'Velocity:       ' + str(u[badi]), \
+##                     'Time step:      ' + str(dt) + ' [s]', \
+##                     '*******************************************', ' '])
+##        for k in xrange( np.size(msg) ):
+##            print msg[k]
+
+##        return OK                          
+
+
+    #   check_flow_velocity()
     #-------------------------------------------------------------------  
     def open_input_files(self):
 
@@ -2681,9 +2877,11 @@ class channels_component( BMI_base.BMI_component ):
 
         angle = model_input.read_next(self.angle_unit, self.angle_type, rti)
         if (angle is not None):
-            #-----------------------------------------------
-            # Convert bank angles from degrees to radians. 
-            #-----------------------------------------------
+            #------------------------------------------------------------
+            # Convert bank angles from degrees to radians.  For a
+            # SCALAR angle, this is done in initialize_computed_vars().
+            # To support general case this is done here for angle GRID. 
+            #------------------------------------------------------------
             angle *= self.deg_to_rad   # [radians]
             self.update_var( 'angle', angle )
 
@@ -3199,7 +3397,209 @@ class channels_component( BMI_base.BMI_component ):
         print(' ')
         print('-------------------------------------------------')
 
-    #   print_status_report()         
+    #   print_status_report() 
+    #-------------------------------------------------------------------
+    def get_new_slope_grid0(self):
+
+        #---------------------------------------------------------
+        # NB!  The iteration of D8 parent IDs will only terminate
+        #      if we have pID[0]=0.   See d8_global.py.
+        #---------------------------------------------------------
+        slope = self.initialize_grid( 0, dtype='float64' )  
+         
+        z2   = self.d8.DEM
+        pIDs = self.d8.parent_IDs
+        z1   = self.d8.DEM[ pIDs ]  
+        dz   = (z2 - z1)
+        wg   = (dz > 0)   # (array of True or False)
+        ng   = wg.sum()   # (number of cells with True)
+        wb   = np.invert( wg )
+        nb   = wb.sum()  # (number of cells with True)
+        L    = self.d8.ds.copy()
+        if (ng > 0):
+            slope[ wg ] = (dz[wg] / L[wg])
+
+        print('Computing slope grid...')
+        Spmin = slope[ slope > 0 ].min()
+        print('   initial min slope     = ' + str(slope.min()) )
+        print('   initial min pos slope = ' + str(Spmin) )
+        print('   initial max slope     = ' + str(slope.max()) )
+        
+        #-----------------------------------------------------
+        # Get a grid which for each grid cell contains the
+        # calendar-style index (or ID) of the grid cell that
+        # its D8 code says it flows to.
+        #-----------------------------------------------------
+        pID_grid = self.d8.parent_ID_grid
+        
+        #-----------------------------------------
+        # Save IDs as a tuple of row indices and
+        # column indices, "np.where" style
+        # divmod() is builtin and not in numpy.
+        #-----------------------------------------
+        # self.parent_IDs = divmod(pID_grid, self.nx)
+        
+        max_reps = 500  #######
+        n_reps = 0                   
+        DONE = (nb == 0)
+        while not(DONE):
+            #-----------------------------------
+            # Get IDs for "parents of parents"
+            #-----------------------------------
+            pID_grid = pID_grid[ pIDs ]
+            pIDs = divmod( pID_grid, self.nx )
+            z1   = self.d8.DEM[ pIDs ]
+            ds   = self.d8.ds[ pIDs ]
+            L    += ds
+            
+            dz = (z2 - z1)
+             # (array of True or False)
+            wg = np.logical_and(dz > 0, slope == 0) 
+            ng = wg.sum()  # (number of cells with True)
+            wb = np.invert( wg )
+            nb = wb.sum()  ########## (nb = npixels - ng)
+            if (ng > 0):
+                slope[ wg ] = dz[wg] / L[wg]
+            
+            n_reps += 1
+            if (n_reps == max_reps):
+                print('Aborting after ' + str(max_reps) + ' reps.')     
+            DONE = (nb == 0) or (n_reps == max_reps) or \
+                   (pID_grid.max() == 0)   ######################
+        
+        self.slope = slope    
+        print('Finished computing slope grid.')
+        Spmin = slope[ slope > 0 ].min()
+        print('   n_reps        = ' + str(n_reps) )
+        print('   min slope     = ' + str(slope.min()) )
+        print('   min pos slope = ' + str(Spmin) )
+        print('   max slope     = ' + str(slope.max()) )
+        print(' ')
+              
+    #   get_new_slope_grid0()
+    #-------------------------------------------------------------------
+    def get_new_slope_grid(self):
+
+        #---------------------------------------------------------
+        # NB!  The iteration of D8 parent IDs will only terminate
+        #      if we have pID[0]=0.   See d8_global.py.
+        #---------------------------------------------------------
+        # Idea2: If your D8 parent cell (downstream) has S=0,
+        #        then iterate to parent of parent until you
+        #        reach a cell whose D8 parent has S > 0.
+        #        This cell can now be assigned a slope based
+        #        on start z and stop z and distance.
+        #        Connected cells upstream with S=0 should be
+        #        assigned this same slope.
+        #        Or, at this point, could compute a new z,
+        #        then repeat the process.
+        #---------------------------------------------------------
+        slope = self.initialize_grid( 0, dtype='float64' )  
+         
+        z2   = self.d8.DEM
+        pIDs = self.d8.parent_IDs
+        z1   = self.d8.DEM[ pIDs ]  
+        dz   = (z2 - z1)
+        wg   = (dz > 0)   # (array of True or False)
+        ng   = wg.sum()   # (number of cells with True)
+        wb   = np.invert( wg )
+        nb   = wb.sum()  # (number of cells with True)
+        L    = self.d8.ds.copy()
+        if (ng > 0):
+            slope[ wg ] = (dz[wg] / L[wg])
+
+        print('Computing slope grid...')
+        Spmin = slope[ slope > 0 ].min()
+        print('   initial min slope     = ' + str(slope.min()) )
+        print('   initial min pos slope = ' + str(Spmin) )
+        print('   initial max slope     = ' + str(slope.max()) )
+        
+        #-----------------------------------------------------
+        # Get a grid which for each grid cell contains the
+        # calendar-style index (or ID) of the grid cell that
+        # its D8 code says it flows to.
+        #-----------------------------------------------------
+        pID_grid = self.d8.parent_ID_grid.copy()
+        
+        #-----------------------------------------
+        # Save IDs as a tuple of row indices and
+        # column indices, "np.where" style
+        # divmod() is builtin and not in numpy.
+        #-----------------------------------------
+        # self.parent_IDs = divmod(pID_grid, self.nx)
+
+        #-------------------------------           
+        # Get slopes of the D8 parents
+        #-------------------------------
+        S0 = slope.copy()
+        pslope = slope[ pIDs ]
+        w1 = np.logical_and( slope > 0, pslope == 0 )
+        n1 = w1.sum()
+                    
+        max_reps = 500  #######
+        n_reps = 0                   
+        DONE = (n1 == 0)
+        while not(DONE):
+            
+            #-----------------------------------
+            # Get IDs for "parents of parents"
+            #-----------------------------------
+            pID_grid = pID_grid[ pIDs ]
+            pIDs = divmod( pID_grid, self.nx )
+
+            z1 = self.d8.DEM[ pIDs ]
+            dz = (z2 - z1)
+            ds = self.d8.ds[ pIDs ]
+            L  += ds
+    
+            p_slope = slope[ pIDs ]
+            wg = (p_slope > 0)        ###############
+            ng = wg.sum()
+            if (ng > 0):
+                slope[ wg ] = dz[ wg ] / L[ wg ]
+            
+            n_reps += 1
+            if (n_reps == max_reps):
+                print('Aborting after ' + str(max_reps) + ' reps.')     
+            DONE = (n_reps == max_reps) or (pID_grid.max() == 0)   ########
+
+        #--------------------------------------------------------------    
+        # Step 2.  Assign slope to the in-between grid cells with S=0
+        #--------------------------------------------------------------
+        # If D8 parent was assigned a slope in Step 1, then any of
+        # its D8 kids with S=0 should be assigned the same slope.
+        # Iterate until all cells with S=0 are assigned a slope.
+        #--------------------------------------------------------------
+        pIDs = self.d8.parent_IDs
+        ## pID_grid = self.d8.parent_ID_grid.copy()   
+        # w1 = (slope == 0)
+        # n1 = w1.sum()
+        # DONE = (n1 == 0)
+        DONE = False
+        while not(DONE): 
+            pslope = slope[ pIDs ]
+            w2 = np.logical_and( slope == 0, pslope > 0 )
+            n2 = w2.sum()
+            if (n2 > 0):
+                slope[ w2 ] = pslope[ w2 ]
+            DONE = (n2 == 0)
+            #-----------------------------------
+            # Get IDs for "parents of parents"
+            #-----------------------------------
+            ## pID_grid = pID_grid[ pIDs ]
+            ## pIDs = divmod( pID_grid, self.nx )
+
+        #--------------------------------------------------------------             
+        self.slope = slope    
+        print('Finished computing slope grid.')
+        Spmin = slope[ slope > 0 ].min()
+        print('   n_reps        = ' + str(n_reps) )
+        print('   min slope     = ' + str(slope.min()) )
+        print('   min pos slope = ' + str(Spmin) )
+        print('   max slope     = ' + str(slope.max()) )
+        print(' ')
+              
+    #   get_new_slope_grid()     
     #-------------------------------------------------------------------
     def remove_bad_slopes(self, FLOAT=False):
 
