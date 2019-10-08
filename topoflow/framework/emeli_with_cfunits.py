@@ -1518,6 +1518,7 @@ class framework():
         n_comps = len( self.provider_list )
         dt_array = np.zeros( n_comps )
         dt_units = np.zeros( n_comps, dtype='<U30')   ###
+
         k = 0
         print('Original component time step sizes =')
         for comp_name in self.provider_list:    
@@ -1525,11 +1526,20 @@ class framework():
             dt       = bmi.get_time_step()
             units    = bmi.get_time_units()
             unit_str = ' [' + units + ']'
-            ## print 'units =', units
-            print('    ' + comp_name + ' = ' + str(dt) + unit_str) 
-            dt_array[ k ] = dt
-            dt_units[ k ] = units
-            k += 1 
+            #---------------------------------------------------            
+            DISABLED = (bmi.comp_status.lower() == 'disabled')
+            if not(DISABLED):
+                print('    ' + comp_name + ' = ' + str(dt) + unit_str) 
+                dt_array[ k ] = dt
+                dt_units[ k ] = units
+            else:
+                print('    ' + comp_name + ' is Disabled.' )
+                #--------------------------------------------
+                # Set to large value so won't affect min dt
+                #--------------------------------------------
+                dt_array[ k ] = 1000000.0
+                dt_units[ k ] = 'seconds'
+            k += 1
 
         #-----------------------------------------
         # Convert all time step units to seconds
