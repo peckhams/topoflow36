@@ -173,9 +173,8 @@ def get_new_slope_grid(site_prefix=None, case_prefix=None,
     ng   = wg.sum()   # (number of cells with True)
     wb   = np.invert( wg )
     nb   = wb.sum()  # (number of cells with True)
-    L    = d8.ds.copy()
     if (ng > 0):
-        slope[ wg ] = (dz[wg] / L[wg])
+        slope[ wg ] = (dz[wg] / d8.ds[wg])
 
     print('Computing slope grid...')
     Spmin = slope[ slope > 0 ].min()
@@ -192,45 +191,52 @@ def get_new_slope_grid(site_prefix=None, case_prefix=None,
     pID_grid = d8.parent_ID_grid
     ID_grid  = d8.ID_grid
 
-    #-----------------------------------------
-    # Save IDs as a tuple of row indices and
-    # column indices, "np.where" style
-    # divmod() is builtin and not in numpy.
-    #-----------------------------------------
-    # parent_IDs = divmod(pID_grid, d8.nx)
-
-    #-------------------------------           
-    # Get slopes of the D8 parents
-    #-------------------------------
+    #------------------------------------           
+    # Get slopes of the D8 parent cells
+    #------------------------------------
+    L  = d8.ds.copy()  # (cumulative stream length)
     S0 = slope.copy()
     p_slope = slope[ pIDs ]
     w1 = np.logical_and( slope > 0, p_slope == 0 )
-    n1 = w1.sum()
-    IDs = w1      ##################
-    L = L[ IDs ]  #################
-    unfinished = np.zeros( n1 ) + 1    ########## 
+    ## n1 = w1.sum()
+    start_ID_vals  = ID_grid[ w1 ]          ##################
+    pID_vals       = pID_grid[ w1 ]
+    n1 = start_ID_vals.size
+    print('Number of initial IDs = ' + str(n1) )
+    start_IDs = divmod( start_ID_vals, d8.nx)
+    pIDs      = divmod( pID_vals, d8.nx)
+    start_z   = d8.DEM[ start_IDs ]
+    L         = L[ start_IDs ]
+    #----------------------------------
+    ## unfinished = np.zeros( n1 ) + 1    ########## 
     n_left = n1          
     max_reps = 500  #######
     n_reps = 0                   
     DONE = (n1 == 0)
     while not(DONE):
-        
+        #------------------------------------- 
+        # Fist, get parents of pIDs (not IDs)
         #----------------------------------------------------
         # Here, IDs & pIDs are tuples, like from np.where,
         # while ID_vals & pID_vals are long-integer indices.
         #----------------------------------------------------
+        # Note: Number of unique pIDs <= number of IDs
+        #----------------------------------------------------
+        ## IDs = pIDs.copy()          # (not an option)
+        ## IDs = copy.copy( pIDs )    # (maybe needed)    
+        IDs = pIDs
         pID_vals = pID_grid[ IDs ]
         pIDs = divmod( pID_vals, d8.nx )  # (tuple, like WHERE)
 
-        z1 = d8.DEM[ pIDs ]
-        dz = (z2[IDs] - z1)
-        ds = d8.ds[ pIDs ]
-        L  += ds
+        dz  = (start_z - d8.DEM[ pIDs ])   # (drop from start)
+        L  += d8.ds[ pIDs ]
 
+        k_slope = S0[ IDs ]
         p_slope = S0[ pIDs ]
-        ID_vals = d8.ID_grid[ IDs ]  ######
+        ID_vals = ID_grid[ IDs ]  ######
         ## wg = (p_slope > 0)        ###############
-        wg = np.logical_and( p_slope > 0, unfinished == 1 )
+        wg = np.logical_and( p_slope > 0, k_slope == 0 )
+        ## wg = np.logical_and( p_slope > 0, unfinished == 1 )
         ng = wg.sum()
         if (ng > 0):
             ready_ID_vals = ID_vals[ wg ]
@@ -238,7 +244,7 @@ def get_new_slope_grid(site_prefix=None, case_prefix=None,
             slope[ ready_IDs ] = dz[ wg ] / L[ wg ]
             unfinished[ wg ] = 0
             n_left = unfinished.sum()
-        IDs = pIDs
+            print('n_left = ' + str(n_left) )
         
         n_reps += 1
         if (n_reps == max_reps):
@@ -253,24 +259,16 @@ def get_new_slope_grid(site_prefix=None, case_prefix=None,
     # its D8 kids with S=0 should be assigned the same slope.
     # Iterate until all cells with S=0 are assigned a slope.
     #--------------------------------------------------------------
-#     pIDs = d8.parent_IDs
-#     ## pID_grid = d8.parent_ID_grid.copy()   
-#     # w1 = (slope == 0)
-#     # n1 = w1.sum()
-#     # DONE = (n1 == 0)
-#     DONE = False
-#     while not(DONE): 
-#         pslope = slope[ pIDs ]
-#         w2 = np.logical_and( slope == 0, pslope > 0 )
-#         n2 = w2.sum()
-#         if (n2 > 0):
-#             slope[ w2 ] = pslope[ w2 ]
-#         DONE = (n2 == 0)
-        #-----------------------------------
-        # Get IDs for "parents of parents"
-        #-----------------------------------
-        ## pID_grid = pID_grid[ pIDs ]
-        ## pIDs = divmod( pID_grid, d8.nx )
+    pIDs = d8.parent_IDs
+    # DONE = (n1 == 0)
+    DONE = False
+    while not(DONE): 
+        pslope = slope[ pIDs ]
+        w2 = np.logical_and( slope == 0, pslope > 0 )
+        n2 = w2.sum()
+        if (n2 > 0):
+            slope[ w2 ] = pslope[ w2 ]
+        DONE = (n2 == 0)
 
     #-----------------------------------------------------------
     # Set slope to NaN at all "noflow_IDs" (D8 flow code of 0)
