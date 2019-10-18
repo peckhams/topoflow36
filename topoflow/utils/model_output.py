@@ -178,8 +178,7 @@ def open_new_gs_file(self, file_name, info=None,
         exec( ncgs_unit_str + "=" + "ncgs_files.ncgs_file()" )
         exec( ncgs_unit_str + ".open_new_file(" + ncgs_file_str +
               ", self.rti, var_name, long_name, units_name, " +
-              "dtype=dtype, " +
-              "time_units=time_units)" )
+              "dtype=dtype, time_units=time_units)" )
         #----------------------------------------
         # (2019-10-03)  This isn't needed here.
         #----------------------------------------
