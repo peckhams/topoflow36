@@ -1938,7 +1938,7 @@ class channels_component( BMI_base.BMI_component ):
         # free-surface gradient (DEM + d_flood), we should not
         # set it to zero at interior noflow_IDs.
         #----------------------------------------------------------- 
-        d[ self.d8.noflow_IDs ] = 0.0
+        d[ self.d8.noflow_IDs ] = 0.0  # (was needed for Baro)
         ## d[ self.d8.edge_IDs ] = 0.0
 
         #------------------------------------------------

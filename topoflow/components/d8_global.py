@@ -1043,11 +1043,14 @@ class d8_component( d8_base.d8_component ):
         # Initialize vars
         #------------------------------------------------
         # initialize_computed_vars() initializes self.A
+        # (2019-10-09) Update A grid in-place.
         #------------------------------------------------
-        self.A = np.minimum(self.A, 0)   # (reset to all zeros)
+        ## self.A = np.minimum(self.A, 0)   # (reset to all zeros)
+        ## np.minimum(self.A, 0, self.A)    # (reset to all zeros, in-place)
+        self.A[:] = np.minimum(self.A, 0)   # (reset to all zeros, in-place)
         n_reps = np.int32(0)
 
-        #-----------------        
+        #-----------------      
         # Local synonyms
         #-----------------
         nx = self.nx
