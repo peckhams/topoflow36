@@ -121,29 +121,29 @@ class infil_component(infil_base.infil_component):
         #-------------------------------------------------
         # Get arrays to store soil params for each layer
         #-------------------------------------------------
-        self.soil_type = np.zeros(n_layers, dtype='<U100')
+        self.soil_type = np.zeros(n_layers, dtype='<U200')
         self.dz_val    = np.zeros(n_layers, dtype='Float64')    #### + dz3
         self.nz_val    = np.zeros(n_layers, dtype='Int16')      #### + nz3
         #--------------------------------------------------------
-        self.Ks_type   = np.zeros(n_layers, dtype='<U100')
-        self.Ki_type   = np.zeros(n_layers, dtype='<U100')
-        self.qs_type   = np.zeros(n_layers, dtype='<U100')
-        self.qi_type   = np.zeros(n_layers, dtype='<U100')
-        self.qr_type   = np.zeros(n_layers, dtype='<U100')
-        self.pB_type   = np.zeros(n_layers, dtype='<U100')    
-        self.pA_type   = np.zeros(n_layers, dtype='<U100')
-        self.lam_type  = np.zeros(n_layers, dtype='<U100')
-        self.c_type    = np.zeros(n_layers, dtype='<U100')
+        self.Ks_type   = np.zeros(n_layers, dtype='<U200')
+        self.Ki_type   = np.zeros(n_layers, dtype='<U200')
+        self.qs_type   = np.zeros(n_layers, dtype='<U200')
+        self.qi_type   = np.zeros(n_layers, dtype='<U200')
+        self.qr_type   = np.zeros(n_layers, dtype='<U200')
+        self.pB_type   = np.zeros(n_layers, dtype='<U200')    
+        self.pA_type   = np.zeros(n_layers, dtype='<U200')
+        self.lam_type  = np.zeros(n_layers, dtype='<U200')
+        self.c_type    = np.zeros(n_layers, dtype='<U200')
         #--------------------------------------------------------        
-        self.Ks_file  = np.zeros(n_layers, dtype='<U100')
-        self.Ki_file  = np.zeros(n_layers, dtype='<U100')
-        self.qs_file  = np.zeros(n_layers, dtype='<U100')
-        self.qi_file  = np.zeros(n_layers, dtype='<U100')
-        self.qr_file  = np.zeros(n_layers, dtype='<U100')
-        self.pB_file  = np.zeros(n_layers, dtype='<U100')
-        self.pA_file  = np.zeros(n_layers, dtype='<U100')
-        self.lam_file = np.zeros(n_layers, dtype='<U100')
-        self.c_file   = np.zeros(n_layers, dtype='<U100')
+        self.Ks_file  = np.zeros(n_layers, dtype='<U200')
+        self.Ki_file  = np.zeros(n_layers, dtype='<U200')
+        self.qs_file  = np.zeros(n_layers, dtype='<U200')
+        self.qi_file  = np.zeros(n_layers, dtype='<U200')
+        self.qr_file  = np.zeros(n_layers, dtype='<U200')
+        self.pB_file  = np.zeros(n_layers, dtype='<U200')
+        self.pA_file  = np.zeros(n_layers, dtype='<U200')
+        self.lam_file = np.zeros(n_layers, dtype='<U200')
+        self.c_file   = np.zeros(n_layers, dtype='<U200')
         #---------------------------------------------------------
         # Note: self.Ks is a Python list.  Initially, each entry
         # is a numpy scalar (type 'np.float64').  However, we
@@ -707,8 +707,8 @@ class infil_component(infil_base.infil_component):
             print('Calling print_suggested_values()...')
             
         #-----------------------------------------------------
-        # theta_r is often set to the theta_hygroscopic.
-        # theta_i is often set to the theta_field_capacity.
+        # theta_r is often set to theta_hygroscopic.
+        # theta_i is often set to theta_field_capacity.
         #-----------------------------------------------------
         print('=====================================================')
         for k in range(self.n_layers):
@@ -838,7 +838,8 @@ class infil_component(infil_base.infil_component):
         #----------------------------------------------
         # Write user-specified data to output files ?
         #----------------------------------------------
-        self.write_output_files(time_seconds)
+        self.write_output_files()
+        ## self.write_output_files(time_seconds)
 
         #-----------------------------
         # Update internal clock

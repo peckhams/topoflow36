@@ -224,21 +224,21 @@ class infil_component( infil_base.infil_component ):
         #-------------------------------------------------
         # Get arrays to store soil params for each layer
         #-------------------------------------------------
-        self.soil_type = np.zeros([n_layers], dtype='<U100')
+        self.soil_type = np.zeros([n_layers], dtype='<U200')
 ##        self.dz_val    = np.zeros([n_layers], dtype='Float64')    #### + dz3
 ##        self.nz_val    = np.zeros([n_layers], dtype='Int16')      #### + nz3
         #----------------------------------------------------------
-        self.Ks_type  = np.zeros(n_layers, dtype='<U100')
-        self.qs_type  = np.zeros(n_layers, dtype='<U100')
-        self.qi_type  = np.zeros(n_layers, dtype='<U100')
-        self.f_type   = np.zeros(n_layers, dtype='<U100')
-        self.C_type   = np.zeros(n_layers, dtype='<U100')
+        self.Ks_type  = np.zeros(n_layers, dtype='<U200')
+        self.qs_type  = np.zeros(n_layers, dtype='<U200')
+        self.qi_type  = np.zeros(n_layers, dtype='<U200')
+        self.f_type   = np.zeros(n_layers, dtype='<U200')
+        self.C_type   = np.zeros(n_layers, dtype='<U200')
         #--------------------------------------------------------        
-        self.Ks_file  = np.zeros(n_layers, dtype='<U100')
-        self.qs_file  = np.zeros(n_layers, dtype='<U100')
-        self.qi_file  = np.zeros(n_layers, dtype='<U100')
-        self.f_file   = np.zeros(n_layers, dtype='<U100')
-        self.C_file   = np.zeros(n_layers, dtype='<U100')
+        self.Ks_file  = np.zeros(n_layers, dtype='<U200')
+        self.qs_file  = np.zeros(n_layers, dtype='<U200')
+        self.qi_file  = np.zeros(n_layers, dtype='<U200')
+        self.f_file   = np.zeros(n_layers, dtype='<U200')
+        self.C_file   = np.zeros(n_layers, dtype='<U200')
         #---------------------------------------------------------
         # Note: self.Ks is a Python list.  Initially, each entry
         # is a numpy scalar (type 'np.float64').  However, we

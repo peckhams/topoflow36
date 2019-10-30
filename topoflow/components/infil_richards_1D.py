@@ -12,7 +12,7 @@ changes (e.g. discontinuities) in hydraulic conductivity.
 See: Smith, R.E. (2002) Infiltration Theory for Hydrologic Applications,
 Water Resources Monograph 15, AGU.
 """
-## Copyright (c) 2001-2016, Scott D. Peckham
+## Copyright (c) 2001-2019, Scott D. Peckham
 ##
 ## January 2013   (Revised handling of input/output names).
 ## October 2012   (CSDMS Standard Names and BMI)
@@ -76,13 +76,14 @@ Water Resources Monograph 15, AGU.
 #-----------------------------------------------------------------------
 
 import numpy as np
-import os
+import os, sys
 
 from topoflow.components import infil_base
 from topoflow.components import soil_base
 
 from topoflow.utils import model_input
 from topoflow.utils import tf_utils  ## (for unit_test only)
+from topoflow.utils import soil_trans_BC as stbc
 
 # import matplotlib.pyplot   # (not yet available on beach)
 
@@ -336,42 +337,44 @@ class infil_component(infil_base.infil_component):
     #-------------------------------------------------------------------
     def initialize_layer_vars(self):
 
-        #-------------------------------------------------------
-        # Notes: We need to call initialize_layer_vars()
-        #        before initialize_config_vars(), which may
-        #        call read_cfg_file().  However, this means
-        #        we haven't read "n_layers" yet, so just
-        #        hardwire it here for now. (5/11/10)
-        #-------------------------------------------------------
-        n_layers = 3
-        # n_layers = self.n_layers
+        #---------------------------------------------------
+        # Notes:  The sequence of function calls is:
+        #
+        # initialize()                  # in BMI_base.py
+        #    initialize_config_vars()   # in BMI_base.py
+        #       read_config_file()      # in BMI_base.py
+        #           initialize_layer_vars()   # here
+        #           (after n_layers was read)
+        #       set_computed_input_vars()     # below
+        #----------------------------------------------------
+        n_layers = self.n_layers
         
         #-------------------------------------------------
         # Get arrays to store soil params for each layer
         #-------------------------------------------------
-        self.soil_type = np.zeros(n_layers, dtype='<U100')
+        self.soil_type = np.zeros(n_layers, dtype='<U200')
         self.dz_val    = np.zeros(n_layers, dtype='float64')    #### + dz3
         self.nz_val    = np.zeros(n_layers, dtype='Int16')      #### + nz3
         #--------------------------------------------------------
-        self.Ks_type   = np.zeros(n_layers, dtype='<U100')
-        self.Ki_type   = np.zeros(n_layers, dtype='<U100')
-        self.qs_type   = np.zeros(n_layers, dtype='<U100')
-        self.qi_type   = np.zeros(n_layers, dtype='<U100')
-        self.qr_type   = np.zeros(n_layers, dtype='<U100')
-        self.pB_type   = np.zeros(n_layers, dtype='<U100')    
-        self.pA_type   = np.zeros(n_layers, dtype='<U100')
-        self.lam_type  = np.zeros(n_layers, dtype='<U100')
-        self.c_type    = np.zeros(n_layers, dtype='<U100')
+        self.Ks_type   = np.zeros(n_layers, dtype='<U200')
+        self.Ki_type   = np.zeros(n_layers, dtype='<U200')
+        self.qs_type   = np.zeros(n_layers, dtype='<U200')
+        self.qi_type   = np.zeros(n_layers, dtype='<U200')
+        self.qr_type   = np.zeros(n_layers, dtype='<U200')
+        self.pB_type   = np.zeros(n_layers, dtype='<U200')    
+        self.pA_type   = np.zeros(n_layers, dtype='<U200')
+        self.lam_type  = np.zeros(n_layers, dtype='<U200')
+        self.c_type    = np.zeros(n_layers, dtype='<U200')
         #--------------------------------------------------------        
-        self.Ks_file  = np.zeros(n_layers, dtype='<U100')
-        self.Ki_file  = np.zeros(n_layers, dtype='<U100')
-        self.qs_file  = np.zeros(n_layers, dtype='<U100')
-        self.qi_file  = np.zeros(n_layers, dtype='<U100')
-        self.qr_file  = np.zeros(n_layers, dtype='<U100')
-        self.pB_file  = np.zeros(n_layers, dtype='<U100')
-        self.pA_file  = np.zeros(n_layers, dtype='<U100')
-        self.lam_file = np.zeros(n_layers, dtype='<U100')
-        self.c_file   = np.zeros(n_layers, dtype='<U100')
+        self.Ks_file  = np.zeros(n_layers, dtype='<U200')
+        self.Ki_file  = np.zeros(n_layers, dtype='<U200')
+        self.qs_file  = np.zeros(n_layers, dtype='<U200')
+        self.qi_file  = np.zeros(n_layers, dtype='<U200')
+        self.qr_file  = np.zeros(n_layers, dtype='<U200')
+        self.pB_file  = np.zeros(n_layers, dtype='<U200')
+        self.pA_file  = np.zeros(n_layers, dtype='<U200')
+        self.lam_file = np.zeros(n_layers, dtype='<U200')
+        self.c_file   = np.zeros(n_layers, dtype='<U200')
         #---------------------------------------------------------
         # Note: self.Ks is a Python list.  Initially, each entry
         # is a numpy scalar (type 'np.float64').  However, we
@@ -409,22 +412,47 @@ class infil_component(infil_base.infil_component):
 
         #------------------------------------------------------------
         # Compute eta value for each soil layer from lambda values.
-        # Depending on lambda, eta values will scalars or grids.
+        # Depending on lambda, eta values will be scalars or grids.
         #------------------------------------------------------------
         for j in range(self.n_layers):
+#             print('type(lam_list[j]) = ' + str(type(self.lam_list[j])) )
+#             print('lam_list[j].dtype = ' + str(self.lam_list[j].dtype) )
+#             print('lam_list[j].shape = ' + str(self.lam_list[j].shape) )
             self.eta_list[j] = np.float64(2) + (np.float64(3) * self.lam_list[j])
                              
-        #--------------------------------------------------------------
+        #-------------------------------------------------------------
         # Compute a qH value for each soil layer from other values
-        # using the Theta_TBC() function.  qH values will be scalars
-        # or grids, depending on the args to Theta_TBC().
+        # using the theta_of_psi() function.  qH values will be
+        # scalars or grids, depending on the args to theta_of_psi().
         #-------------------------------------------------------------
         for j in range(self.n_layers):
-            self.qH_list[j] = Theta_TBC( self.psi_hygro, \
-                                         self.qs_list[j], self.qr_list[j], \
-                                         self.pB_list[j], self.pA_list[j], \
-                                         self.c_list[j],  self.lam_list[j] )
+            self.qH_list[j] = stbc.theta_of_psi( self.psi_hygro, \
+                                   self.qs_list[j], self.qr_list[j], \
+                                   self.pB_list[j], self.pA_list[j], \
+                                   self.c_list[j],  self.lam_list[j] )
+#             self.qH_list[j] = Theta_TBC( self.psi_hygro, \
+#                                          self.qs_list[j], self.qr_list[j], \
+#                                          self.pB_list[j], self.pA_list[j], \
+#                                          self.c_list[j],  self.lam_list[j] )
 
+        #------------------------------------------------------------
+        # 2019-10-30  #############################
+        # Compute a Ki value for each soil layer from other values
+        # using the K_of_theta() function.  Ki values will be
+        # scalars or grids, depending on the args to K_of_theta().
+        #------------------------------------------------------------
+        # This ensures that K_i is consistent with theta_i.
+        # But need to make sure K[0] = Ki.  ##################
+        #------------------------------------------------------------        
+        for j in range(self.n_layers):
+            self.Ki_list[j] = stbc.K_of_theta( self.qi_list[j], \
+                                   self.Ks_list[j], self.qs_list[j], \
+                                   self.qr_list[j], self.lam_list[j] )
+                 
+            if (self.DEBUG):
+                print('min (Ki_list[j]) =', self.Ki_list[j].min() )
+                print('max (Ki_list[j]) =', self.Ki_list[j].max() )
+                                                                  
         #---------------------------------------------------------
         # Make sure that all "save_dts" are larger or equal to
         # the specified process dt.  There is no point in saving
@@ -473,11 +501,10 @@ class infil_component(infil_base.infil_component):
     #   check_input_types()
     #-------------------------------------------------------------------
     def initialize_computed_vars(self):
-
+     
         dtype = 'float64'
-
-        self.vol_IN = self.initialize_scalar( 0, dtype='float64')
-        self.vol_Rg = self.initialize_scalar( 0, dtype='float64')
+        self.vol_IN = self.initialize_scalar( 0, dtype=dtype)
+        self.vol_Rg = self.initialize_scalar( 0, dtype=dtype)
 
         #---------------------------------------
         # Get surface influx to initialize "v"
@@ -517,7 +544,7 @@ class infil_component(infil_base.infil_component):
         # For testing
         #--------------
         if (self.DEBUG):
-            print('In initialize_richards_vars():')
+            print('In initialize_computed_vars():')
             print('ALL_SCALARS =', self.ALL_SCALARS)
             print('shape(Ks)   =', np.shape(self.Ks))
             print('shape(Ki)   =', np.shape(self.Ki))
@@ -583,23 +610,39 @@ class infil_component(infil_base.infil_component):
             #--------------------------------------
             # Initialize q to qi (qi is 1D or 3D)
             #--------------------------------------
+
             if (np.size(self.qi) == self.nz):
                 for j in range(self.nz):
                     self.q[j,:,:] = self.qi[j]
                 # (Can this be done with array operators instead ?)
             else:
                 self.q += self.qi
+            
+            if (self.DEBUG):
+                print('Initialized theta to theta_i.')
+                print('   min(qi) = ', self.qi.min() )
+                print('   max(qi) = ', self.qi.max() )
+                print('   min(q)  = ', self.q.min()  )
+                print('   max(q)  = ', self.q.max()  )
 
             #--------------------------------------
             # Initialize K to Ki (Ki is 1D or 3D)
             #--------------------------------------
+
             if (np.size(self.Ki) == self.nz):
                 for j in range(self.nz):
                     self.K[j,:,:] = self.Ki[j]
                 # (Can this be done with array operators instead ?)
             else:
                 self.K += self.Ki
-
+               
+            if (self.DEBUG): 
+                print('Initialized K to K_i.')
+                print('   min(Ki) = ', self.Ki.min() )
+                print('   max(Ki) = ', self.Ki.max() )
+                print('   min(K)  = ', self.K.min()  )
+                print('   max(K)  = ', self.K.max()  )
+        
             #--------------------------------------------------
             # If q is now 3D, convert qs to 3D also so we can
             # compute (q - qs) in update_v(). (6/22/10)
@@ -637,7 +680,7 @@ class infil_component(infil_base.infil_component):
         # Print some suggested (i.e. consistent) values
         # for theta_r, theta_i and K_i.  (10/12/10)
         #-------------------------------------------------
-        self.print_suggested_values()
+        ## self.print_suggested_values()
         
         ###########################################
         # Override some of the user's settings ??
@@ -649,41 +692,48 @@ class infil_component(infil_base.infil_component):
             
     #   initialize_computed_vars()
     #-------------------------------------------------------------------
-    def initialize_theta_r(self):
-
-        #-------------------------------------------------
-        # Note that this is not entirely consistent with
-        # the Theta_TBC() function, but that function
-        # requires theta_r as an argument.
-        #-------------------------------------------------
-        # Initialize theta_r to the min allowed value.
-        #-------------------------------------------------
-        psi_r = self.psi_min
-        
-        #--------------------------------------
-        # Note:  Both psi's < 0, so ratio > 0
-        #--------------------------------------
-        self.qr = self.qs * (self.pB / psi_r)**self.lam
-    
-    #   initialize_theta_r()
-    #-------------------------------------------------------------------
-    def initialize_theta_i(self):
-
-        #------------------------------------------------
-        # Initialize theta_i = qi to the field capacity.
-        # Be sure to call initialize_theta_r() first.
-        #------------------------------------------------
-        self.qi = Theta_TBC( self.psi_field, \
-                             self.qs, self.qr, \
-                             self.pB, self.pA, \
-                             self.c,  self.lam )
-                                                
-    #   initialize_theta_i()
+#     def initialize_theta_r(self):
+# 
+#         #-------------------------------------------------
+#         # Note that this is not entirely consistent with
+#         # the Theta_TBC() function, but that function
+#         # requires theta_r as an argument.
+#         #-------------------------------------------------
+#         # Initialize theta_r to the min allowed value.
+#         #-------------------------------------------------
+#         psi_r = self.psi_min
+#         
+#         #--------------------------------------
+#         # Note:  Both psi's < 0, so ratio > 0
+#         #--------------------------------------
+#         self.qr = self.qs * (self.pB / psi_r)**self.lam
+#     
+#     #   initialize_theta_r()
+#     #-------------------------------------------------------------------
+#     def initialize_theta_i(self):
+# 
+#         #------------------------------------------------
+#         # Initialize theta_i = qi to the field capacity.
+#         # Be sure to call initialize_theta_r() first.
+#         #------------------------------------------------
+#         self.qi = stbc.theta_of_psi( self.psi_field, \
+#                              self.qs, self.qr, \
+#                              self.pB, self.pA, \
+#                              self.c,  self.lam )
+# #         self.qi = Theta_TBC( self.psi_field, \
+# #                              self.qs, self.qr, \
+# #                              self.pB, self.pA, \
+# #                              self.c,  self.lam )
+#                                                 
+#     #   initialize_theta_i()
     #-------------------------------------------------------------------
     def initialize_K_i(self):
 
-        self.Ki = K_of_Theta_TBC( self.qi, self.Ks, self.qs,
-                                  self.qr, self.lam )
+        self.Ki = stbc.K_of_theta( self.qi, self.Ks, self.qs,
+                                   self.qr, self.lam )
+                                  
+#         self.Ki = K_of_Theta_TBC( self.qi, self.Ks, self.qs,
+#                                   self.qr, self.lam )
 
     #   initialize_K_i()
     #-------------------------------------------------------------------
@@ -692,10 +742,10 @@ class infil_component(infil_base.infil_component):
         if (self.DEBUG):
             print('Calling print_suggested_values()...')
             
-        #-----------------------------------------------------
-        # theta_r is often set to the theta_hygroscopic.
-        # theta_i is often set to the theta_field_capacity.
-        #-----------------------------------------------------
+        #-------------------------------------------------
+        # theta_r is often set to theta_hygroscopic.
+        # theta_i is often set to theta_field_capacity.
+        #-------------------------------------------------
         print('=====================================================')
         for k in range(self.n_layers):
 
@@ -735,7 +785,7 @@ class infil_component(infil_base.infil_component):
             #--------------------------------------------
             theta_res = self.qr_list[k]
 
-            theta_hygro = Theta_TBC( self.psi_hygro,
+            theta_hygro = stbc.theta_of_psi( self.psi_hygro,
                                      self.qs_list[k],
                                      self.qr_list[k],
                                      self.pB_list[k],
@@ -743,7 +793,7 @@ class infil_component(infil_base.infil_component):
                                      self.c_list[k],
                                      self.lam_list[k] )
             
-            theta_init = Theta_TBC( self.psi_field,
+            theta_init = stbc.theta_of_psi( self.psi_field,
                                     self.qs_list[k],
                                     theta_res,         #######
                                     self.pB_list[k],
@@ -751,11 +801,33 @@ class infil_component(infil_base.infil_component):
                                     self.c_list[k],
                                     self.lam_list[k] )
 
-            K_init = K_of_Theta_TBC( theta_init,       #######
-                                     self.Ks_list[k],
-                                     self.qs_list[k],
-                                     theta_res,        #######
-                                     self.lam_list[k] )
+            K_init = stbc.K_of_theta( theta_init,       #######
+                                      self.Ks_list[k],
+                                      self.qs_list[k],
+                                      theta_res,        #######
+                                      self.lam_list[k] )
+                                     
+#             theta_hygro = Theta_TBC( self.psi_hygro,
+#                                      self.qs_list[k],
+#                                      self.qr_list[k],
+#                                      self.pB_list[k],
+#                                      self.pA_list[k],
+#                                      self.c_list[k],
+#                                      self.lam_list[k] )
+#             
+#             theta_init = Theta_TBC( self.psi_field,
+#                                     self.qs_list[k],
+#                                     theta_res,         #######
+#                                     self.pB_list[k],
+#                                     self.pA_list[k],
+#                                     self.c_list[k],
+#                                     self.lam_list[k] )
+# 
+#             K_init = K_of_Theta_TBC( theta_init,       #######
+#                                      self.Ks_list[k],
+#                                      self.qs_list[k],
+#                                      theta_res,        #######
+#                                      self.lam_list[k] )
 
             theta_r = self.qr_list[k]
             theta_i = self.qi_list[k]
@@ -825,7 +897,8 @@ class infil_component(infil_base.infil_component):
         #----------------------------------------------
         # Write user-specified data to output files ?
         #----------------------------------------------
-        self.write_output_files(time_seconds)
+        self.write_output_files()   # (Bug fix: 2019-10-27)
+        ## self.write_output_files(time_seconds)
 
         #-----------------------------
         # Update internal clock
@@ -834,7 +907,7 @@ class infil_component(infil_base.infil_component):
         self.update_time()
         self.status = 'updated'  # (OpenMI 2.0 convention)
         if (self.DEBUG):
-            print('Completed update:', self.time_index - 1)
+            print('Completed update() for time index =', self.time_index - 1)
             print(' ')
 
     #   update()
@@ -909,6 +982,17 @@ class infil_component(infil_base.infil_component):
             p1   = self.p[1,:,:]
             Kbar = (self.K[0,:,:] + self.K[1,:,:]) / 2.0  ##############
 
+            if (self.DEBUG):
+                print('###  min(p0) = ', p0.min() )
+                print('###  max(p0) = ', p0.max() )
+                print('###  min(p1) = ', p1.min() )
+                print('###  max(p1) = ', p1.max() )
+                print('###  min(Kbar) = ', Kbar.min() )
+                print('###  max(Kbar) = ', Kbar.max() )
+                print('###  min(P_total) = ', self.P_total.min() )
+                print('###  max(P_total) = ', self.P_total.max() )
+                print()
+                             
             #-------------------------------------
             # Where is top layer NOT saturated ?
             #-------------------------------------
@@ -918,7 +1002,10 @@ class infil_component(infil_base.infil_component):
             # be faster.  Don't need to check if w1 is empty.
             #-----------------------------------------------------
             w1 = ( self.q[0,:,:] <  self.qs[0,:,:] )
-            r      = self.P_total[ w1 ]  ########
+            if (self.P_total.size > 1):   ## BUG FIX: 2019-10-29
+                r = self.P_total[ w1 ]
+            else:
+                r = self.P_total
             p0[w1] = ((r / Kbar[w1]) - 1) * dz + p1[w1]            
             #----------------------------------- 
             # This uses WHERE in the usual way
@@ -934,7 +1021,8 @@ class infil_component(infil_base.infil_component):
             #---------------------------------
             ## w2 = np.where( self.p[0,:,:] >= 0 ) 
             #-------------------------------------------------- 
-            w2 = ( self.q[0,:,:] >= self.qs[0,:,:] )
+            ### w2 = ( self.q[0,:,:] >= self.qs[0,:,:] )
+            w2 = np.invert( w1 )
             p0[w2] = 0.0
             #----------------------------------- 
             # This uses WHERE in the usual way
@@ -949,10 +1037,34 @@ class infil_component(infil_base.infil_component):
             # Set pressure head for top layer
             #----------------------------------
             self.p[0,:,:] = p0
-                                 
+            if (self.DEBUG):
+                print('###  min(p0) = ', p0.min(), '(final)' )
+                print('###  max(p0) = ', p0.max(), '(final)' )
+            
+        #------------------------
+        # Check for stability ?
+        #------------------------
+        if (self.CHECK_STABILITY):
+            if (self.SINGLE_PROFILE):
+                wpos = (self.p[0] > 0)
+            else:
+                wpos = (self.p[0,:,:] > 0)
+            npos = wpos.sum()
+            if (npos > 0):
+                print('############################################')
+                print('ERROR in update_surface_BC():')
+                print('   Some pressure head values are positive.')
+                print('   Trying reducing timestep dt in CFG')
+                print('   and check dz and nz for each layer.')
+                print('############################################')
+                print()
+                self.DONE = True
+                sys.exit()
+                                                 
         #------------------------------------
         # Set theta at the surface boundary
         #------------------------------------
+        ## print('SINGLE_PROFILE = ' + str(self.SINGLE_PROFILE) )  #######
         if (self.SINGLE_PROFILE):
             psi     = self.p[0]        # [meters]
             theta_s = self.qs[0]
@@ -961,29 +1073,64 @@ class infil_component(infil_base.infil_component):
             psi_A   = self.pA[0]
             c       = self.c[0]
             Lambda  = self.lam[0]
-            self.q[0] = Theta_TBC(psi, theta_s, theta_r, \
+            self.q[0] = stbc.theta_of_psi(psi, theta_s, theta_r, \
                                   psi_B, psi_A, c, Lambda)
+#             self.q[0] = Theta_TBC(psi, theta_s, theta_r, \
+#                                   psi_B, psi_A, c, Lambda)
         else:
-            psi     = self.p[0,:,:]    # [meters]
-            theta_s = self.qs[0,:,:]
-            theta_r = self.qr[0,:,:]
-            psi_B   = self.pB[0,:,:]
-            psi_A   = self.pA[0,:,:]
-            c       = self.c[0,:,:]
-            Lambda  = self.lam[0,:,:]
-            self.q[0,:,:] = Theta_TBC(psi, theta_s, theta_r, \
+            #----------------------------------------
+            # Now checking if ndim > 1 (2019-10-29)
+            #----------------------------------------
+            psi = self.p[0,:,:]    # [meters]
+            #-----------------------------
+            if (self.qs.ndim > 1):
+                theta_s = self.qs[0,:,:]
+            else:
+                theta_s = self.qs[0]
+            #-----------------------------
+            if (self.qr.ndim > 1):
+                theta_r = self.qr[0,:,:]
+            else:
+                theta_r = self.qr[0]
+            #-----------------------------
+            if (self.pB.ndim > 1):
+                psi_B = self.pB[0,:,:]
+            else:
+                psi_B = self.pB[0]
+            #------------------------------
+            if (self.pA.ndim > 1):
+                psi_A = self.pA[0,:,:]
+            else:
+                psi_A = self.pA[0]
+            #------------------------------
+            if (self.c.ndim > 1):
+                c = self.c[0,:,:]
+            else:
+                c = self.c[0]
+            #------------------------------
+            if (self.lam.ndim > 1):               
+                Lambda = self.lam[0,:,:]
+            else:
+                Lambda = self.lam[0]
+            #------------------------------
+            self.q[0,:,:] = stbc.theta_of_psi(psi, theta_s, theta_r, \
                                       psi_B, psi_A, c, Lambda)
+#             self.q[0,:,:] = Theta_TBC(psi, theta_s, theta_r, \
+#                                       psi_B, psi_A, c, Lambda)
 
         #----------------
         # For debugging
         #----------------
-        ## if (self.SINGLE_PROFILE):
         if (self.DEBUG and self.SINGLE_PROFILE):
             print('In update_surface_BC():')
-            print('psi[0], theta[0] =', self.p[0], ', ', self.q[0])
-            print('psi[1] =', self.p[1])
-            print('r, Kbar, (r/Kbar - 1) =', r, Kbar, ((r/Kbar)-1))
-            
+            print('theta[0] =', self.q[0] )
+            print('theta[1] =', self.q[1] )
+            print('psi[0]   =', self.p[0])
+            print('psi[1]   =', self.p[1])
+            print('r        =', r )
+            print('Kbar     =', Kbar )
+            print('(r/Kbr - 1) =', ((r/Kbar) - 1))
+
     #   update_surface_BC()
     #-----------------------------------------------------------------------
     ## def update_bottom_BC(self, REPORT=False, BC='WATER_TABLE'):
@@ -1058,18 +1205,50 @@ class infil_component(infil_base.infil_component):
             psi_A   = self.pA[m]
             c       = self.c[m]
             Lambda  = self.lam[m]
-            self.q[m] = Theta_TBC(psi, theta_s, theta_r, \
+            self.q[m] = stbc.theta_of_psi(psi, theta_s, theta_r, \
                                   psi_B, psi_A, c, Lambda)
+#             self.q[m] = Theta_TBC(psi, theta_s, theta_r, \
+#                                   psi_B, psi_A, c, Lambda)
         else:
-            psi     = self.p[m,:,:]   # [meters]
-            theta_s = self.qs[m,:,:]
-            theta_r = self.qr[m,:,:]
-            psi_B   = self.pB[m,:,:]
-            psi_A   = self.pA[m,:,:]
-            c       = self.c[m,:,:]
-            Lambda  = self.lam[m,:,:]
-            self.q[m,:,:] = Theta_TBC(psi, theta_s, theta_r, \
+            #----------------------------------------
+            # Now checking if ndim > 1 (2019-10-29)
+            #----------------------------------------
+            psi = self.p[m,:,:]   # [meters]
+            #---------------------------------------
+            if (self.qs.ndim > 1):
+                theta_s = self.qs[m,:,:]
+            else:
+                theta_s = self.qs[m]
+            #-----------------------------
+            if (self.qr.ndim > 1):
+                theta_r = self.qr[m,:,:]
+            else:
+                theta_r = self.qr[m]
+            #-----------------------------
+            if (self.pB.ndim > 1):
+                psi_B = self.pB[m,:,:]
+            else:
+                psi_B = self.pB[m]
+            #------------------------------
+            if (self.pA.ndim > 1):
+                psi_A = self.pA[m,:,:]
+            else:
+                psi_A = self.pA[m]
+            #------------------------------
+            if (self.c.ndim > 1):
+                c = self.c[m,:,:]
+            else:
+                c = self.c[m]
+            #------------------------------
+            if (self.lam.ndim > 1):               
+                Lambda = self.lam[m,:,:]
+            else:
+                Lambda = self.lam[m]
+            #------------------------------            
+            self.q[m,:,:] = stbc.theta_of_psi(psi, theta_s, theta_r, \
                                       psi_B, psi_A, c, Lambda)
+#             self.q[m,:,:] = Theta_TBC(psi, theta_s, theta_r, \
+#                                       psi_B, psi_A, c, Lambda)
 
         #----------------
         # For debugging
@@ -1077,7 +1256,10 @@ class infil_component(infil_base.infil_component):
         ## if (self.SINGLE_PROFILE):
         if (self.DEBUG and self.SINGLE_PROFILE):
             print('In update_bottom_BC():')
-            print('psi[m], theta[m] =', self.p[m], ', ', self.q[m])
+            print('theta[m-1] =', self.q[m-1])           
+            print('theta[m]   =', self.q[m])
+            print('psi[m-1]   =', self.p[m-1])
+            print('psi[m]     =', self.p[m] )
             print(' ')
             
     #   update_bottom_BC()
@@ -1106,6 +1288,16 @@ class infil_component(infil_base.infil_component):
         z_above = np.roll( self.z,  1, axis=0 )
         z_diff  = (z_below - z_above)
         n_dz    = z_diff.size  # (should equal self.nz)
+        #---------------------------------------------------
+#         print('### min(z_diff) = ', z_diff.min() )
+#         print('### max(z_diff) = ', z_diff.max() )
+#         print('### n_dz        = ', n_dz )
+#         print('### self.nz     = ', self.nz )
+#         print('### z =')
+#         print( self.z )
+#         print('### z_diff =')
+#         print( z_diff )
+
         #-----------------------------------------------
         # This should also work
         #------------------------
@@ -1117,6 +1309,15 @@ class infil_component(infil_base.infil_component):
 ##           z_diff   = (dz_below + dz_above)
 ##        n_dz = z_diff.size
 
+#         print('#### min(p)  = ', self.p.min() )
+#         print('#### max(p)  = ', self.p.max() )
+#         print('#### min(K)  = ', self.K.min() )
+#         print('#### max(K)  = ', self.K.max() )
+#         print('#### min(dz) = ', self.dz.min() )
+#         print('#### max(dz) = ', self.dz.max() )
+#         print('#### dz = ')
+#         print( self.dz )
+                               
         if (self.SINGLE_PROFILE): 
             #------------------------------------
             # Theta, psi, K and v are 1D arrays
@@ -1140,6 +1341,9 @@ class infil_component(infil_base.infil_component):
             d_theta[0]         = 0.0 
             d_theta[self.nz-1] = 0.0
 
+#             print('min(d_theta) =', d_theta.min() )
+#             print('max(d_theta) =', d_theta.max() )
+            
         else:    
             #------------------------------------
             # Theta, psi, K and v are 3D arrays
@@ -1172,45 +1376,65 @@ class infil_component(infil_base.infil_component):
         #----------------------------------------------
         self.q += d_theta
 
-        #-----------------------------
-        # Make sure theta <= theta_s
-        # and that  theta >= theta_H
-        #--------------------------------------------------
-        # NB! We don't need this when we check for layers
-        # that are filling or losing in update_v().
-        #---------------------------------------------------
-        # (10/9/10) Next 2 lines lead to error when the
-        # time_index reaches 572 for test_plane_csm/plane1
-        #---------------------------------------------------
-##        self.q = np.minimum( self.q, self.qs )
-##        self.q = np.maximum( self.q, self.qH )
+        #-----------------------------------------------
+        # Option to check stability, in the sense that
+        # theta values are still in range.
+        #-----------------------------------------------
+        # Recall that: S_eff  = (q - qr) / (qs - qr)
+        # and that S_eff must be in [0, 1].
+        #-----------------------------------------------
+        if (self.CHECK_STABILITY):
+            self.check_theta()
 
         if (self.DEBUG):
-        ## if (True):
-            print('min(q), max(q) =', self.q.min(), self.q.max())
-            ## self.check_theta()
-            
-        #------------------
-        # Optional report
-        #------------------
-        #if (REPORT):
-        #    print 'theta =', self.q[0:3]
-        #    # print ' '
+            self.check_theta()
 
     #   update_theta()
     #-----------------------------------------------------------------------
     def check_theta(self):
 
-        w = np.where( np.logical_or( (self.q < self.qH),
-                                     (self.q > self.qs)) )
-
-        if (w[0].size > 0):
-            print('############################################')
-            print('ERROR: Theta not in [theta_H, theta_s].')
-            print('       Aborting model run.')
-            print('############################################')
+        ## bad1 = (self.q < self.qH)  ####### (was triggered, theta=0.217)
+        ## bad1 = (self.q < self.qr)  #### (wrong shape)
+        tol  = 0.01
+        bad1 = (self.q < 0.01)
+        bad2 = (self.q > self.qs + tol)
+        bad3 = np.logical_not( np.isfinite( self.q ) )
+        nb1  = bad1.sum()
+        nb2  = bad2.sum()
+        nb3  = bad3.sum()
+        if (nb1 > 0) or (nb2 > 0) or (nb3 > 0):
+            print('################################################')
+            print('ERROR detected in update_theta():')
+            print('  theta is the soil water content.')
+            if (nb1 > 0):
+                print('  theta < 0.01 (a residual value)')
+                ## print('  theta < theta_H (hygroscopic lower limit)')
+                qmin = self.q.min()
+                print('  min(theta) = ' + str(qmin) )
+#                 if (self.SINGLE_PROFILE):
+#                     print('theta_H    = ' + str(self.qH) )
+            if (nb2 > 0):
+                print('  theta > theta_s (saturated upper limit)')
+                qmax = self.q.max()
+                print('  max(theta) = ' + str(qmax) )
+#                 if (self.SINGLE_PROFILE):
+#                     print('theta_s    = ' + str(self.qs) )
+            print('Try reducing infil. timestep, dt, in CFG file.')
+            print('################################################')
+            print()
+            #-----------------------------------------------
+            # Next line will not stop the model run unless
+            # this component is the driver component.
+            #-----------------------------------------------
             self.DONE = True
-        
+            sys.exit()
+        else:
+            if (self.DEBUG):
+                print('All theta values are in range.')
+                print('min(theta) =', self.q.min() )
+                print('max(theta) =', self.q.max() )
+                print()
+
     #   check_theta()
     #-----------------------------------------------------------------------
     def update_psi(self, REPORT=False):
@@ -1344,10 +1568,7 @@ class infil_component(infil_base.infil_component):
                 #------------------------------------------------------
                 ## self.S_eff = S_eff
                 ## self.b = 1 / lam
-        
-        if (self.DEBUG):
-            print('min(p), max(p) =', self.p.min(), self.p.max())
-        
+
         #------------------
         # Optional report
         #------------------
@@ -1356,13 +1577,29 @@ class infil_component(infil_base.infil_component):
             print('psi   = ', self.p[0:3])
             #print,' '
 
-        ## if (self.SINGLE_PROFILE):
-        if (self.DEBUG and self.SINGLE_PROFILE):
-            m = (self.nz - 1)
+        if (self.DEBUG):
             print('In update_psi():')
-            print('psi[0], theta[0] =', self.p[0], ', ', self.q[0])
-            print('psi[m], theta[m] =', self.p[m], ', ', self.q[m])
-            
+            if (self.SINGLE_PROFILE):
+                m = (self.nz - 1)
+                print('psi[0], theta[0] =', self.p[0], ', ', self.q[0])
+                print('psi[m], theta[m] =', self.p[m], ', ', self.q[m])
+            #-----------------------------------
+            print('min(q)   =', self.q.min() )
+            print('max(q)   =', self.q.max() )
+            print('min(qs)  =', self.qs.min() )
+            print('max(qs)  =', self.qs.max() )
+            print('min(qr)  =', self.qr.min() )
+            print('max(qr)  =', self.qr.max() )
+            print('min(Se)  =', S_eff.min()  )
+            print('max(Se)  =', S_eff.max() )
+            print('min(pB)  =', self.pB.min() )
+            print('max(pB)  =', self.pB.max() )
+            print('min(pA)  =', self.pA.min() )
+            print('max(pA)  =', self.pA.max() )
+            print('min(psi) =', self.p.min() )
+            print('max(psi) =', self.p.max() )
+
+                        
     #   update_psi()
     #-----------------------------------------------------------------------
     def update_K(self, REPORT=False):
@@ -1613,11 +1850,6 @@ class infil_component(infil_base.infil_component):
             else:    
                 imax = indices[0][nd - 1]  ########################
                 
-                #----------------------------------
-                # This is one way to define Z_wet
-                #----------------------------------
-                #;*self.Zw = imax * (*self.dz)
-                
                 #----------------------------------------------
                 # Get min and max theta of decreasing section
                 #----------------------------------------------
@@ -1837,7 +2069,7 @@ class infil_component(infil_base.infil_component):
     def update_q0(self):
 
         if (self.DEBUG):
-            print('Callling update_q0()...')
+            print('Calling update_q0()...')
             
         if (self.ALL_SCALARS): 
             self.q0 = self.q[0]
@@ -1889,6 +2121,9 @@ class infil_component(infil_base.infil_component):
         #-----------------------------------------------------
         # Notes:  Override infil_base's method by same name.
         #-----------------------------------------------------
+        if (self.DEBUG):
+            print('Calling read_input_files()...')
+
         rti = self.rti
 
         for j in range(self.n_layers):        
@@ -1914,26 +2149,29 @@ class infil_component(infil_base.infil_component):
             if (pA_val is not None): self.pA_list[j]  = pA_val
 
             lam_val = model_input.read_next(self.lam_unit[j], self.lam_type[j], rti)
-            if (lam_val is not None): self.lam_list[j]  = lam_val
-
+            if (lam_val is not None):
+                #---------------------------------------------------------
+                # If we read a lambda value from a file, then we need to
+                # compute and save corresponding eta = [2 + (3*lambda)]
+                # BUG FIX:  2019-10-29
+                #---------------------------------------------------------
+                self.lam_list[j] = lam_val
+                self.eta_list[j] = np.float64(2) + (np.float64(3) * lam_val)
+                
             c_val = model_input.read_next(self.c_unit[j], self.c_type[j], rti)
             if (c_val is not None): self.c_list[j]  = c_val
-
-            #---------------------------------------------------------
-            # If we read a lambda value from a file, then we need to
-            # compute and save corresponding eta = [2 + (3*lambda)]
-            #---------------------------------------------------------
-            #### if not(self.lam_unit[j].closed):  ############
-            if (self.lam_type[j] == 1) or (self.lam_type[j] == 3):
-                self.eta_list[j] = np.float64(2) + (np.float64(3) * self.lam_list[j])
-                                 
-            #-----------------------------------------
-            # Update qH, given by Theta_TBC function
-            #-----------------------------------------
-            self.qH_list[j] = Theta_TBC( self.psi_hygro, \
+ 
+            #----------------------------------------------
+            # Update qH, given by theta_of_psi() function
+            #----------------------------------------------
+            self.qH_list[j] = stbc.theta_of_psi( self.psi_hygro, \
                                          self.qs_list[j], self.qr_list[j], \
                                          self.pB_list[j], self.pA_list[j], \
                                          self.c_list[j],  self.lam_list[j] )
+#             self.qH_list[j] = Theta_TBC( self.psi_hygro, \
+#                                          self.qs_list[j], self.qr_list[j], \
+#                                          self.pB_list[j], self.pA_list[j], \
+#                                          self.c_list[j],  self.lam_list[j] )
 
     #   read_input_files()       
     #-------------------------------------------------------------------  
@@ -2097,16 +2335,21 @@ def Z_Derivative_1D(v, dz, BACKWARD=False):
 def Z_Derivative_3D(v, dz, BACKWARD=False):
 
     #------------------------------------------------------------
-    # Notes:  v is a 3D array (or data cube) and dz is a scalar
-    #         or 1D array.  The result is a 3D array, same size
-    #         as v.
+    # Note:  v is a 3D array (or data cube) and dz is a scalar
+    #        or 1D array.  The result is a 3D array, same size
+    #        as v.
 
-    #         This function does not worry about the wrap
-    #         around affect of ROLL at bottom.  This must
-    #         be handled by the caller.
+    #        This function does not worry about the wrap
+    #        around affect of ROLL at bottom.  This must
+    #        be handled by the caller.
 
     #        (11/11/10) Added BACKWARD keyword.
-    #------------------------------------------------------------
+    #-------------------------------------------------------------
+    # Note:  If dz_val[j] is the same for all layers (j), so
+    #        that dz_val.min() == dz_val.max(), then self.dz
+    #        is set to a scalar value.  self.dz and self.nz are
+    #        both set in infil_base.py (build_layer_z_vector()).
+    #-------------------------------------------------------------    
     n_dz = dz.size
 
     if not(BACKWARD):
@@ -2122,6 +2365,10 @@ def Z_Derivative_3D(v, dz, BACKWARD=False):
     else:
         v_above = np.roll(v, 1, axis=0)
 
+        # v_above has same min & max
+#         print('min(v) = ' + str(v.min()) )
+#         print('max(v) = ' + str(v.max()) )
+        
         if (n_dz == 1):
             dv_dz = (v - v_above) / dz  # (dz is a scalar)
         else:    

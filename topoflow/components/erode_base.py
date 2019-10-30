@@ -1100,7 +1100,7 @@ class erosion_component( BMI_base.BMI_component ):
         # Get a nonzero value if a pixel's elevation is
         # greater than than that of its parent pixel.
         #----------------------------------------------------
-        # #####  THIS SHOULD TRUE EXCEPT FOR "FLATS" #######
+        # #####  THIS SHOULD BE TRUE EXCEPT FOR "FLATS" #######
         #----------------------------------------------------
         # Computing pIDs as: "self.d8.parent_IDs" works for
         # erode_d8_global but doesn't for erode_d8_local.

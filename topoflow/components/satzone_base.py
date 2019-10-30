@@ -330,13 +330,13 @@ class satzone_component( infil_base.infil_component ):
         #---------------------------------------
         # Get arrays for soil layer parameters
         #---------------------------------------
-        self.Ks_type = np.zeros(n_layers, dtype='<U100')
-        self.qs_type = np.zeros(n_layers, dtype='<U100')
-        self.th_type = np.zeros(n_layers, dtype='<U100')
+        self.Ks_type = np.zeros(n_layers, dtype='<U200')
+        self.qs_type = np.zeros(n_layers, dtype='<U200')
+        self.th_type = np.zeros(n_layers, dtype='<U200')
         #------------------------------------------------------
-        self.Ks_file = np.zeros(n_layers, dtype='<U100')
-        self.qs_file = np.zeros(n_layers, dtype='<U100')
-        self.th_file = np.zeros(n_layers, dtype='<U100')
+        self.Ks_file = np.zeros(n_layers, dtype='<U200')
+        self.qs_file = np.zeros(n_layers, dtype='<U200')
+        self.th_file = np.zeros(n_layers, dtype='<U200')
         #---------------------------------------------------------
         # Note: self.Ks is a Python list.  Initially, each entry
         # is a numpy scalar (type 'np.float64').  However, we

@@ -1,5 +1,5 @@
 
-## Copyright (c) 2001-2014, Scott D. Peckham
+## Copyright (c) 2001-2019, Scott D. Peckham
 
 ## January 2013  (Removed "get_port_data" calls, etc.)
 ## January 2009  (converted from IDL)
@@ -60,7 +60,7 @@
 #-----------------------------------------------------------------------
 
 import numpy as np
-import os
+import os, sys
 
 from topoflow.utils import BMI_base
 from topoflow.utils import model_input
@@ -139,6 +139,10 @@ class infil_component( BMI_base.BMI_component):
     def initialize(self, cfg_file=None, mode="nondriver",
                    SILENT=False):
 
+        self.DEBUG = True  ###########################
+        ##############################################
+        ##############################################
+                
         #---------------------------------------------------------
         # Notes:  Need to make sure than h_swe matches h_snow ?
         #         User may have entered incompatible valueself.
@@ -165,10 +169,12 @@ class infil_component( BMI_base.BMI_component):
         
         #-----------------------------------------------
         # Load component parameters from a config file
-        #------------------------------------------------------------- 
-        # NOTE!  initialize_config_vars() calls read_config_file(),
-        #        which now calls initialize_layer_vars(). (11/16/16)
-        #-------------------------------------------------------------       
+        #--------------------------------------------------------------- 
+        # NOTE!  In BMI_base.py, initialize_config_vars() calls
+        #        read_config_file() & set_computed input_vars().
+        #        read_config_file() calls initialize_layer_vars()
+        #        after reading n_layers.  (11/16/16)
+        #---------------------------------------------------------------       
         self.set_constants()
         ## self.initialize_layer_vars()  # (5/11/10)
         self.initialize_config_vars() 
@@ -176,6 +182,9 @@ class infil_component( BMI_base.BMI_component):
         self.initialize_basin_vars()  # (5/14/10)
         self.initialize_time_vars()
         
+        if not(hasattr(self, 'CHECK_STABILITY')):
+           self.CHECK_STABILITY = False
+
         #----------------------------------
         # Has component been turned off ?
         #----------------------------------
@@ -302,47 +311,31 @@ class infil_component( BMI_base.BMI_component):
         #---------------------------------------------------------
         self.nz = np.sum( self.nz_val )
 
-        #-----------------------------------------------------
-        # Compute dz as 1D array from scalars in self.dz_val
-        #-----------------------------------------------------
-        # NB! Values in self.dz_val are scalars vs. pointers
-        # so we can't use the build_layered_var routine.
-        #-----------------------------------------------------
-        dz_min = self.dz_val.min()
-        dz_max = self.dz_val.max()
-        if (dz_min == dz_max):
-            #----------------------
-            # dz is just a scalar
-            #----------------------
-            self.dz = self.dz_val[0]
-        else:
-            #-------------------
-            # dz is a 1D array
-            #-------------------
-            self.dz = np.zeros(self.nz, dtype=dtype)
-
-            #--------------------------------------------------
-            # Create array of indices.  See build_layered_var
-            #--------------------------------------------------
-            i = np.concatenate(([np.int32(0)], np.int32(np.cumsum(self.nz_val))) )
-            for j in range(self.n_layers):
-                self.dz[ i[j]: i[j+1]-1 ] = self.dz_val[j]
-
-        #----------------------------------------------
-        # Compute the z-vector, for plotting profiles
-        #----------------------------------------------
+        #-------------------------------        
+        # First, compute the dz vector
+        #-------------------------------
         dz = np.repeat(self.dz_val[0], self.nz_val[0])  # (1D ndarray)
         for j in range(1, self.n_layers):
             layer_dz = self.dz_val[j]
             layer_nz = self.nz_val[j]
             dz_j = np.repeat(layer_dz, layer_nz)  # (1D ndarray)
             dz = np.concatenate( (dz, dz_j) )
-        ############################################
-        # NB! As written (and in IDL version), the
-        #     z-vector does not start with 0.
-        ############################################
-        self.z = np.cumsum(dz)
 
+        #------------------------------------------
+        # If all dz's are equal, make it a scalar
+        #------------------------------------------
+        dz_min = self.dz_val.min()
+        dz_max = self.dz_val.max()
+        if (dz_min == dz_max):
+            self.dz = self.dz_val[0]
+        else:
+            self.dz = dz
+            
+        #---------------------------------------            
+        # Compute z vector as a cumulative sum
+        #---------------------------------------
+        self.z = np.cumsum(dz)
+     
     #   build_layer_z_vector()
     #------------------------------------------------------------------- 
     def build_layered_var(self, var_list_for_layers):
@@ -755,9 +748,11 @@ class infil_component( BMI_base.BMI_component):
             OK = np.isfinite( self.IN )
             nbad = 1
         else:
-            wbad = np.where( np.logical_not(np.isfinite( self.IN )) )
-            nbad = np.size( wbad[0] )
-            ### nbad = np.size(wbad, 0)
+            # Should be faster than using WHERE
+            wbad = np.logical_not( np.isfinite( self.IN ) )
+            nbad = wbad.sum()
+#             wbad = np.where( np.logical_not(np.isfinite( self.IN )) )
+#             nbad = np.size( wbad[0] )
             OK = (nbad == 0)
         if (OK):
             return
@@ -768,7 +763,6 @@ class infil_component( BMI_base.BMI_component):
         msg = np.array(['ERROR:  Aborting model run.', \
                         '        NaNs found in infiltration rates.', \
                         '        Number of NaN values = ' + str(nbad) ])
-        ## GUI_Error_Message(msg)  #########
 
         print('##############################################')
         for line in msg:
@@ -777,7 +771,13 @@ class infil_component( BMI_base.BMI_component):
         print(' ')
         
         self.status = 'failed'
+
+        #--------------------------------------------------------        
+        # This won't stop the run unless infiltration component
+        # is the driver component.  So use sys.exit().
+        #--------------------------------------------------------
         self.DONE = True
+        sys.exit()
         
     #   check_infiltration
     #-----------------------------------------------------------------------
@@ -1161,11 +1161,19 @@ class infil_component( BMI_base.BMI_component):
         if (time_seconds is None):
             time_seconds = self.time_sec
         model_time = int(time_seconds)
+ 
+#         print('self.time = ' + str(self.time) )
+#         print('self.time_sec = ' + str(self.time_sec) )
+#         print('self.time_units = ' + self.time_units )        
+#         print('model_time = ' + str(model_time) )
+#         print('save_grid_dt = ' + str(self.save_grid_dt) )
+#         print(' ')
         
         #----------------------------------------
         # Save computed values at sampled times
         #----------------------------------------
         if (model_time % int(self.save_grid_dt) == 0):
+            ### print('Saving grids at time = ' + str(model_time) )
             self.save_grids()
             
         if (model_time % int(self.save_pixels_dt) == 0):

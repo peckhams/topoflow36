@@ -1,7 +1,7 @@
 
 ## Does "land_surface_air__latent_heat_flux" make sense? (2/5/13)
 
-# Copyright (c) 2001-2014, Scott D. Peckham
+# Copyright (c) 2001-2019, Scott D. Peckham
 #
 #  Sep 2014.  Fixed sign error in update_bulk_richardson_number().
 #             Ability to compute separate P_snow and P_rain.
@@ -602,17 +602,30 @@ class met_component( BMI_base.BMI_component ):
         ## print '    Calling initialize_time_vars()...'
         self.initialize_time_vars()
 
-        #-------------------------------------------------
-        # (5/19/12) This makes P "mutable", which allows
-        # its updated values to be seen by any component
-        # that has a reference to it.
-        #-------------------------------------------------
-        # Write a "initialize_computed_vars()" method?
-        #-------------------------------------------------
-        self.P      = self.initialize_scalar(0, dtype='float64')
-        self.P_rain = self.initialize_scalar(0, dtype='float64')
-        self.P_snow = self.initialize_scalar(0, dtype='float64')
-                    
+        #---------------------------------------------------
+        # See "initialize_computed_vars()" method below.
+        #---------------------------------------------------
+        # Note: read_input_files() is called further down,
+        #       and uses self.is_scalar(P), which uses
+        #       self.P.ndim to determine if scalar.  So
+        #       scalar/grid needs to be set at start.
+        #       Check other input variables for this issue.    #######
+        #---------------------------------------------------        
+        P_type = self.P_type.lower()
+        if (P_type == 'scalar') or (P_type == 'time_series'):
+            #-------------------------------------------------
+            # (5/19/12) This makes P "mutable", which allows
+            # its updated values to be seen by any component
+            # that has a reference to it.
+            #-------------------------------------------------
+            self.P      = self.initialize_scalar(0, dtype='float64')
+            self.P_rain = self.initialize_scalar(0, dtype='float64')
+            self.P_snow = self.initialize_scalar(0, dtype='float64')
+        else:
+            self.P      = self.initialize_grid(0, dtype='float64')
+            self.P_rain = self.initialize_grid(0, dtype='float64')
+            self.P_snow = self.initialize_grid(0, dtype='float64')
+                               
         #------------------------------------------------------
         # NB! "Sample steps" must be defined before we return
         #     Check all other process modules.
@@ -1051,6 +1064,11 @@ class met_component( BMI_base.BMI_component ):
             if (self.P_rain.max() > 0):
                 print('   >> Rain is falling...')
 
+#         print('shape(P_rain) = ', self.P_rain.shape )
+#         print('min(P_rain)   = ', self.P_rain.min() )
+#         print('max(P_rain)   = ', self.P_rain.max() )
+#         print()
+               
         #--------------
         # For testing
         #--------------
@@ -1813,7 +1831,8 @@ class met_component( BMI_base.BMI_component ):
 #                 self.P = P
 
             if (self.DEBUG or (self.time_index == 0)):
-                print('In read_input_files():')
+                print('In met_base read_input_files():')
+                print('   time = ' + str(self.time) )
                 Pmin_str = str( P.min() * self.mps_to_mmph )
                 Pmax_str = str( P.max() * self.mps_to_mmph )
                 print('   min(P) = ' + Pmin_str + ' [mmph]')
