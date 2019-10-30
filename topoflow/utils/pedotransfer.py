@@ -7,8 +7,12 @@
 
 #  test1()
 #  test2()
+#  test3()
 
+#  get_nodata_values()
 #  read_soil_grid_files()        # (as RTG)
+#  check_soil_grid_values()
+#  convert_soil_grid_values()    # ISRIC to Wosten PTF vars
 #  read_isric_soil_grid_files()  # (as TIFF)
 
 #  wosten_theta_s()
@@ -18,6 +22,7 @@
 #  wosten_l()
 
 #  get_wosten_vars()
+#  capillary_length_G()
 #  get_tBC_from_vG_vars()
 #  save_soil_hydraulic_vars()
 
@@ -39,6 +44,8 @@ from scipy.special import gamma
 from . import regrid as rg
 from . import rti_files
 from . import rtg_files
+## from . import soil_trans_BC as soil
+
 import glob, os
 
 # import os.path
@@ -52,14 +59,103 @@ def test1():
               
 #   test1()
 #-------------------------------------------------------------------
-def test2():
+def test2(BARO=True, LOL=False):
 
-    directory = '/Users/peckhams/ISRIC_Files/'
-    save_soil_hydraulic_vars( site_prefix=None, directory=directory,
-                              layer=1, LOL_1MIN_TEST=True )
-                              ### layer=1, BARO_1MIN_TEST=True )
-                      
+    #------------------------------------------------------
+    # Directory and site_prefix will be set automatically
+    #------------------------------------------------------
+    BARO_1MIN_TEST = BARO
+    LOL_1MIN_TEST  = LOL
+    
+    #----------------------------------------------------------    
+    # Compute and save soil hydraulic variables for top layer
+    #----------------------------------------------------------
+#     save_soil_hydraulic_vars( site_prefix=None, directory=directory,
+#          layer=1, BARO_1MIN_TEST=BARO_1MIN_TEST,
+#          LOL_1MIN_TEST=LOL_1MIN_TEST )  
+
+    #-----------------------------------------------------------
+    # First, clip and resample the files downloaded from ISRIC
+    # to the bounding box and grid cell size of the model    
+    #-----------------------------------------------------------  
+    # Compute and save soil hydraulic variables for all layers
+    #-----------------------------------------------------------        
+    for k in range(7):
+        layer = k + 1
+        save_soil_hydraulic_vars( site_prefix=None, directory=None,
+             layer=layer, BARO_1MIN_TEST=BARO_1MIN_TEST,
+             LOL_1MIN_TEST=LOL_1MIN_TEST )  
+                            
 #   test2()
+#-------------------------------------------------------------------
+def test3():
+
+    topsoil = 1
+    
+    print('Case of: C=90, S=5, OM=5, D=1.5')
+    alpha = wosten_alpha( 0.9, 0.05, 0.05, 1.5, topsoil )
+    # alpha = wosten_alpha( 90.0, 5.0, 5.0, 1.5, topsoil )
+    print('alpha = ' + str(alpha) )
+    print()
+    #-----------------------------------------------------
+    print('Case of: C=5, S=90, OM=5, D=1.5')
+    alpha = wosten_alpha( 0.05, 0.9, 0.05, 1.5, topsoil )
+    # alpha = wosten_alpha( 5.0, 90.0, 5.0, 1.5, topsoil )
+    print('alpha = ' + str(alpha) )
+    print()
+    #-----------------------------------------------------
+        
+#   test3()
+#-------------------------------------------------------------------
+def get_nodata_values():
+
+    #-------------------------------------------------
+    # Replace zero values with another nodata value.
+    # Zero values cause NaN or Inf in Wosten vars.
+    # For %, 101.0 is an impossible value.
+    # For D, use 10 [g / cm^3].
+    #-------------------------------------------------
+    # Density of water          = 1.00  [g / cm^3]
+    # Density of silt           = 1.33  [g / cm^3]
+    # Density of loose sand     = 1.442 [g / cm^3]
+    # Density of dry sand       = 1.602 [g / cm^3]
+    # Density of compacted clay = 1.746 [g / cm^3]
+    # Density of most rocks     = 2.65  [g / cm^3]
+    # Density of pure iron      = 7.87  [g / cm^3]
+    # Density of pure actinium  = 10.07 [g / cm^3]  
+    # Density of pure lead      = 11.34 [g / cm^3]
+    # Density of pure gold      = 19.20 [g / cm^3]
+    #-------------------------------------------------
+    nd_values = {
+    'C'  : 101.0,  # [%]
+    'S'  : 101.0,  # [%]
+    'X'  : 101.0,  # [%]
+    'OM' : 101.0,  # [%]
+    'D'  : 10.0,   # [g / cm^3]
+    #------------------------------
+    'theta' : -9999.0 }  # unitless, in [0,1]
+
+#     nd_values = {
+#     'C'  : -9999.0,  # [%]
+#     'S'  : -9999.0,  # [%]
+#     'X'  : -9999.0,  # [%]
+#     'OM' : -9999.0,  # [%]
+#     'D'  : -9999.0 }  # [g / cm^3]
+#     #------------------------------
+#     'theta' : -9999.0 }  # unitless, in [0,1]
+         
+#     nd_values = {
+#     'C'  : 0.001,  # [%]
+#     'S'  : 0.001,  # [%]
+#     'X'  : 0.001,  # [%]
+#     'OM' : 0.001,  # [%]
+#     'D'  : 0.001 }  # [g / cm^3]
+#     #------------------------------
+#     'theta' : -9999.0 }  # unitless, in [0,1]
+        
+    return nd_values
+
+#   get_nodata_values()
 #-------------------------------------------------------------------
 def read_soil_grid_files( site_prefix=None, directory=None,
          res_str='1km', layer=1 ):
@@ -85,11 +181,11 @@ def read_soil_grid_files( site_prefix=None, directory=None,
     # Values are available for 7 different depths:
     #   0.0, 0.05, 0.15, 0.30, 0.60, 1.00, 2.00
     #   sl1, sl2,  sl3,  sl4,  sl5,  sl6,  sl7
-    #--------------------------------------------------- 
+    #----------------------------------------------------- 
     suffix  = layer_str + res_str + '.rtg'
     C_file  = site_prefix + '_CLYPPT_M' + suffix  # (C)
     S_file  = site_prefix + '_SLTPPT_M' + suffix  # (S)
-    OM_file = site_prefix + '_ORCDRC_M' + suffix  # (OM)
+    OC_file = site_prefix + '_ORCDRC_M' + suffix  # (OC)
     D_file  = site_prefix + '_BLDFIE_M' + suffix  # (D)   
 
     #------------------------------------------------
@@ -100,122 +196,52 @@ def read_soil_grid_files( site_prefix=None, directory=None,
     
     #-------------------------------
     # Read the soil property grids
-    #------------------------------------------------
-    # Wosten C = clay mass fraction, [kg/kg], as %.
-    # Same units in ISRIC and Wosten.
-    #------------------------------------------------
+    #---------------------------------------------------
+    # Read ISRIC clay mass fraction [kg/kg], as %.
+    # This is the same as "C" in Wosten PTF equations.
+    #--------------------------------------------------- 
     C = rtg_files.read_grid( C_file, grid_info, RTG_type='FLOAT' )
-    #------------------------------------------------
-    # Wosten S = silt mass fraction, [kg/kg], as %.
-    # Same units in ISRIC and Wosten.
-    #------------------------------------------------    
+    
+    #---------------------------------------------------
+    # Read ISRIC silt mass fraction [kg/kg], as %.
+    # This is the same as "S" in Wosten PTF equations.
+    #---------------------------------------------------    
     S = rtg_files.read_grid( S_file, grid_info, RTG_type='FLOAT' )
-    #----------------------------------------------------------
-    # Wosten OM = organic matter mass fraction, [kg/kg], as %
-    # ISRIC units = [g / kg]  
-    # Convert ISIRC [g / kg] to Wosten [%].
-    #--------------------------------------------------
-    # First convert [g/kg] to [kg/kg] (mass fraction),
-    # Then multiply by 100 to convert [kg/kg] to %.
-    # Note:  mass fraction [kg/kg] is in [0,1].
-    #--------------------------------------------------
-    # OM [g/kg] * (1 kg / 1000 g) = (OM/1000) [kg/kg]
-    # (OM/1000) [kg/kg] * 100 = (OM/10) %.
-    #--------------------------------------------------
-    OM = rtg_files.read_grid( OM_file, grid_info, RTG_type='FLOAT' )    
-    OM = (OM / 10.0)
-    #--------------------------------------
-    # Wosten D = bulk density, [g / cm^3]
-    #-------------------------------------------------
-    # Convert ISRIC [kg / m^3] to Wosten [g / cm^3]
-    #-------------------------------------------------
-    # D [kg / m^3] * (1000 g / 1 kg) * (1 m / 100 cm)^3
-    # D [kg / m^3] * (1 / 1000) = D [g / cm^3]
+    
     #----------------------------------------------------
+    # Read ISRIC organic carbon content, units [g / kg]
+    #----------------------------------------------------
+    OC = rtg_files.read_grid( OC_file, grid_info, RTG_type='FLOAT' )    
+
+    #-------------------------------------------------
+    # Read ISRIC soil bulk density, units [kg / m^3]
+    #-------------------------------------------------
     D = rtg_files.read_grid( D_file, grid_info, RTG_type='FLOAT' )
-    D = (D / 1000.0)
 
     #--------------------------------------
     # Check if grid values are reasonable
     #--------------------------------------
-    w1 = np.logical_or( C < 0, C > 100.0 )
-    n1 = w1.sum()
-    if (n1 > 0):
-        cmin = C.min()
-        cmax = C.max()
-        print('WARNING in read_soil_grid_files:')
-        print('   Some values in C grid are out of range.')
-        print('   min(C) = ' + str(cmin) )
-        print('   max(C) = ' + str(cmax) )
-        print()
-    #--------------------------------------------------------
-    w2 = np.logical_or( S < 0, S > 100.0 )
-    n2 = w2.sum()
-    if (n2 > 0):
-        Smin = S.min()
-        Smax = S.max()
-        print('WARNING in read_soil_grid_files:')
-        print('   Some values in S grid are out of range.')
-        print('   min(S) = ' + str(Smin) )
-        print('   max(S) = ' + str(Smax) )
-        print()
-    #--------------------------------------------------------
-    w3 = np.logical_or( OM < 0, OM > 100.0 )
-    n3 = w3.sum()
-    if (n3 > 0):
-        OMmin = OM.min()
-        OMmax = OM.max()
-        print('WARNING in read_soil_grid_files:')
-        print('   Some values in OM grid are out of range.')
-        if (OMmin < 0):
-            print('   min(OM) = ' + str(OMmin) )
-            print('   Possible nodata value.')
-        if (OMmax > 100):
-            print('   max(OM) = ' + str(OMmax) )
-            ## print('   Possible nodata value.')
-        print()
-    #-------------------------------------------------------- 
-    w4 = np.logical_or( D < 0, D > 2.65 )
-    n4 = w4.sum()
-    if (n4 > 0):
-        Dmin = D.min()
-        Dmax = D.max()
-        print('WARNING in read_soil_grid_files:')
-        print('   Some values in D grid are out of range.')
-        if (Dmin < 0):
-            print('   min(D) = ' + str(Dmin) )
-            print('   Possible nodata value.')
-        if (Dmax > 2.65):
-            print('   max(D) = ' + str(Dmax) )
-            ## print('   Possible nodata value.')
-        print()
+    check_soil_grid_values(C, S, OC, D, VERBOSE=True)
 
+    #------------------------------------------------
+    # Convent units to those needed by Wosten PTFs.
+    #------------------------------------------------
+    (C,S,OM,D) = convert_soil_grid_values(C, S, OC, D)
+        
     #-------------------------------------------------
-    # Replace zero values with another nodata value.
-    # Zero values cause NaN or Inf in Wosten vars.
+    # Replace -9999.0 with another nodata value to
+    # avoid NaN or Inf in Wosten PTF equations.
     # For %, 101.0 is an impossible value.
-    # For D, use 10 [g / cm^3].
-    #-------------------------------------------------
-    # Density of water          = 1.00  [g / cm^3]
-    # Density of silt           = 1.33  [g / cm^3]
-    # Density of loose sand     = 1.442 [g / cm^3]
-    # Density of dry sand       = 1.602 [g / cm^3]
-    # Density of compacted clay = 1.746 [g / cm^3]
-    # Density of most rocks     = 2.65  [g / cm^3]
-    # Density of pure iron      = 7.87  [g / cm^3]
-    # Density of pure actinium  = 10.07 [g / cm^3]  
-    # Density of pure lead      = 11.34 [g / cm^3]
-    # Density of pure gold      = 19.20 [g / cm^3]
-    #-------------------------------------------------
-    C[ C <= 0 ]   = 101.0  # [%]
-    S[ S <= 0 ]   = 101.0  # [%]
-    OM[ OM <= 0 ] = 101.0  # [%]
-    D[ D <= 0]    = 10.0   # [g / cm^3]
-    #---------------------------------------
-#     C[ C <= 0 ]   = 0.001  # [%]
-#     S[ S <= 0 ]   = 0.001  # [%]
-#     OM[ OM <= 0 ] = 0.001  # [%]
-#     D[ D <= 0]    = 0.001  # [g / cm^3]
+    # For D, use 10 [g / cm^3] (impossible for soil).
+    #---------------------------------------------------
+    # We have used -9999.0 (ISRIC) up to this point,
+    # but that's not good for the wosten PTF equations.
+    #---------------------------------------------------
+    nodata = get_nodata_values()
+    C[ C <= 0 ]   = nodata['C']   # [%]
+    S[ S <= 0 ]   = nodata['S']   # [%]
+    OM[ OM <= 0 ] = nodata['OM']  # [%]
+    D[ D <= 0]    = nodata['D']   # [g / cm^3]
       
     #------------------------------------
     # Return Wosten input vars as tuple
@@ -223,6 +249,136 @@ def read_soil_grid_files( site_prefix=None, directory=None,
     return (C, S, OM, D)
     
 #   read_soil_grid_files()
+#-------------------------------------------------------------------
+def check_soil_grid_values(C, S, OC, D, VERBOSE=False):
+
+    #-----------------------------
+    # Get all the mins and maxes
+    #-----------------------------
+    Cmin  = C.min()
+    Cmax  = C.max()
+    Smin  = S.min()
+    Smax  = S.max()
+    OCmin = OC.min()
+    OCmax = OC.max()
+    Dmin  = D.min()
+    Dmax  = D.max()
+
+    #--------------------------------- 
+    # Option to print mins and maxes
+    #---------------------------------
+    if (VERBOSE):
+        print('min(C),  max(C)  = ' + str(Cmin)  + ', ' + str(Cmax) )
+        print('min(S),  max(S)  = ' + str(Smin)  + ', ' + str(Smax) )
+        print('min(OC), max(OC) = ' + str(OCmin) + ', ' + str(OCmax) )
+        print('min(D),  max(D)  = ' + str(Dmin)  + ', ' + str(Dmax) )
+        print()
+
+    #--------------------------------------
+    # Check if grid values are reasonable
+    #--------------------------------------
+    if ((Cmin < 0.0) or (Cmax > 100.0)):
+        print('WARNING in read_soil_grid_files:')
+        print('   Some values in C grid are out of range.')
+        print('   min(C) = ' + str(Cmin) )
+        print('   max(C) = ' + str(Cmax) )
+        print()
+    #--------------------------------------------------------
+    if ((Smin < 0.0) or (Smax > 100.0)):
+        print('WARNING in read_soil_grid_files:')
+        print('   Some values in S grid are out of range.')
+        print('   min(S) = ' + str(Smin) )
+        print('   max(S) = ' + str(Smax) )
+        print()
+    #--------------------------------------------------------
+    # ISRIC OC units are [g/kg]
+    # ISRIC D units are [kg / m^3]
+    #--------------------------------------------------------
+    if ((OCmin < 0.0) or (OCmax > 1000.0)):
+        print('WARNING in read_soil_grid_files:')
+        print('   Some values in OC grid are out of range.')
+        if (OCmin < 0.0):
+            print('   min(OC) = ' + str(OCmin) )
+            print('   Possible nodata value.')
+        if (OCmax > 1000.0):
+            print('   max(OC) = ' + str(OCmax) )
+            ## print('   Possible nodata value.')
+        print()
+    #------------------------------------------------
+    # Density of water          = 1000  [kg / m^3]
+    # Density of silt           = 1330  [kg / m^3]
+    # Density of loose sand     = 1442  [kg / m^3]
+    # Density of dry sand       = 1602  [kg / m^3]
+    # Density of compacted clay = 1746  [kg / m^3]  
+    # Density of most rocks     = 2650  [kg / m^3]
+    #------------------------------------------------         
+    if ((Dmin < 0.0) or (Dmax > 2650)):
+        print('WARNING in read_soil_grid_files:')
+        print('   Some values in D grid are out of range.')
+        if (Dmin < 0.0):
+            print('   min(D) = ' + str(Dmin) )
+            print('   Possible nodata value.')
+        if (Dmax > 2650.0):
+            print('   max(D) = ' + str(Dmax) )
+            ## print('   Possible nodata value.')
+        print()
+     
+#   check_soil_grid_values()
+#-------------------------------------------------------------------
+def convert_soil_grid_values(C, S, OC, D, VERBOSE=False):
+
+    #----------------------------------------------
+    # Convert ISIRC OC [g / kg] to Wosten OM [%].
+    #--------------------------------------------------
+    # OC = ISRIC organic carbon content in [g / kg]
+    # However, Wosten PTFs need OM, where:
+    # OM = organic mass fraction in [kg / kg], as %.
+    #---------------------------------------------------
+    # First convert [g/kg] to [kg/kg] (mass fraction).
+    # Then multiply by 100 to convert [kg/kg] to %.
+    # Note:  mass fraction [kg/kg] is in [0,1].
+    #--------------------------------------------------
+    #     g       1 kg        OM   kg
+    # OM ---  *  ------  =   ----  --
+    #     kg     1000 g      1000  kg
+    #--------------------------------------------------
+    # (OM/1000) [kg/kg] * 100 = (OM/10) %.
+    #--------------------------------------------------
+    w1 = (OC == -9999.0)
+    OC = (OC / 10.0)
+    OC[w1] = -9999.0   # (preserve nodata value)
+    
+    #---------------------------------------------------
+    # Convert organic carbon to organic matter content
+    #----------------------------------------------------------
+    # NOTE:  ISRIC SoilGrids "ORCDRC" is "soil organic carbon
+    #        content (fine earth fraction)", in [g / kg].
+    #        But Wosten PTFs need soil organic *matter*.
+    #        A conversion factor of 1.724 is given in 
+    #        Wosten et al. (1998, p. 28) and is attributed to:
+    #        Nelson and Sommers (1982).  Also found online.
+    #        About 58% of organic matter is carbon, and
+    #        100 / 58 = 1.724.
+    #---------------------------------------------------------- 
+    OM = OC * 1.724   # (Wosten et al (1998), p. 28)
+    OM[w1] = -9999.0
+    
+    #-------------------------------------------------
+    # Convert ISRIC [kg / m^3] to Wosten [g / cm^3]
+    #-------------------------------------------------
+    # Wosten D = bulk density, [g / cm^3]
+    #-------------------------------------------------
+    #    kg     1000 g      (1 m)^3       D    g
+    # D ---- * -------- * ------------ = ---- ---
+    #    m3      1 kg      (100 cm)^3    1000  cm3
+    #-------------------------------------------------
+    w1 = (D == -9999.0)
+    D = (D / 1000.0)
+    D[w1] = -9999.0    # (preserve nodata value)
+    
+    return (C, S, OM, D)
+
+#   convert_soil_grid_values()
 #-------------------------------------------------------------------
 def read_isric_soil_grid_files( layer=1, region_str=None,
                                 res_str='1km' ):
@@ -260,11 +416,15 @@ def read_isric_soil_grid_files( layer=1, region_str=None,
     #   sl1, sl2,  sl3,  sl4,  sl5,  sl6,  sl7
     #-------------------------------------------------------------
     suffix  = layer_str + res_str + region_str
-    C_file  = site_prefix + '_CLYPPT_M' + suffix  # (C)
-    S_file  = site_prefix + '_SLTPPT_M' + suffix  # (S)
+    C_file  = site_prefix + '_CLYPPT_M' + suffix  # (C, clay)
+    S_file  = site_prefix + '_SLTPPT_M' + suffix  # (S, silt)
     OM_file = site_prefix + '_ORCDRC_M' + suffix  # (OM)
-    D_file  = site_prefix + '_BLDFIE_M' + suffix  # (D)    
-
+    D_file  = site_prefix + '_BLDFIE_M' + suffix  # (D)
+    #-------------------------------------------------------  
+    # This is not needed by Wosten pedotransfer functions.
+    #-------------------------------------------------------   
+#     X_file  = site_prefix + '_SNDPPT_M' + suffix  # (X, sand)
+        
     #-------------------------------
     # Read the soil property grids
     #------------------------------------------------
@@ -310,6 +470,14 @@ def read_isric_soil_grid_files( layer=1, region_str=None,
     D = (D / 1000.0)
     f4 = None  # (close f4)
 
+    #------------------------------------------------
+    # Wosten X = sand mass fraction, [kg/kg], as %.
+    # Same units in ISRIC and Wosten.
+    #------------------------------------------------   
+#     f5 = gdal.Open( X_file )
+#     X  = f5.ReadAsArray()   # (byte type)
+#     f5 = None  # (close f5)
+    
     #------------------------------------
     # Return Wosten input vars as tuple
     #------------------------------------
@@ -322,17 +490,14 @@ def transform_isric_soil_grid_files( directory=None,
               IN_MEMORY=False, VERBOSE=False,
               BARO_1MIN_TEST=False,
               LOL_1MIN_TEST=False):
-
-    if (directory is None):
-        directory = '/Users/peckhams/ISRIC_Files/'
-    os.chdir( directory )
-        
+  
     #------------------------------------------------------
     # For info on GDAL constants, see:
     # https://gdal.org/python/osgeo.gdalconst-module.html
     #------------------------------------------------------  
     if (BARO_1MIN_TEST):
-        site_prefix  = 'Baro_Gam_1min'
+        site_prefix = 'Baro_Gam_1min'
+        directory   = '/Users/peckhams/ISRIC_Files/Ethiopia/'
         # Bounds = [ minlon, minlat, maxlon, maxlat ]
         DEM_bounds = [ 34.22125, 7.3704166666, 36.43791666666, 9.50375]
         DEM_xres   = 1./60   # (60 arcsecs = 60/3600 degrees)
@@ -341,14 +506,19 @@ def transform_isric_soil_grid_files( directory=None,
         DEM_nrows  = 128
 
     if (LOL_1MIN_TEST):
-        site_prefix  = 'Lol-Kuru_1min'
+        site_prefix = 'Lol-Kuru_1min'
+        directory   = '/Users/peckhams/ISRIC_Files/South_Sudan/'
         # Bounds = [ minlon, minlat, maxlon, maxlat ]
         DEM_bounds = [ 23.9954166666, 6.5329166666, 28.0120833333, 9.56625]
         DEM_xres   = 1./60   # (60 arcsecs = 60/3600 degrees)
         DEM_yres   = 1./60   # (60 arcsecs = 60/3600 degrees)
         DEM_ncols  = 241
         DEM_nrows  = 182
-            
+
+    if (directory is None):
+        return
+    os.chdir( directory )
+                
     #-----------------------------------------    
     # Use a temp file in memory or on disk ?
     #-----------------------------------------
@@ -461,9 +631,9 @@ def transform_isric_soil_grid_files( directory=None,
     
 #   transform_isric_soil_grid_files() 
 #-------------------------------------------------------------------
-def wosten_theta_s( C, S, OM, D, topsoil, subsoil ):
+def wosten_theta_s( C, S, OM, D, topsoil, FORCE_RANGE=True):
 
-    #--------------------------------    
+    #--------------------------------
     # From Wosten (1998). R^2 = 76%
     #-------------------------------------------------------
     # Note that theta_s should be in [0, 1], unitless
@@ -478,6 +648,20 @@ def wosten_theta_s( C, S, OM, D, topsoil, subsoil ):
     p5 = (-0.001183 * D * OM) - (0.0001664 * topsoil * S)
 
     theta_s = (p1 + p2 + p3 + p4 + p5)
+
+    #--------------------------  
+    # Propagate nodata values
+    #--------------------------
+    nd_values    = get_nodata_values()
+    C_nodata     = nd_values['C']
+    S_nodata     = nd_values['S']
+    OM_nodata    = nd_values['OM']
+    D_nodata     = nd_values['D']
+    theta_nodata = nd_values['theta']
+    w1 = np.logical_or( OM == OM_nodata, D == D_nodata)
+    w2 = np.logical_or( C == C_nodata, S == S_nodata)
+    theta_s[w1] = theta_nodata
+    theta_s[w2] = theta_nodata
     
     #--------------------------------------
     # Check if grid values are reasonable
@@ -487,19 +671,32 @@ def wosten_theta_s( C, S, OM, D, topsoil, subsoil ):
     if (n1 > 0):
         qmin = theta_s.min()
         qmax = theta_s.max()
-        print('ERROR in wosten_theta_s:')
+        print('WARNING in wosten_theta_s:')
         print('   Some values are not in [0, 1].')
         if (qmin < 0.0):
             print('   min(theta_s) = ' + str(qmin) )
+            print('   Possible nodata value.' )
         if (qmax > 1.0):
             print('   max(theta_s) = ' + str(qmax) )
+
+        #-------------------------------
+        # Option to replace bad values
+        #-------------------------------
+        if (FORCE_RANGE):
+            print('   Forcing bad values into range.')
+            wneg = (theta_s < 0.0)
+            wpos = (theta_s > 0.0)
+            theta_s[ wneg ] = theta_s[ wpos ].min()
+            w1 = (theta_s > 1.0)
+            w2 = (theta_s < 1.0)
+            theta_s[ w1 ] = theta_s[ w2 ].max()
         print()
 
     return theta_s
     
 #   wosten_theta_s()
 #-------------------------------------------------------------------
-def wosten_K_s( C, S, OM, D, topsoil, subsoil ):
+def wosten_K_s( C, S, OM, D, topsoil ):
 
     #-------------------------------------   
     # From Wosten (1998). R^2 = 19%.
@@ -562,7 +759,7 @@ def wosten_K_s( C, S, OM, D, topsoil, subsoil ):
     
 #   wosten_K_s()
 #-------------------------------------------------------------------
-def wosten_alpha( C, S, OM, D, topsoil, subsoil):
+def wosten_alpha( C, S, OM, D, topsoil, FORCE_RANGE=True ):
 
     #---------------------------------   
     # From Wosten (1998). R^2 = 20%.
@@ -571,16 +768,17 @@ def wosten_alpha( C, S, OM, D, topsoil, subsoil):
     #---------------------------------
     p1 = -14.96 + 0.03135*C + 0.0351*S + 0.646*OM + 15.29*D
     p2 = -0.192*topsoil - 4.671*D**2 - 0.000781*C**2 - 0.00687*OM**2
-    #-----------------------------------------
-    # Wosten (1998) and Matula et al. (2007)
-    #-----------------------------------------
+    #----------------------------------------------------------
+    # Wosten (1998), Nemes et al. (2001), Matula et al. (2007)
+    #----------------------------------------------------------
     p3 = (0.0449 / OM) + 0.0663*np.log(S) + 0.1482*np.log(OM)
-    p4 = (-0.04546 * D * S) + (0.4852 * D * OM)
+    p4 = (-0.04546 * D * S) - (0.4852 * D * OM)
     #-----------------------    
     # Wosten et al. (2001)
     #-----------------------
     ## p3 = (0.449 / OM) + 0.0663*np.log(S) + 0.1482*np.log(OM)
     ## p4 = (-0.4546 * D * S) - (0.4852 * D * OM)
+    #-------------------------------
     p5 = 0.00673 * topsoil * C
 
     #---------------------------------------------------------   
@@ -594,28 +792,75 @@ def wosten_alpha( C, S, OM, D, topsoil, subsoil):
     
     #--------------------------------------
     # Check if grid values are reasonable
+    #------------------------------------------------------------
+    # According to van Genuchten et al. (1991, p. 50, Table 3),
+    # average alpha values range from:
+    # -0.027 (clay) to -0.138 (sand) [1/cm].
+    # If psi_B = 1/alpha, then psi_B in (-37.04, -7.25) [cm].
+    #------------------------------------------------------------
+    # According to van Genuchten et al. (1991, p. 51, Table 4),
+    # average alpha values range from:
+    # -0.005 (silty clay) to -0.145 (sand) [1/cm].
+    # If psi_B = 1/alpha, then psi_B in (-200.0, -6.90) [cm].
+    #------------------------------------------------------------
+    # According to Smith (2001) book, psi_B values range from
+    # about -90 to -9 cm.
+    # If alpha = 1 / psi_B, alpha in [-1/9, -1/90] =
+    # [-0.1111, -0.01111] or roughly [-0.1, -0.01].
     #-----------------------------------------------------
-    # psi_B values ranges from about -90 to -9 cm.
-    # If alpha = 1 / psi_B, alpha in [-1/9, -1/90].
-    #-----------------------------------------------------
-    alpha_min = -1.0 / 9.0
-    alpha_max = -1.0 / 90.0
+    ## alpha_min = -1.0 / 9.0
+    ## alpha_max = -1.0 / 90.0
+    alpha_min = -0.15
+    alpha_max = -0.004
     w1 = np.logical_or( alpha < alpha_min, alpha > alpha_max )
     n1 = w1.sum()
     if (n1 > 0):
-        amin = alpha.min()
-        amax = alpha.max()
-        print('ERROR in wosten_alpha:')
-        print('   Some values are out of range.')
+        amin  = alpha.min()
+        amax1 = alpha.max()
+        amax2 = alpha[ alpha != 0 ].max()
+        print('WARNING in wosten_alpha:')
+        print('   Some values are out of typical range.')
+        print('   Typical range: -0.15 to -0.004 [1/cm]')
         if (amin < alpha_min):
             print('   min(alpha) = ' + str(amin) )
-        if (amax > alpha_max):
-            print('   max(alpha) = ' + str(amax) )
+        if (amax2 > alpha_max):
+            print('   max(alpha) = ' + str(amax2) + ' (excl. zero)')
+        if (amax1 == 0):
+            print('   max(alpha) = ' + str(amax1) + ' (incl. zero)')
+
+        #-------------------------------
+        # Option to replace bad values
+        #-------------------------------
+        if (FORCE_RANGE):
+            print('   Forcing bad values into range.')
+            wneg = (alpha < 0)
+            wbig = (alpha >= 0)
+            alpha[ wbig ] = alpha[ wneg ].max()
+            #------------------------------------
+            wbad = (alpha < -0.5)   #######################
+            w2   = np.invert( wbad )
+            alpha[ wbad ] = alpha[ w2 ].max()
         print()
+
+    #--------------
+    # For testing
+    #--------------
+#     amin  = alpha.min()
+#     amax  = alpha.max()
+#     amin2 = np.min( alpha[ alpha != -np.inf ] )
+#     ## ananmin = np.nanmin( alpha )
+#     print('In wosten_alpha():')
+#     print('   min(alpha)    = ' + str(amin) )
+#     print('   min2(alpha)   = ' + str(amin2) ) 
+#     ## print('   nanmin(alpha) = ' + str(ananmin) )
+#     print('   max(alpha)    = ' + str(amax) )
+#     print()
         
     #-----------------------------------------------       
     # Convert units from [1/cm] to [1/m].
-    # X (1/cm) * (100 cm / m) = 100 * x (1/m)
+    #    1     100 cm                 1
+    # X ---- x -------  = (X * 100)  ---
+    #    cm       m                   m
     #-------------------------------------------------
     # Note pressure heads, psi, considered by Wosten
     # are in the range:  0 to -16,000 cm.
@@ -630,7 +875,7 @@ def wosten_alpha( C, S, OM, D, topsoil, subsoil):
     
 #   wosten_alpha()
 #-------------------------------------------------------------------
-def wosten_n( C, S, OM, D, topsoil, subsoil ):
+def wosten_n( C, S, OM, D, topsoil, FORCE_RANGE=True):
 
     #------------------------------------------   
     # From Wosten (1998). R^2 = 54%.
@@ -652,23 +897,40 @@ def wosten_n( C, S, OM, D, topsoil, subsoil ):
     #--------------------------------------
     # Check if grid values are reasonable
     #--------------------------------------
-    w1 = (n < 1.0)
-    ## w1 = np.logical_or( n < 1.0, n > ????? )
+    ### w1 = np.logical_or( n < 1.0, n > 3.0 )
+    w1 = np.logical_or( n <= 1.0, n > 3.0 )     ### (Use <= vs. <)
     n1 = w1.sum()
     if (n1 > 0):
         nmin = n.min()
         nmax = n.max()
         print('ERROR in wosten_n:')
         print('   Some values are out of range.')
-        print('   min(n) = ' + str(nmin) )
-        print('   max(n) = ' + str(nmax) )
+        print('   Typical range: 1.0 to 3.0 [unitless].')
+        if (nmin < 1.0):
+            print('   min(n) = ' + str(nmin) )
+        if (nmax > 3.0):
+            print('   max(n) = ' + str(nmax) )
+        #-------------------------------
+        # Option to replace bad values
+        #-------------------------------
+        if (FORCE_RANGE):
+            print('   Forcing bad values into range.')
+            w1 = (n <= 1.0)
+            n[ w1 ] = 1.001
+            ## w2 = np.invert( w1 )
+            ## n[ w1 ] = n[ w2 ].min()
+            #------------------------------------
+            w3 = (n > 3.0)   ########### MAYBE 2.0 ??
+            n[ w3 ] = 1.3    ###########
+            ## w4 = np.invert( w3 )
+            ## n[ w3 ] = n[ w4 ].max()
         print()
-                
+                       
     return n
 
 #   wosten_n()
 #-------------------------------------------------------------------
-def wosten_L( C, S, OM, D, topsoil, subsoil ):
+def wosten_L( C, S, OM, D, topsoil ):
 
     #-------------------------------------------------------    
     # From Wosten (1998). R^2 = 12%. 
@@ -694,33 +956,151 @@ def wosten_L( C, S, OM, D, topsoil, subsoil ):
     w1 = np.logical_or( L < -10, L > 10 )
     n1 = w1.sum()
     if (n1 > 0):
+        Lmin = L.min()
+        Lmax = L.max()
         print('ERROR in wosten_L:')
         print('   Some values are out of range.')
-    
+        print('   Typical range: -10 to 10 [unitless].')
+        if (L < -10.0):
+            print('   min(L) = ' + str(Lmin) )
+        if (L > 10.0):
+            print('   max(L) = ' + str(Lmax) )
+        print()
+            
     return L
         
 #   wosten_L()
 #-------------------------------------------------------------------
-def get_wosten_vars(C, S, OM, D, topsoil, subsoil):
+def get_wosten_vars(C, S, OM, D, topsoil ):
 
     #----------------------------------------------------------
     # Use the Wosten (1998) pedotransfer functions to compute
     # theta_s, K_s, and van Genuchten parameters, then save
     # them to files.
     #----------------------------------------------------------
-    theta_s = wosten_theta_s( C, S, OM, D, topsoil, subsoil )
-    K_s     = wosten_K_s( C, S, OM, D, topsoil, subsoil )
-    alpha   = wosten_alpha( C, S, OM, D, topsoil, subsoil )
-    n       = wosten_n( C, S, OM, D, topsoil, subsoil )
-    L       = wosten_L( C, S, OM, D, topsoil, subsoil )
+    theta_s = wosten_theta_s( C, S, OM, D, topsoil )
+    K_s     = wosten_K_s( C, S, OM, D, topsoil )
+    alpha   = wosten_alpha( C, S, OM, D, topsoil )
+    n       = wosten_n( C, S, OM, D, topsoil )
+    L       = wosten_L( C, S, OM, D, topsoil )
     
     return (theta_s, K_s, alpha, n, L)
     
 #   get_wosten_vars()
 #-------------------------------------------------------------------
+def capillary_length_G(c, eta, n, inv_alpha, TBC=True):
+
+    #------------------------------------------
+    # Compute the Green-Ampt parameter, G > 0
+    #------------------------------------------
+    # G = capillary length scale > 0
+    # psi_B = bubbling pressure head < 0
+    # Both have same units of:  ?????????
+    #----------------------------------------------------------
+    # This formula is for transitional Brooks-Corey, given in
+    # Peckham et al. (2017) GPF paper.
+    #----------------------------------------------------------
+    # According to Table 8.1 (p. 136) in R.E. Smith (2002) book,
+    # G ranges from about 82 mm for sand to 2230 mm for clay.
+    #-------------------------------------------------------------
+    if (TBC):
+        psi_B = inv_alpha
+        G = -psi_B * gamma(1 + 1/c) * gamma((eta-1)/c) / gamma(eta/c)
+
+    #------------------------------------------
+    # Compute the Green-Ampt parameter, G > 0
+    #------------------------------------------
+    # G = capillary length scale > 0
+    #----------------------------------------------------------
+    # (2019-10-22) Derived this formula to compute G directly
+    # from van Genuchten m and alpha parameters.  Use the
+    # definition of G from Smith, change variables to:
+    # Z = [(alpha*psi)^n + 1], and then integrate symbolically
+    # with Mathematica.
+    #---------------------------------------------------------
+    # Limit of G as m -> 0 = 0.
+    # Limit of G as m -> 1 = -1/alpha.
+    #-----------------------------------
+    if not(TBC):
+        #------------------------------------------------
+        # Limit of G[m] as m -> 0 equals 0.
+        # Note: gamma(0) = inf, gamma(-1) = complex inf
+        # So treat the case of m == 0 separately.
+        #------------------------------------------------
+        m  = 1 - (1.0/n)
+        G  = np.zeros( m.shape, dtype=m.dtype)
+        w1 = np.logical_and(m != 0, m != 1)
+        m1 = m[w1]
+        #----------------------------------------
+#         mmin = m.min()
+#         mmax = m.max()
+#         print('mmin = ' + str(mmin))
+#         print('mmax = ' + str(mmax))
+        #----------------------------------------
+        coeff = -inv_alpha[w1] * (1-m1)   # (> 0)
+        term1 = 4 / (2 - 3*m1)
+        term2 = gamma(1-m1)/gamma(m1/2)  + gamma(1+m1)/gamma(5*m1/2)
+        term3 = gamma((3*m1/2) - 1)
+        G[w1] = coeff * (term1 + (term2 * term3))
+        #--------------------------------------------
+        ## w2 = (m == 0)
+        ## G[w2] = 0.0   # (already the case)
+        #--------------------------------------------
+        w3 = (m == 1)
+        G[w3] = -inv_alpha[ w3 ]
+    
+    #--------------------------------------
+    # Check if grid values are reasonable
+    #--------------------------------------------------
+    # See Peckham_et_al (2017) GPF paper on TopoFlow.
+    #--------------------------------------------------
+    # Theoretical results:
+    #  G[c, eta] is in [0, -2 * psi_B].
+    #  Definitions imply:  eta > 2, c > 3.
+    #  Ignoring the coefficient in G[c,eta] above:
+    #     Limit[ g[c,eta], c-> Infinity] = (eta/(eta-1)).
+    #     For eta =2, this equals 2.
+    #-------------------------------------------------------------
+    # According to Table 8.1 (p. 136) in R.E. Smith (2002) book,
+    # G ranges from about 82 mm for sand to 2230 mm for clay.
+    #-------------------------------------------------------------
+    G_min = 0.08  # (sand, meters)
+    G_max = 2.3   # (clay, meters)
+    w1 = np.logical_or( G < G_min, G > G_max )
+    ## w1 = np.logical_or( G < 0, G > -2*psi_B )  ### (psi_B is grid)
+    n1 = w1.sum()
+    if (n1 > 0):
+        Gmin = G.min()
+        Gmax = G.max()
+        # Gmin = np.nanmin(G)
+        # Gmax = np.nanmax(G)
+        ## Gmin = np.nanmin(G[ np.isfinite(G) ])
+        ## Gmax = np.nanmax(G[ np.isfinite(G) ])
+
+        print('WARNING in get_tBC_from_vG_vars:')
+        print('   Some values in G grid are out of range.')
+        print('   Typical range: 0.08 to 2.3 [m].' )
+        if (Gmin < G_min):
+            print('   min(G) = ' + str(Gmin) + ' [m]' )
+        if (Gmax > G_max):
+            print('   max(G) = ' + str(Gmax) + ' [m]' )
+        print()
+     
+    return G
+   
+#   capillary_length_G()
+#-------------------------------------------------------------------
 def get_tBC_from_vG_vars( alpha, n, L ):
 
-    #--------------------------------------------------------
+    #----------------------------------------------------------
+    # Note:  This function is based on results from the book:
+    # Smith, R.E. (2002) Infiltration Theory for Hydrologic
+    # Applications, AGU Water Resources Monograph 15, 212 pp.
+    # Smith first discusses the well-known Brooks-Corey and
+    # van Genuchten models, and then proposes what he calls
+    # the "transitional Brooks-Corey" model that is used by
+    # TopoFlow.
+    #----------------------------------------------------------
     # Convert van Genuchten parameters to those of the
     # transitional Brooks-Corey model.  Although K
     # is computed quite differently for the transitional
@@ -736,7 +1116,7 @@ def get_tBC_from_vG_vars( alpha, n, L ):
     #---------------------------------------------------------
     # These equations appear to be general:
     #---------------------------------------------------------
-    # (1)  m      = (1 - 1/n)
+    # (1)  m      = (1 - 1/n)     (from Mualem (1976))
     # (1') n      = 1 / (1 - m)
     # (1") n-1    = m / (1 - m)
     # (2)  eta    = 2 + (3 * lambda)
@@ -746,6 +1126,7 @@ def get_tBC_from_vG_vars( alpha, n, L ):
     # head (psi) to match exactly (eta is not involved):
     # tBC params = psi_B, c, lambda  (and eta)
     # vG  params = alpha, m, n, L
+    # See R.E. Smith (2002, ch. 2, p. 22)
     #---------------------------------------------------------
     # NOTE:  We only need alpha and n (not L) to set the
     #        transitional Brooks-Corey parameters.  We
@@ -765,43 +1146,21 @@ def get_tBC_from_vG_vars( alpha, n, L ):
     # (n > 1) => 0 < m < 1  
     # (n > 1) => (lambda > 0)
     # (n > 1) => (eta > 2)
-    #---------------------------------------------------------  
-    psi_B  = (1.0 / alpha)
+    #---------------------------------------------------------
+    w1 = (alpha != 0)
+    w2 = np.invert( w1 )
+    inv_alpha = np.zeros( alpha.shape, alpha.dtype )
+    inv_alpha[w1] = (1.0 / alpha[w1])    # (Do this only once here.)
+    inv_alpha[w2] = -9999.0
+    #--------------------------
+    psi_B  = inv_alpha
     c      = n
     lam    = (n - 1)
     eta    = 3*n - 1
     
-    #------------------------------------------
-    # Compute the Green-Ampt parameter, G > 0
-    #------------------------------------------
-    # G = capillary length scale > 0
-    # psi_B = bubbling pressure head < 0
-    # Both have same units of:  ?????????
-    #------------------------------------------
-    G = -psi_B * gamma(1 + 1/c) * gamma((eta-1)/c) / gamma(eta/c)
- 
-    #--------------------------------------
-    # Check if grid values are reasonable
-    #--------------------------------------------------
-    # See Peckham_et_al (2017) GPF paper on TopoFlow.
-    #--------------------------------------------------
-    # Theoretical results:
-    #  G[c, eta] is in [0, -2 * psi_B].
-    #  Definitions imply:  eta > 2, c > 3.
-    #  Ignoring the coefficient in G[c,eta] above:
-    #     Limit[ g[c,eta], c-> Infinity] = (eta/(eta-1)).
-    #     For eta =2, this equals 2.
-    #------------------------------------------------------
-    w1 = np.logical_or( G < 0, G > -2*psi_B )
-    n1 = w1.sum()
-    if (n1 > 0):
-        Gmin = G.min()
-        Gmax = G.max()
-        print('WARNING in get_tBC_from_vG_vars:')
-        print('   Some values in G grid are out of range.')
-        print('   min(G) = ' + str(Gmin) )
-        print('   max(G) = ' + str(Gmax) )
-        print()
+    TBC = False
+    # TBC = True
+    G = capillary_length_G(c, eta, n, inv_alpha, TBC=TBC)
            
     return ( psi_B, c, lam, eta, G )
 
@@ -811,30 +1170,50 @@ def save_soil_hydraulic_vars( site_prefix=None, directory=None,
                               layer=1, BARO_1MIN_TEST=False,
                               LOL_1MIN_TEST=False):
 
-    if (directory is None):
-        directory = '/Users/peckhams/ISRIC_Files/'
-    os.chdir( directory )
     if (BARO_1MIN_TEST):
-        site_prefix  = 'Baro_Gam_1min'
+        directory   = '/Users/peckhams/ISRIC_Files/Ethiopia/'    
+        site_prefix = 'Baro_Gam_1min'
     if (LOL_1MIN_TEST):
-        site_prefix  = 'Lol-Kuru_1min'
+        directory   = '/Users/peckhams/ISRIC_Files/South_Sudan/' 
+        site_prefix = 'Lol-Kuru_1min'
+    if (directory is None):
+        directory = '/Users/peckhams/ISRIC_Files/Test/'
+    os.chdir( directory )
+   
+    print('===============================================')
+    print('Computing variables for soil layer = ' + str(layer) )
+    print('===============================================')
         
-    transform_isric_soil_grid_files( directory=directory,
-              site_prefix=site_prefix,
-              BARO_1MIN_TEST=BARO_1MIN_TEST,
-              LOL_1MIN_TEST=LOL_1MIN_TEST)
+    if (layer == 1): 
+        #----------------------------------------------------  
+        # Apply transformations to all soil layers (*.tiff)
+        #----------------------------------------------------        
+        transform_isric_soil_grid_files( directory=directory,
+                  site_prefix=site_prefix,
+                  BARO_1MIN_TEST=BARO_1MIN_TEST,
+                  LOL_1MIN_TEST=LOL_1MIN_TEST)
               
     (C, S, OM, D) = read_soil_grid_files( layer=layer, directory=directory,
                                           site_prefix=site_prefix )
 
-    topsoil = (layer == 1)
-    subsoil = not(topsoil)
+    if (layer == 1):
+        topsoil = 1
+    else:
+        topsoil = 0
     
-    (theta_s, K_s, alpha, n, L) = get_wosten_vars(C, S, OM, D, topsoil, subsoil)   
-    (psi_B, c, lam, eta, G ) = get_tBC_from_vG_vars(alpha, n, L)
- 
-    prefix = site_prefix
-    ## prefix = case_prefix
+    (theta_s, K_s, alpha, n, L) = get_wosten_vars( C, S, OM, D, topsoil )   
+    (psi_B, c, lam, eta, G ) = get_tBC_from_vG_vars( alpha, n, L )
+
+    #------------------------------------------
+    # Get consistent estimates of:
+    # theta_i = qi = initial soil moisture, &
+    # theta_r = qr = residual soil moisture
+    # K_i = initial hydraulic conductivity
+    #------------------------------------------
+    # NOT FINISHED YET.
+     
+    prefix = site_prefix + '_sl' + str(layer)
+    ## prefix = case_prefix+ '_sl' + str(layer) 
      
     #---------------------------------   
     # Basic soil hydraulic variables
@@ -860,6 +1239,16 @@ def save_soil_hydraulic_vars( site_prefix=None, directory=None,
     n_file    = prefix + '_2D-vG-n.bin'
     L_file    = prefix + '_2D-vG-L.bin'
 
+    #------------------------------------------
+    # Consistent estimates of:
+    # theta_i = qi = initial soil moisture, &
+    # theta_r = qr = residual soil moisture
+    # K_i = initial hydraulic conductivity
+    #------------------------------------------
+    qi_file = prefix + '_2D-qi.bin'
+    qr_file = prefix + '_2D-qr.bin'
+    # Ki_file = prefix + '_2D-Ki.bin'
+    
     #-------------------------------    
     # Write all variables to files
     #-------------------------------
