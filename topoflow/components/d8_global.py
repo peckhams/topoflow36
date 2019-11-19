@@ -50,6 +50,7 @@ from topoflow.utils      import rtg_files
 #       update_flow_width_grid()
 #       update_flow_length_grid()
 #       update_area_grid()          # (added on 10/28/09)
+#       update_slope_grid()         # (added on 2019-11-16)
 
 #-----------------------------------------------------------------------
 class d8_component( d8_base.d8_component ):
@@ -1317,4 +1318,14 @@ class d8_component( d8_base.d8_component ):
                 print(' ')
                 
     #   update_area_grid()
+    #-------------------------------------------------------------------
+    def update_slope_grid(self, SILENT=True, REPORT=False):
+
+        pIDs = self.parent_IDs
+        self.S = (self.DEM - self.DEM[ pIDs ]) / self.ds
+        self.S[ self.edge_IDs ] = 0.0
+
+        ## self.S[ self.noflow_IDs ] = 0.0
+
+    #   update_slope_grid()
     #-------------------------------------------------------------------

@@ -139,7 +139,7 @@ class infil_component( BMI_base.BMI_component):
     def initialize(self, cfg_file=None, mode="nondriver",
                    SILENT=False):
 
-        self.DEBUG = True  ###########################
+        ## self.DEBUG = True  ###########################
         ##############################################
         ##############################################
                 
