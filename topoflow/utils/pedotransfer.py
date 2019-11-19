@@ -1,6 +1,6 @@
 
 # Copyright (c) 2019, Scott D. Peckham
-# August - October 2019
+# August - November 2019
 # See:
 # https://csdms.colorado.edu/wiki/Model_help:TopoFlow-Soil_Properties_Page
 #-------------------------------------------------------------------
@@ -15,6 +15,10 @@
 #  convert_soil_grid_values()    # ISRIC to Wosten PTF vars
 #  read_isric_soil_grid_files()  # (as TIFF)
 
+#  get_rtg_file_prefix()
+#  regrid_isric_soil_grid_files()
+#  transform_isric_soil_grid_files()
+
 #  wosten_theta_s()
 #  wosten_K_s()
 #  wosten_alpha()
@@ -27,23 +31,14 @@
 #  save_soil_hydraulic_vars()
 
 #-------------------------------------------------------------------
-#  Set up a "tf4" conda environment (TopoFlow 4.0)
-#-------------------------------------------------------------------
-#  % conda create --name tf4
-#  % conda activate tf4
-#  % conda install -c conda-forge gdal   (to read geotiff)
-#  % conda install dask
-#  % conda install -c conda-forge scipy   (for gamma function)
-#         (use conda-forge vs. anaconda; broken?)
-#  % conda install -c conda-forge pydap
-
-#-------------------------------------------------------------------
 import numpy as np
 import gdal, osr  ## ogr
 from scipy.special import gamma
 from . import regrid as rg
+from . import import_grid as ig
 from . import rti_files
 from . import rtg_files
+
 ## from . import soil_trans_BC as soil
 
 import glob, os
@@ -59,34 +54,37 @@ def test1():
               
 #   test1()
 #-------------------------------------------------------------------
-def test2(BARO=True, LOL=False):
+def test2(BARO_1MIN=True, LOL_1MIN=False):
 
-    #------------------------------------------------------
-    # Directory and site_prefix will be set automatically
-    #------------------------------------------------------
-    BARO_1MIN_TEST = BARO
-    LOL_1MIN_TEST  = LOL
-    
-    #----------------------------------------------------------    
-    # Compute and save soil hydraulic variables for top layer
-    #----------------------------------------------------------
-#     save_soil_hydraulic_vars( site_prefix=None, directory=directory,
-#          layer=1, BARO_1MIN_TEST=BARO_1MIN_TEST,
-#          LOL_1MIN_TEST=LOL_1MIN_TEST )  
-
-    #-----------------------------------------------------------
-    # First, clip and resample the files downloaded from ISRIC
-    # to the bounding box and grid cell size of the model    
-    #-----------------------------------------------------------  
-    # Compute and save soil hydraulic variables for all layers
-    #-----------------------------------------------------------        
-    for k in range(7):
-        layer = k + 1
-        save_soil_hydraulic_vars( site_prefix=None, directory=None,
-             layer=layer, BARO_1MIN_TEST=BARO_1MIN_TEST,
-             LOL_1MIN_TEST=LOL_1MIN_TEST )  
-                            
-#   test2()
+    if (BARO_1MIN):
+        site_prefix = 'Baro_Gam_1min'
+        out_dir = '/Users/peckhams/ISRIC_Files/Ethiopia/'
+        in_dir  = out_dir + '_isric_soil_data/'
+        # Bounds = [ minlon, minlat, maxlon, maxlat ]   
+        out_bounds = [ 34.22125, 7.3704166666, 36.43791666666, 9.50375]
+        out_xres_sec = 60    # [arcsecs]
+        out_yres_sec = 60    # [arcsecs]
+        ## out_ncols  = 133  # (will be computed)
+        ## out_nrows  = 128  # (will be computed)
+               
+    if (LOL_1MIN):
+        site_prefix = 'Lol-Kuru_1min'
+        out_dir = '/Users/peckhams/ISRIC_Files/South_Sudan/'
+        in_dir  = out_dir + '_isric_soil_data/'
+        # Bounds = [ minlon, minlat, maxlon, maxlat ] 
+        out_bounds = [ 23.9954166666, 6.5329166666, 28.0120833333, 9.56625]
+        out_xres_sec = 60   # [arcsecs]
+        out_yres_sec = 60   # [arcsecs]
+        ## out_ncols  = 241  # (will be computed)
+        ## out_nrows  = 182  # (will be computed)
+        
+    save_soil_hydraulic_vars( site_prefix=site_prefix,
+         in_dir=in_dir, out_dir=out_dir,
+         out_bounds=out_bounds, VERBOSE=True,
+         out_xres_sec=out_xres_sec, out_yres_sec=out_yres_sec,
+         RESAMPLE_ALGO='bilinear')
+           
+#   test2()      
 #-------------------------------------------------------------------
 def test3():
 
@@ -158,7 +156,7 @@ def get_nodata_values():
 #   get_nodata_values()
 #-------------------------------------------------------------------
 def read_soil_grid_files( site_prefix=None, directory=None,
-         res_str='1km', layer=1 ):
+         res_str='1km', layer=1, REPORT=True):
 
     layer_str = '_sl' + str(layer) + '_'
     if (directory is None):
@@ -221,7 +219,7 @@ def read_soil_grid_files( site_prefix=None, directory=None,
     #--------------------------------------
     # Check if grid values are reasonable
     #--------------------------------------
-    check_soil_grid_values(C, S, OC, D, VERBOSE=True)
+    check_soil_grid_values(C, S, OC, D, REPORT=REPORT)
 
     #------------------------------------------------
     # Convent units to those needed by Wosten PTFs.
@@ -250,7 +248,7 @@ def read_soil_grid_files( site_prefix=None, directory=None,
     
 #   read_soil_grid_files()
 #-------------------------------------------------------------------
-def check_soil_grid_values(C, S, OC, D, VERBOSE=False):
+def check_soil_grid_values(C, S, OC, D, REPORT=True):
 
     #-----------------------------
     # Get all the mins and maxes
@@ -267,7 +265,7 @@ def check_soil_grid_values(C, S, OC, D, VERBOSE=False):
     #--------------------------------- 
     # Option to print mins and maxes
     #---------------------------------
-    if (VERBOSE):
+    if (REPORT):
         print('min(C),  max(C)  = ' + str(Cmin)  + ', ' + str(Cmax) )
         print('min(S),  max(S)  = ' + str(Smin)  + ', ' + str(Smax) )
         print('min(OC), max(OC) = ' + str(OCmin) + ', ' + str(OCmax) )
@@ -484,41 +482,114 @@ def read_isric_soil_grid_files( layer=1, region_str=None,
     return (C, S, OM, D)
     
 #   read_isric_soil_grid_files()
+#-------------------------------------------------------------------  
+def get_rtg_file_prefix( tiff_file, site_prefix ):
+
+    p = tiff_file.split('_')
+    n = len(p)
+    #-------------------------------------------------------    
+    out_suffix = ('_' + p[0])       # var name string
+    if (n > 1):
+        out_suffix += ('_' + p[1])  # unknown code string
+    if (n > 2):
+        out_suffix += ('_' + p[2])  # layer number string
+    if (n > 3):
+        out_suffix += ('_' + p[3])  # resolution string
+#     if (n > 4):
+#         out_suffix += ('_' + p[4])  # location string
+    #-------------------------------------------------------
+    rtg_prefix= site_prefix + out_suffix
+    return rtg_prefix
+    
+#   get_rtg_file_prefix()
 #-------------------------------------------------------------------    
-def transform_isric_soil_grid_files( directory=None,
-              site_prefix=None,
-              IN_MEMORY=False, VERBOSE=False,
-              BARO_1MIN_TEST=False,
-              LOL_1MIN_TEST=False):
-  
+def regrid_isric_soil_grid_files( site_prefix,
+           in_dir=None, out_dir=None,
+           out_bounds=None, out_xres_sec=None, out_yres_sec=None,
+           RESAMPLE_ALGO='bilinear', REPORT=True):
+
+    if (in_dir is None):
+        return
+    os.chdir( in_dir )
+    if (out_dir[-1] != '/'):
+        out_dir = out_dir + '/'
+         
+    #--------------------------------------------------
+    # Get list of all TIFF files in working directory
+    #--------------------------------------------------
+    # Note:  glob.glob does NOT return a sorted list.
+    # https://stackoverflow.com/questions/6773584/
+    #    how-is-pythons-glob-glob-ordered
+    #--------------------------------------------------
+    ### tif_file_list = glob.glob( '*.tif' )
+    tif_file_list = glob.glob( '*.tiff' )
+    tif_file_list = sorted( tif_file_list )  #######
+    n_grids = 0
+    #----------------------------------------
+    ## bad_box_count = 0
+    ## out_nodata = -9999.0       #############
+             
+    for tif_file in tif_file_list:                                
+
+        #----------------------
+        # Construct filenames
+        #----------------------
+        rtg_prefix = get_rtg_file_prefix( tif_file, site_prefix )
+        rtg_file   = out_dir + rtg_prefix + '.rtg' 
+        rti_file   = out_dir + rtg_prefix + '.rti'
+        #--------------------------------------------
+        # This file gets overwritten multiple times
+        # BAD IDEA BECAUSE data_types DIFFER.
+        #--------------------------------------------
+#         rti_file     = out_dir + site_prefix + '.rti'   ###### TEMPORARY FIX
+        out_tif_file = out_dir + rtg_prefix + '.tif'
+        
+        rg.regrid_geotiff(in_file=tif_file,
+               out_file=out_tif_file, 
+               out_bounds=out_bounds,
+               out_xres_sec=out_xres_sec,
+               out_yres_sec=out_yres_sec,
+               RESAMPLE_ALGO='bilinear', REPORT=True)
+
+        #--------------------------------------------------        
+        # Read regridded GeoTIFF & save as RTG (with RTI)
+        #--------------------------------------------------
+        ig.save_geotiff_as_rtg(out_tif_file, rtg_file, rti_file, REPORT=False)
+        n_grids += 1
+
+    print()
+    print('Finished regridding ISRIC soil grid files.')
+    print('   Soil grid files also saved to RTG format.')
+    print('   Number of grids = ' + str(n_grids) )
+    # print( '   Number outside of model domain = ' + str(bad_box_count) )
+    print()       
+ 
+#   regrid_isric_soil_grid_files()                 
+#-------------------------------------------------------------------    
+def transform_isric_soil_grid_files( site_prefix,
+              in_dir=None, out_dir=None,
+              out_bounds=None,
+              out_xres_sec=None, out_yres_sec=None,
+              RESAMPLE_ALGO='bilinear', 
+              IN_MEMORY=False, REPORT=False ):
+
     #------------------------------------------------------
     # For info on GDAL constants, see:
     # https://gdal.org/python/osgeo.gdalconst-module.html
-    #------------------------------------------------------  
-    if (BARO_1MIN_TEST):
-        site_prefix = 'Baro_Gam_1min'
-        directory   = '/Users/peckhams/ISRIC_Files/Ethiopia/'
-        # Bounds = [ minlon, minlat, maxlon, maxlat ]
-        DEM_bounds = [ 34.22125, 7.3704166666, 36.43791666666, 9.50375]
-        DEM_xres   = 1./60   # (60 arcsecs = 60/3600 degrees)
-        DEM_yres   = 1./60   # (60 arcsecs = 60/3600 degrees)
-        DEM_ncols  = 133
-        DEM_nrows  = 128
-
-    if (LOL_1MIN_TEST):
-        site_prefix = 'Lol-Kuru_1min'
-        directory   = '/Users/peckhams/ISRIC_Files/South_Sudan/'
-        # Bounds = [ minlon, minlat, maxlon, maxlat ]
-        DEM_bounds = [ 23.9954166666, 6.5329166666, 28.0120833333, 9.56625]
-        DEM_xres   = 1./60   # (60 arcsecs = 60/3600 degrees)
-        DEM_yres   = 1./60   # (60 arcsecs = 60/3600 degrees)
-        DEM_ncols  = 241
-        DEM_nrows  = 182
-
-    if (directory is None):
+    #------------------------------------------------------ 
+    if (in_dir is None):
         return
-    os.chdir( directory )
-                
+    os.chdir( in_dir )
+    if (out_dir[-1] != '/'):
+        out_dir = out_dir + '/'  
+        
+    #-----------------------------------------------------------  
+    # Typically, out_bounds = DEM_bounds,
+    # out_xres_sec = DEM_xres_sec, out_yres_sec = DEM_yres_sec
+    #-----------------------------------------------------------
+    out_xres_deg = out_xres_sec / 3600.0
+    out_yres_deg = out_yres_sec / 3600.0
+        
     #-----------------------------------------    
     # Use a temp file in memory or on disk ?
     #-----------------------------------------
@@ -531,30 +602,35 @@ def transform_isric_soil_grid_files( directory=None,
     # Get list of all TIFF files in working directory
     #--------------------------------------------------
     tiff_file_list = glob.glob( '*.tiff' )
+    tiff_file_list = sorted( tiff_file_list )   ######
     n_grids = 0
     bad_box_count = 0
     out_nodata = -9999.0       #############
              
-    for tiff_file in tiff_file_list:                                
+    for tiff_file in tiff_file_list:
+        #------------------------------------------------     
+        # Print filename before open in case of failure
+        #------------------------------------------------
+        if (REPORT):
+            print( '===============================================================')
+            print( 'ISRIC File =', tiff_file)
+            print( '===============================================================')                               
         ds_in = gdal.Open( tiff_file )
         grid1 = ds_in.ReadAsArray()
         band  = ds_in.GetRasterBand(1)
         tiff_nodata = band.GetNoDataValue()
 
-        if (VERBOSE):
-            print( '===============================================================')
-            print( 'ISRIC File = ')
-            print( '   ' + tiff_file )
-            ## print( 'count =', (count + 1) )
-            print( '===============================================================')
-            print( 'grid1: min   =', grid1.min(), 'max =', grid1.max() )
+        if (REPORT):
+            print( 'grid1.min()  =', grid1.min() )
+            print( 'grid1.max()  =', grid1.max() )
             print( 'grid1.shape  =', grid1.shape )
             print( 'grid1.dtype  =', grid1.dtype )
-            print( 'grid1 nodata =', nc_nodata )
-            w  = np.where(grid1 > tiff_nodata)
+            print( 'grid1 nodata =', tiff_nodata )
+            #-----------------------------------------
+            w  = np.where(grid1 == tiff_nodata)
             nw = w[0].size
-            print( 'grid1 # data =', nw)
-            print( ' ' )
+            print( 'nodata count =', nw)
+            print()
               
         #--------------------------------------        
         # Use gdal.Info() to print/check info
@@ -566,16 +642,16 @@ def transform_isric_soil_grid_files( directory=None,
         # Check if the bounding boxes actually overlap
         #-----------------------------------------------
         BAD_BOX = False
-        ds_bounds = rg.get_raster_bounds( ds_in, VERBOSE=False )
-        if (rg.bounds_disjoint( ds_bounds, DEM_bounds )):
+        in_bounds = rg.get_raster_bounds( ds_in, VERBOSE=False )
+        if (rg.bounds_disjoint( in_bounds, out_bounds )):
             print( '###############################################')
             print( 'WARNING: Bounding boxes do not overlap.')
             print( '         New grid will contain only nodata.')
             print( '###############################################')
             print( 'count =', n_grids )
             print( 'file  =', nc_file )
-            print( 'ds_bounds  =', ds_bounds )
-            print( 'DEM_bounds =', DEM_bounds )
+            print( 'in_bounds  =', in_bounds )
+            print( 'out_bounds =', out_bounds )
             print( ' ')
             bad_box_count += 1
             BAD_BOX = True
@@ -586,22 +662,28 @@ def transform_isric_soil_grid_files( directory=None,
         #-------------------------------------------
         if not(BAD_BOX):
             grid2 = rg.gdal_regrid_to_dem_grid( ds_in, tmp_file,
-                        out_nodata, DEM_bounds, DEM_xres, DEM_yres,
-                        RESAMPLE_ALGO='bilinear' )
-            if (VERBOSE):
-                print( 'grid2: min  =', grid2.min(), 'max =', grid2.max() )
-                print( 'grid2.shape =', grid2.shape )
-                print( 'grid2.dtype =', grid2.dtype )
-                w  = np.where(grid2 > out_nodata)
+                        out_nodata, 
+                        out_bounds, out_xres_deg, out_yres_deg,
+                        ### DEM_bounds, DEM_xres, DEM_yres,
+                        RESAMPLE_ALGO=RESAMPLE_ALGO)
+            if (REPORT):
+                print( 'grid2.min()  =', grid2.min() )
+                print( 'grid2.max()  =', grid2.max() )
+                print( 'grid2.shape  =', grid2.shape )
+                print( 'grid2.dtype  =', grid2.dtype )
+                print( 'grid2 nodata =', out_nodata )
+                #-----------------------------------------
+                w  = np.where(grid2 == out_nodata)
                 nw = w[0].size
-                print( 'grid2 # data =', nw)
-                print( ' ')
+                print( 'nodata count =', nw)
+                print()
+
             ds_in = None   # Close the tmp_file
             if (IN_MEMORY):
                 gdal.Unlink( tmp_file )
-        else:
-            grid2 = np.zeros( (DEM_nrows, DEM_ncols), dtype='float32' )
-            grid2 += out_nodata
+#         else:
+#             grid2 = np.zeros( (out_nrows, out_ncols), dtype='float32' )
+#             grid2 += out_nodata
  
         #--------------------------------  
         # Write grid to new output file
@@ -609,20 +691,17 @@ def transform_isric_soil_grid_files( directory=None,
         # Example ISRIC filename:
         # CLYPPT_M_sl2_1km_South_Sudan.tiff
         #------------------------------------
-        grid2 = np.float32( grid2 )
-        p         = tiff_file.split('_')
-        var_str   = p[0]
-        unk_str   = p[1]
-        layer_str = p[2]
-        res_str   = p[3]
-        loc_str   = p[4]
-        out_suffix = ('_' + p[0] + '_' + p[1] + '_' + p[2] + '_' + p[3])
-        out_file = site_prefix  + out_suffix + '.rtg'
-        out_unit = open( out_file, 'wb' )
-        grid2.tofile( out_unit )
-        out_unit.close()
+        if not(BAD_BOX):       
+            rtg_prefix = get_rtg_file_prefix( tiff_file, site_prefix )
+            rtg_file   = out_dir + rtg_prefix + '.rtg'
+            rtg_unit   = open( rtg_file, 'wb' )
+            grid2 = np.float32( grid2 )
+            grid2.tofile( rtg_unit )
+            rtg_unit.close()
         n_grids += 1
 
+    os.remove( tmp_file )   # Delete the temp tif file.
+    
     print()
     print( 'Finished transforming ISRIC soil grid files.')
     print( '   Number of grids = ' + str(n_grids) )
@@ -1166,141 +1245,314 @@ def get_tBC_from_vG_vars( alpha, n, L ):
 
 #   get_tBC_from_vG_vars()
 #-------------------------------------------------------------------
-def save_soil_hydraulic_vars( site_prefix=None, directory=None,
-                              layer=1, BARO_1MIN_TEST=False,
-                              LOL_1MIN_TEST=False):
+def save_soil_hydraulic_vars( site_prefix=None,
+         in_dir=None, out_dir=None,
+         out_bounds=None, REPORT=True,
+         out_xres_sec=None, out_yres_sec=None,
+         RESAMPLE_ALGO='bilinear'):
 
-    if (BARO_1MIN_TEST):
-        directory   = '/Users/peckhams/ISRIC_Files/Ethiopia/'    
-        site_prefix = 'Baro_Gam_1min'
-    if (LOL_1MIN_TEST):
-        directory   = '/Users/peckhams/ISRIC_Files/South_Sudan/' 
-        site_prefix = 'Lol-Kuru_1min'
-    if (directory is None):
-        directory = '/Users/peckhams/ISRIC_Files/Test/'
-    os.chdir( directory )
-   
-    print('===============================================')
-    print('Computing variables for soil layer = ' + str(layer) )
-    print('===============================================')
+    os.chdir( in_dir )
+    if (out_dir[-1] != '/'):
+        out_dir = out_dir + '/'
+ 
+    #----------------------------------------------------  
+    # Apply transformations to all soil layers (*.tiff)
+    #----------------------------------------------------
+#     regrid_isric_soil_grid_files( site_prefix, 
+#            in_dir=in_dir, out_dir=out_dir,
+#            out_bounds=out_bounds,
+#            out_xres_sec=out_xres_sec, out_yres_sec=out_yres_sec,
+#            RESAMPLE_ALGO='bilinear', REPORT=REPORT)
+    #----------------------------------------------------
+    # Almost ready;  still need to create an RTI file
+    #----------------------------------------------------               
+    transform_isric_soil_grid_files( site_prefix,
+          in_dir=in_dir, out_dir=out_dir,
+           out_bounds=out_bounds,
+           out_xres_sec=out_xres_sec, out_yres_sec=out_yres_sec,
+           RESAMPLE_ALGO='bilinear', REPORT=REPORT)
+
+    #-------------------------------------------------------     
+    # Compute soil hydraulic variable grids for all layers
+    #-------------------------------------------------------              
+    for k in range(7):
+        layer = k + 1
         
-    if (layer == 1): 
-        #----------------------------------------------------  
-        # Apply transformations to all soil layers (*.tiff)
-        #----------------------------------------------------        
-        transform_isric_soil_grid_files( directory=directory,
-                  site_prefix=site_prefix,
-                  BARO_1MIN_TEST=BARO_1MIN_TEST,
-                  LOL_1MIN_TEST=LOL_1MIN_TEST)
+        if (REPORT):
+            print('===============================================')
+            print('Computing variables for soil layer = ' + str(layer) )
+            print('===============================================')
               
-    (C, S, OM, D) = read_soil_grid_files( layer=layer, directory=directory,
-                                          site_prefix=site_prefix )
+        (C, S, OM, D) = read_soil_grid_files( layer=layer,
+                             res_str='1km',   ################
+                             directory=out_dir, REPORT=REPORT,
+                             site_prefix=site_prefix )
 
-    if (layer == 1):
-        topsoil = 1
-    else:
-        topsoil = 0
-    
-    (theta_s, K_s, alpha, n, L) = get_wosten_vars( C, S, OM, D, topsoil )   
-    (psi_B, c, lam, eta, G ) = get_tBC_from_vG_vars( alpha, n, L )
-
-    #------------------------------------------
-    # Get consistent estimates of:
-    # theta_i = qi = initial soil moisture, &
-    # theta_r = qr = residual soil moisture
-    # K_i = initial hydraulic conductivity
-    #------------------------------------------
-    # NOT FINISHED YET.
-     
-    prefix = site_prefix + '_sl' + str(layer)
-    ## prefix = case_prefix+ '_sl' + str(layer) 
-     
-    #---------------------------------   
-    # Basic soil hydraulic variables
-    #---------------------------------
-    Ks_file   = prefix + '_2D-Ks.bin'
-    qs_file   = prefix + '_2D-qs.bin'
-    pB_file   = prefix + '_2D-pB.bin'
-    #-------------------------------------------
-    # The transitional Brooks-Corey parameters
-    #-------------------------------------------
-    c_file    = prefix + '_2D-c.bin'    
-    lam_file  = prefix + '_2D-lam.bin'
-    G_file    = prefix + '_2D-G.bin'
-    ## eta_file  = prefix + '_2D-eta.bin'
-#     c_file    = prefix + '_2D-tBC-c.bin'    
-#     lam_file  = prefix + '_2D-tBC-lam.bin'
-#     G_file    = prefix + '_2D-tBC-G.bin'
-#     ## eta_file  = prefix + '_2D-tBC-eta.bin'
-    #-------------------------------
-    # The van Genuchten parameters
-    #-------------------------------
-    a_file    = prefix + '_2D-vG-alpha.bin'
-    n_file    = prefix + '_2D-vG-n.bin'
-    L_file    = prefix + '_2D-vG-L.bin'
-
-    #------------------------------------------
-    # Consistent estimates of:
-    # theta_i = qi = initial soil moisture, &
-    # theta_r = qr = residual soil moisture
-    # K_i = initial hydraulic conductivity
-    #------------------------------------------
-    qi_file = prefix + '_2D-qi.bin'
-    qr_file = prefix + '_2D-qr.bin'
-    # Ki_file = prefix + '_2D-Ki.bin'
-    
-    #-------------------------------    
-    # Write all variables to files
-    #-------------------------------
-    Ks_unit = open(Ks_file, 'wb')
-    K_s = np.float32( K_s )  
-    K_s.tofile( Ks_unit )
-    Ks_unit.close()
-    #----------------------------------
-    qs_unit = open(qs_file, 'wb')
-    theta_s = np.float32( theta_s )
-    theta_s.tofile( qs_unit )
-    qs_unit.close()
-    #----------------------------------
-    pB_unit = open(pB_file, 'wb')
-    psi_B   = np.float32( psi_B )
-    psi_B.tofile( pB_unit)
-    pB_unit.close()
-    #----------------------------------
-    c_unit = open(c_file, 'wb')
-    c = np.float32( c )
-    c.tofile( c_unit )
-    c_unit.close()
-    #----------------------------------
-    lam_unit = open(lam_file, 'wb')
-    lam = np.float32( lam )
-    lam.tofile( lam_unit)
-    lam_unit.close()
-    #----------------------------------
-    G_unit = open(G_file, 'wb')
-    G = np.float32( G )
-    G.tofile( G_unit )
-    G_unit.close()
-    #----------------------------------
-#     eta_unit = open(eta_file, 'wb')
-#     eta = np.float32( eta )
-#     eta.tofile( eta_unit )
-#     eta_unit.close()
-    #----------------------------------
-    a_unit = open(a_file, 'wb')
-    alpha = np.float32( alpha )
-    alpha.tofile( a_unit )
-    a_unit.close()
-    #----------------------------------
-    n_unit = open(n_file, 'wb')
-    n = np.float32( n )
-    n.tofile( n_unit)
-    n_unit.close()
-    #----------------------------------
-    L_unit = open(L_file, 'wb')
-    L = np.float32( L )
-    L.tofile( L_unit )
-    L_unit.close()
+        if (layer == 1):
+            topsoil = 1
+        else:
+            topsoil = 0
+ 
+        #----------------------------------------------------------   
+        # Use the Wosten PTF equations to compute key
+        # soil hydraulic variables, including van Genuchten vars.
+        #----------------------------------------------------------
+        (theta_s, K_s, alpha, n, L) = get_wosten_vars( C, S, OM, D, topsoil )
         
+        #----------------------------------------------------------   
+        # Compute "transitional Brooks-Corey" soil hydraulic vars
+        # from the van Genuchten vars.
+        #----------------------------------------------------------   
+        (psi_B, c, lam, eta, G ) = get_tBC_from_vG_vars( alpha, n, L )
+
+        #------------------------------------------
+        # Get consistent estimates of:
+        # theta_i = qi = initial soil moisture, &
+        # theta_r = qr = residual soil moisture
+        # K_i = initial hydraulic conductivity
+        #------------------------------------------
+        # NOT FINISHED YET.
+     
+        prefix = site_prefix + '_sl' + str(layer)
+        ## prefix = case_prefix+ '_sl' + str(layer) 
+        prefix = out_dir + prefix   ##################
+
+        #---------------------------------   
+        # Basic soil hydraulic variables
+        #---------------------------------
+        Ks_file   = prefix + '_2D-Ks.bin'
+        qs_file   = prefix + '_2D-qs.bin'
+        pB_file   = prefix + '_2D-pB.bin'
+        #-------------------------------------------
+        # The transitional Brooks-Corey parameters
+        #-------------------------------------------
+        c_file    = prefix + '_2D-c.bin'    
+        lam_file  = prefix + '_2D-lam.bin'
+        G_file    = prefix + '_2D-G.bin'
+        ## eta_file  = prefix + '_2D-eta.bin'
+    #     c_file    = prefix + '_2D-tBC-c.bin'    
+    #     lam_file  = prefix + '_2D-tBC-lam.bin'
+    #     G_file    = prefix + '_2D-tBC-G.bin'
+    #     ## eta_file  = prefix + '_2D-tBC-eta.bin'
+        #-------------------------------
+        # The van Genuchten parameters
+        #-------------------------------
+        a_file    = prefix + '_2D-vG-alpha.bin'
+        n_file    = prefix + '_2D-vG-n.bin'
+        L_file    = prefix + '_2D-vG-L.bin'
+
+        #------------------------------------------
+        # Consistent estimates of:
+        # theta_i = qi = initial soil moisture, &
+        # theta_r = qr = residual soil moisture
+        # K_i = initial hydraulic conductivity
+        #------------------------------------------
+        # qi_file = prefix + '_2D-qi.bin'
+        # qr_file = prefix + '_2D-qr.bin'
+        # Ki_file = prefix + '_2D-Ki.bin'
+    
+        #-------------------------------    
+        # Write all variables to files
+        #-------------------------------
+        Ks_unit = open(Ks_file, 'wb')
+        K_s = np.float32( K_s )  
+        K_s.tofile( Ks_unit )
+        Ks_unit.close()
+        #----------------------------------
+        qs_unit = open(qs_file, 'wb')
+        theta_s = np.float32( theta_s )
+        theta_s.tofile( qs_unit )
+        qs_unit.close()
+        #----------------------------------
+        pB_unit = open(pB_file, 'wb')
+        psi_B   = np.float32( psi_B )
+        psi_B.tofile( pB_unit)
+        pB_unit.close()
+        #----------------------------------
+        c_unit = open(c_file, 'wb')
+        c = np.float32( c )
+        c.tofile( c_unit )
+        c_unit.close()
+        #----------------------------------
+        lam_unit = open(lam_file, 'wb')
+        lam = np.float32( lam )
+        lam.tofile( lam_unit)
+        lam_unit.close()
+        #----------------------------------
+        G_unit = open(G_file, 'wb')
+        G = np.float32( G )
+        G.tofile( G_unit )
+        G_unit.close()
+        #----------------------------------
+    #     eta_unit = open(eta_file, 'wb')
+    #     eta = np.float32( eta )
+    #     eta.tofile( eta_unit )
+    #     eta_unit.close()
+        #----------------------------------
+        a_unit = open(a_file, 'wb')
+        alpha = np.float32( alpha )
+        alpha.tofile( a_unit )
+        a_unit.close()
+        #----------------------------------
+        n_unit = open(n_file, 'wb')
+        n = np.float32( n )
+        n.tofile( n_unit)
+        n_unit.close()
+        #----------------------------------
+        L_unit = open(L_file, 'wb')
+        L = np.float32( L )
+        L.tofile( L_unit )
+        L_unit.close()
+ 
+    print('Finished computing & saving soil hydraulic vars.')
+    print()
+
+#     if (REPORT):
+#         print('Finished computing & saving soil hydraulic vars.')
+#         print()
+           
 #   save_soil_hydraulic_vars()   
 #-------------------------------------------------------------------
+# def save_soil_hydraulic_vars0( site_prefix=None,
+#                               in_dir=None, out_dir=None,
+#                               layer=1, BARO_1MIN_TEST=False,
+#                               LOL_1MIN_TEST=False):
+# 
+#     if (BARO_1MIN_TEST):
+#         out_dir = '/Users/peckhams/ISRIC_Files/Ethiopia/'
+#         in_dir  = out_dir + '_isric_soil_data/'    
+#         site_prefix = 'Baro_Gam_1min'
+#     if (LOL_1MIN_TEST):
+#         out_dir = '/Users/peckhams/ISRIC_Files/South_Sudan/'
+#         in_dir  = out_dir + '_isric_soil_data/' 
+#         site_prefix = 'Lol-Kuru_1min'
+#     if (directory is None):
+#         in_dir = '/Users/peckhams/ISRIC_Files/Test/'
+#         out_dir = '/Users/peckhams/ISRIC_Files/Test/'
+#     os.chdir( directory )
+#    
+#     print('===============================================')
+#     print('Computing variables for soil layer = ' + str(layer) )
+#     print('===============================================')
+#         
+#     if (layer == 1): 
+#         #----------------------------------------------------  
+#         # Apply transformations to all soil layers (*.tiff)
+#         #----------------------------------------------------        
+#         transform_isric_soil_grid_files( directory=directory,
+#                   site_prefix=site_prefix,
+#                   BARO_1MIN_TEST=BARO_1MIN_TEST,
+#                   LOL_1MIN_TEST=LOL_1MIN_TEST)
+#               
+#     (C, S, OM, D) = read_soil_grid_files( layer=layer, directory=directory,
+#                                           site_prefix=site_prefix )
+# 
+#     if (layer == 1):
+#         topsoil = 1
+#     else:
+#         topsoil = 0
+#     
+#     (theta_s, K_s, alpha, n, L) = get_wosten_vars( C, S, OM, D, topsoil )   
+#     (psi_B, c, lam, eta, G ) = get_tBC_from_vG_vars( alpha, n, L )
+# 
+#     #------------------------------------------
+#     # Get consistent estimates of:
+#     # theta_i = qi = initial soil moisture, &
+#     # theta_r = qr = residual soil moisture
+#     # K_i = initial hydraulic conductivity
+#     #------------------------------------------
+#     # NOT FINISHED YET.
+#      
+#     prefix = site_prefix + '_sl' + str(layer)
+#     ## prefix = case_prefix+ '_sl' + str(layer) 
+#      
+#     #---------------------------------   
+#     # Basic soil hydraulic variables
+#     #---------------------------------
+#     Ks_file   = prefix + '_2D-Ks.bin'
+#     qs_file   = prefix + '_2D-qs.bin'
+#     pB_file   = prefix + '_2D-pB.bin'
+#     #-------------------------------------------
+#     # The transitional Brooks-Corey parameters
+#     #-------------------------------------------
+#     c_file    = prefix + '_2D-c.bin'    
+#     lam_file  = prefix + '_2D-lam.bin'
+#     G_file    = prefix + '_2D-G.bin'
+#     ## eta_file  = prefix + '_2D-eta.bin'
+# #     c_file    = prefix + '_2D-tBC-c.bin'    
+# #     lam_file  = prefix + '_2D-tBC-lam.bin'
+# #     G_file    = prefix + '_2D-tBC-G.bin'
+# #     ## eta_file  = prefix + '_2D-tBC-eta.bin'
+#     #-------------------------------
+#     # The van Genuchten parameters
+#     #-------------------------------
+#     a_file    = prefix + '_2D-vG-alpha.bin'
+#     n_file    = prefix + '_2D-vG-n.bin'
+#     L_file    = prefix + '_2D-vG-L.bin'
+# 
+#     #------------------------------------------
+#     # Consistent estimates of:
+#     # theta_i = qi = initial soil moisture, &
+#     # theta_r = qr = residual soil moisture
+#     # K_i = initial hydraulic conductivity
+#     #------------------------------------------
+#     # qi_file = prefix + '_2D-qi.bin'
+#     # qr_file = prefix + '_2D-qr.bin'
+#     # Ki_file = prefix + '_2D-Ki.bin'
+#     
+#     #-------------------------------    
+#     # Write all variables to files
+#     #-------------------------------
+#     Ks_unit = open(Ks_file, 'wb')
+#     K_s = np.float32( K_s )  
+#     K_s.tofile( Ks_unit )
+#     Ks_unit.close()
+#     #----------------------------------
+#     qs_unit = open(qs_file, 'wb')
+#     theta_s = np.float32( theta_s )
+#     theta_s.tofile( qs_unit )
+#     qs_unit.close()
+#     #----------------------------------
+#     pB_unit = open(pB_file, 'wb')
+#     psi_B   = np.float32( psi_B )
+#     psi_B.tofile( pB_unit)
+#     pB_unit.close()
+#     #----------------------------------
+#     c_unit = open(c_file, 'wb')
+#     c = np.float32( c )
+#     c.tofile( c_unit )
+#     c_unit.close()
+#     #----------------------------------
+#     lam_unit = open(lam_file, 'wb')
+#     lam = np.float32( lam )
+#     lam.tofile( lam_unit)
+#     lam_unit.close()
+#     #----------------------------------
+#     G_unit = open(G_file, 'wb')
+#     G = np.float32( G )
+#     G.tofile( G_unit )
+#     G_unit.close()
+#     #----------------------------------
+# #     eta_unit = open(eta_file, 'wb')
+# #     eta = np.float32( eta )
+# #     eta.tofile( eta_unit )
+# #     eta_unit.close()
+#     #----------------------------------
+#     a_unit = open(a_file, 'wb')
+#     alpha = np.float32( alpha )
+#     alpha.tofile( a_unit )
+#     a_unit.close()
+#     #----------------------------------
+#     n_unit = open(n_file, 'wb')
+#     n = np.float32( n )
+#     n.tofile( n_unit)
+#     n_unit.close()
+#     #----------------------------------
+#     L_unit = open(L_file, 'wb')
+#     L = np.float32( L )
+#     L.tofile( L_unit )
+#     L_unit.close()
+#         
+# #   save_soil_hydraulic_vars0()   
+#-------------------------------------------------------------------
+

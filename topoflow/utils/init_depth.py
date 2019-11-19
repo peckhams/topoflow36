@@ -3,12 +3,15 @@
 #
 #  Sep 2019.  First version to put in topoflow utils folder.
 #             Started from IDL version:  init_depth.pro.
+#  Nov 2019.  Added get_baseflow_volume_flux().  Edited test2().
+
 #------------------------------------------------------------------------
 
 #  test1()
 #  test2()
 
 #  remove_bad_slopes()
+#  get_baseflow_volume_flux()   # 2019-11-14
 #  compute_initial_depth()
 
 #------------------------------------------------------------------------
@@ -27,7 +30,6 @@ def test1():
     compute_initial_depth()
 
 #   test1()
-
 #------------------------------------------------------------------------
 def test2():
 
@@ -44,28 +46,32 @@ def test2():
     #--------------------------------------------------------
     d0_file = (site_prefix + '_d0.rtg')
 
-    #--------------------------------------------    
-    # Estimate baseflow rate for the Baro River
-    #--------------------------------------------
-    A = np.float64(23567.7)    # [km2]
-    A *= 1e6    # [km2 -> m2]
-    u = 1.0        # [m s-1]
-    w = 140.0      # [m]
-    d = 6.0        # [m]
-    Q = u * w * d  # [m3 s-1]
-    B = Q / A      # [m s-1]    (units needed)
-    B = B / 6.0  ### (arbitrary reduction factor)
-    #-------------------------------------------------------
-    # print('Baseflow estimate = ' + str(B) + ' [m s-1]' )
-    B2 = B * 1000.0 * 3600.0   # [mm h-1] 
-    print('Baseflow estimate = ' + str(B2) + ' [mm h-1]' )
+    #-------------------------------------------------    
+    # Estimate bankfull discharge for the Baro River
+    #-------------------------------------------------
+    A_km2 = np.float64(23567.7)  # [km^2]
+    A_m2  = A_km2 * 1e6          # [km^2 -> m^2]
+    u_bankfull = 1.5        # [m s-1]
+    w_bankfull = 140.0      # [m]
+    d_bankfull = 6.0        # [m]
+    Q_bankfull = u_bankfull * w_bankfull * d_bankfull  # [m3 s-1]   
 
+    #----------------------------------------------    
+    # Estimate baseflow discharge and volume flux
+    # See Notes to get_baseflow_volume_flux().
+    #----------------------------------------------
+    Q_baseflow = Q_bankfull / 8.0 
+    B_mps  = (Q_baseflow / A_m2)       # [m s-1]
+    B_mmph = B_mps * 1000.0 * 3600.0   # [mm h-1] 
+    #----------------------------------------------------------
+    print('Baseflow estimate = ' + str(B_mps)  + ' [m s-1]' )
+    print('Baseflow estimate = ' + str(B_mmph) + ' [mm h-1]' )
 
     #----------------------------------------------     
     # Compute the initial channel flow depth grid
     #----------------------------------------------                                          
     compute_initial_depth( site_prefix=site_prefix, cfg_dir=cfg_dir,
-            baseflow_rate=B, tol=None, SILENT=False,
+            baseflow_rate=B_mps, tol=None, SILENT=False,
             #--------------------------------------------
             area_file=area_file, slope_file=slope_file,
             width_file=width_file, manning_file=manning_file,
@@ -128,8 +134,8 @@ def remove_bad_slopes(slope, FLOAT=False, SILENT=False):
         print('WARNING: Zero or negative slopes found.')
         print('         Replacing them with smallest slope.')
         print('         Use "Profile smoothing tool" instead.')
-        print('         min(S) = ' + str(S_min))
-        print('         max(S) = ' + str(S_max))
+        print('         min(slope) = ' + str(S_min))
+        print('         max(slope) = ' + str(S_max))
         print('-------------------------------------------------')
         print(' ')
 
@@ -144,6 +150,42 @@ def remove_bad_slopes(slope, FLOAT=False, SILENT=False):
     return new_slope
      
 #   remove_bad_slopes()
+#------------------------------------------------------------------------
+def get_baseflow_volume_flux( A_out_km2, Qb_out, REPORT=True,
+                              MMPH=False):
+
+    #-----------------------------------------------------------------
+    # Notes: A_out = total contributing area (TCA) at outlet [km^2].
+    #        Qb_out = baseflow discharge at outlet [m3 s-1]
+    #        This could be the minimim value recorded at a gauge.
+    #------------------------------------------------------------------
+    # Q_out = (u_out * w_out * d_out)   (baseflow or bankfull)
+    #
+    # As a rough estimate, we could assume that for baseflow Q:
+    #    (1) u_baseflow = 1.0  [m s-1]  (roughly u_bankfull / 2)
+    #    (2) w_baseflow = (w_bankfull / 2)
+    #    (3) d_baseflow = (d_bankfull / 2)  # assume 45 deg bank angle.
+    #
+    # Expect u_bankfull to be closer to 2 or 3 [m s-1]. (not bigger)
+    # With these assumptions, Q_baseflow is about Q_bankfull / 8.
+    #------------------------------------------------------------------
+    A_out_m2 = A_out_km2 * 1e6           # convert [km^2] to [m^2]
+    B_mps    = (Qb_out / A_out_m2)       # [m s-1]
+    B_mmph   = B_mps * 1000.0 * 3600.0   # convert [m s-1] to [mm h-1] 
+
+    #------------------
+    # Optional report
+    #------------------
+    if (REPORT):
+        print('Baseflow volume flux = ' + str(B_mps)  + ' [m s-1]' )
+        print('Baseflow volume flux = ' + str(B_mmph) + ' [mm h-1]' )
+
+    if (MMPH):
+        return B_mmph
+    else:
+        return B_mps
+
+#   get_baseflow_volume_flux()
 #------------------------------------------------------------------------
 def compute_initial_depth( site_prefix=None, cfg_dir=None,
                            baseflow_rate=None, tol=None,
@@ -169,7 +211,7 @@ def compute_initial_depth( site_prefix=None, cfg_dir=None,
     #           Ac = wetted cross-section area
     #           P  = wetted cross-section perimeter
     #           Rh = (Ac/P) = hydraulic radius
-    #           B = spatially-uniform baseflow volume flux
+    #           B = spatially-uniform baseflow volume flux [m s-1]
     #------------------------------------------------------------
     #        The equations used here are:
     #           Q  = v * Ac = B * A    [m3 s-1] (steady-state)
@@ -201,8 +243,8 @@ def compute_initial_depth( site_prefix=None, cfg_dir=None,
     #        compute velocity, u, and then use it to select
     #        the appropriate root.
     #------------------------------------------------------------                           
-    B = baseflow_rate
-    #print('B = ' + str(B) )
+    B = baseflow_rate    # baseflow volume flux [m s-1]
+    # print('B = ' + str(B) )
     
     #--------------------------------
     # Set tolerance for convergence

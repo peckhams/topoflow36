@@ -188,6 +188,14 @@ def get_grid_from_TCA( site_prefix=None, cfg_dir=None,
     ## grid[ w1 ] = 0.0
     grid[ w1 ] = 1.0
     
+    if (REPORT):
+        nbad = w1.sum()
+        if (nbad > 0):
+            print('Values set to 1.0 where A <= 0.')
+            print('  This occurred at', nbad, 'grid cells.')
+        print('grid min =', grid.min() )
+        print('grid_max =', grid.max() )
+        
     #----------------------------------
     # Write computed grid to out_file
     #----------------------------------

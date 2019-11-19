@@ -1,10 +1,11 @@
 
 ## Copyright (c) 2001-2013, Scott D. Peckham
 ## January 2009  (converted from IDL)
+## Nov 2019  get_utm_zone().
 
 import glob   # (for exists())
-import numpy  # (for things like uint8(), int16(), float64())
 import sys    # (for sys.byteorder)
+import numpy as np  # (for things like uint8(), int16(), float64())
 
 #-------------------------------------------------------------------------
 #
@@ -20,6 +21,7 @@ import sys    # (for sys.byteorder)
 #   get_rti_byte_order()
 #   get_bpe()
 #   get_grid_size()
+#   get_utm_zone()      # 2019-11-16
 #   byte_swap_needed()
 
 #   exists()
@@ -128,7 +130,7 @@ def get_rti_data_type( dtype ):
                 'int32':'LONG', 'int64':'LONG64',
                 'float32':'FLOAT', 'float64':'DOUBLE'}
 
-    return type_map[ dtype.lower() ]
+    return type_map[ str(dtype).lower() ]
 
 #   get_rti_data_type()
 #---------------------------------------------------------------------
@@ -175,6 +177,17 @@ def get_grid_size( file_name ):
 
 #   get_grid_size()
 #---------------------------------------------------------------------
+def get_utm_zone( mid_lon ):
+
+    #------------------------------------------------
+    # Note:  This should be checked more carefully,
+    #        especially at zone boundaries.
+    #------------------------------------------------
+    zone_num = np.ceil( (mid_lon + 180.0) / 6.0 ) 
+    return str( zone_num )
+
+#   get_utm_zone()
+#---------------------------------------------------------------------
 def byte_swap_needed( file_name, info=None ):
 
     if (info == None):
@@ -189,6 +202,8 @@ def byte_swap_needed( file_name, info=None ):
 #-------------------------------------------------------------------------  
 def exists(RTI_file, SILENT=False):
  
+    # Note:  Could also use os.path.exists().
+    
     #------------------------
     # Does RTI file exist ?
     #------------------------
@@ -239,18 +254,18 @@ def read_value(RTI_unit, data_type, UPCASE=False):
         val = s
     #############################
     if   (data_type == 'BYTE'):
-        ## value = numpy.int16( val )
-        value = numpy.uint8(val)
+        ## value = np.int16( val )
+        value = np.uint8(val)
     elif (data_type == 'INTEGER'):    
-        value = numpy.int16(val)
+        value = np.int16(val)
     elif (data_type == 'FLOAT'):    
-        value = numpy.float32(val)
+        value = np.float32(val)
     elif (data_type == 'DOUBLE'):    
-        value = numpy.float64(val)
+        value = np.float64(val)
     elif (data_type == 'LONG'):    
-        value = numpy.int32(val)
+        value = np.int32(val)
     elif (data_type == 'LONG64'):    
-        value = numpy.int64(val)
+        value = np.int64(val)
     elif (data_type == 'STRING'):    
         value = s.strip()
         if (UPCASE):    
@@ -442,7 +457,7 @@ def make_info(grid_file=None,
         if (pixel_geom == 1):
             xsize = (ncols * xres)
         else:
-            xres_deg = (xres / numpy.float64(3600))  # (arcseconds to degrees)
+            xres_deg = (xres / np.float64(3600))  # (arcseconds to degrees)
             xsize    = (ncols * xres_deg)  
         x_east_edge  = (x_west_edge + xsize)
     #--------------------------------------------------------------------------
@@ -450,7 +465,7 @@ def make_info(grid_file=None,
         if (pixel_geom == 1):
             ysize = (nrows * yres)
         else:
-            yres_deg = (yres / numpy.float64(3600))  # (arcseconds to degrees)
+            yres_deg = (yres / np.float64(3600))  # (arcseconds to degrees)
             ysize    = (nrows * yres_deg)
         y_north_edge = y_south_edge + ysize
 
@@ -519,7 +534,7 @@ def write_info(file_name, info, SILENT=True):
     yres_string    = (format % info.yres).strip()
     zres_string    = (format % info.zres).strip()
     #------------------------------------------------------    
-    pixel_geom_string = str(numpy.int16(info.pixel_geom))
+    pixel_geom_string = str(np.int16(info.pixel_geom))
     #------------------------------------------------------ 
     gmin_string    = (format % info.gmin).strip()
     gmax_string    = (format % info.gmax).strip()
@@ -575,7 +590,8 @@ def write_info(file_name, info, SILENT=True):
     RTU.write(';---------\n')
     RTU.write(';UTM zone\n')
     RTU.write(';---------\n')
-    RTU.write('UTM zone: ' + info.UTM_zone + '\n')
+    # Add "str()" just in case it is stored as a number.
+    RTU.write('UTM zone: ' + str(info.UTM_zone) + '\n')
     RTU.write('\n')
     RTU.write('\n')
     
