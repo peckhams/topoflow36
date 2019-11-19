@@ -188,8 +188,8 @@ def get_baseflow_volume_flux( A_out_km2, Qb_out, REPORT=True,
 #   get_baseflow_volume_flux()
 #------------------------------------------------------------------------
 def compute_initial_depth( site_prefix=None, cfg_dir=None,
-                           baseflow_rate=None, tol=None,
-                           SILENT=False,
+                           baseflow_rate=None, bank_angle=None,
+                           tol=None, SILENT=False,
                            #-----------------------------------
                            area_file=None, slope_file=None,
                            width_file=None, manning_file=None,
@@ -251,7 +251,7 @@ def compute_initial_depth( site_prefix=None, cfg_dir=None,
     #--------------------------------
     if (tol is None):
         tol = np.float64( 0.001 )
-
+        
     #----------------------------------------------
     # Read header_file info for all of the files:
     # inputs: area_file, slope_file, width_file,
@@ -283,7 +283,10 @@ def compute_initial_depth( site_prefix=None, cfg_dir=None,
         q_file = cfg_dir + angle_file    # q = theta = bank_angle
         theta = rtg_files.read_grid( q_file, grid_info, RTG_type='FLOAT' )
     else:
-        theta = 30.0   # [degrees]
+        if (bank_angle is None):
+            theta = 30.0   # [degrees]
+        else:
+            theta = bank_angle
     #------------------------------------------------------------------------  
     if (sinu_file is not None):
         sinu_file = cfg_dir + sinu_file  
@@ -318,9 +321,9 @@ def compute_initial_depth( site_prefix=None, cfg_dir=None,
     
     #------------------------------------------------
     # Option 1:
-    # Initialize to very large depth so that we can
-    # get largest root (and smallest velocity) if
-    # there are multiple roots.
+    # Initialize to very large, impossible depth so
+    # that we can get largest root (and smallest
+    # velocity) if there are multiple roots.
     #------------------------------------------------
     # Initialize d, to be saved to d0_file
     #------------------------------------------------    
