@@ -29,6 +29,9 @@ import netCDF4 as nc
 #       get_dtype_map()
 #       open_new_file()
 #       add_grid()
+#       get_var_names()       # 2019-11-21
+#       get_var_long_name()   # 2019-11-21
+#       get_var_units()       # 2019-11-21
 #       get_grid()
 #       close_file()
 #       close()
@@ -477,9 +480,31 @@ class ncgs_file():
         
     #   add_grid()
     #----------------------------------------------------------
-    def get_grid(self, grid_name, time_index):
+    def get_var_names(self):
+    
+        var_dict = self.ncgs_unit.variables
+        return list( var_dict.keys() )
 
-        var = self.ncgs_unit.variables[ grid_name ]
+    #   get_var_names()
+    #----------------------------------------------------------
+    def get_var_long_name(self, var_name ):
+
+        var = self.ncgs_unit.variables[ var_name ]
+        return var.long_name
+        
+            
+    #   get_var_long_name()
+    #----------------------------------------------------------
+    def get_var_units(self, var_name ):
+
+        var = self.ncgs_unit.variables[ var_name ]
+        return var.units
+            
+    #   get_var_units()
+    #----------------------------------------------------------
+    def get_grid(self, var_name, time_index):
+
+        var = self.ncgs_unit.variables[ var_name ]
         return var[ time_index ]
         
     #   get_grid()

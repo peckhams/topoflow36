@@ -39,6 +39,7 @@ import netCDF4 as nc
 #       add_values_at_IDs()
 #-----------------------------
 #       add_series()
+#       get_var_names()        # 2019-11-21
 #       get_series()
 #-----------------------------
 #       close_file()
@@ -629,12 +630,25 @@ class ncts_file():
         
     #   add_series()
     #----------------------------------------------------------
+    def get_var_names(self):
+    
+        var_dict = self.ncts_unit.variables
+        return list( var_dict.keys() )
+
+    #   get_var_names()
+    #----------------------------------------------------------
     def get_series(self, var_name):
 
+        #----------------------------------------------------------
+        # Note:  Attributes such as long_name and units can
+        #        be obtained as series.units or series.long_name.
+        #        The actual values can be obtained from:
+        #        values = series[:], or np.array(series)
+        #----------------------------------------------------------
         series = self.ncts_unit.variables[ var_name ]
         times  = self.ncts_unit.variables[ 'time' ]
         return (series, times)
-        
+               
     #   get_series()
     #-------------------------------------------------------------------
     def close_file(self):
