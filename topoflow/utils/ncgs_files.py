@@ -433,7 +433,7 @@ class ncgs_file():
     def open_new_file(self, file_name, info=None,
                       var_name='Z',
                       long_name=None,
-                      units_name='None',
+                      units_name=None,
                       dtype='float32',
                       ### dtype='float64'
                       time_units='minutes', time_res='60.0',
