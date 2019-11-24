@@ -4,15 +4,18 @@
 # June 2010 (streamlined a bit more)
 # December 2, 2009 (updated open_new_file to use "info")
 # October 13, 2009
+# Nov. 2019 (changed how netCDF is written in open_new_file())
 
 import os
 import sys
 import time
+import datetime
 
 import numpy as np
 from . import bov_files
 from . import file_utils
 from . import rti_files
+from . import tf_utils
 
 import netCDF4 as nc
 
@@ -37,7 +40,7 @@ import netCDF4 as nc
 #       close()
 #
 #-------------------------------------------------------------------
-def unit_test(nx=4, ny=5, n_grids=6, VERBOSE=False,
+def unit_test(nx=4, ny=6, n_grids=6, VERBOSE=False,
               file_name="NCGS_Grid_Test.nc"):
 
     print('Running unit_test()...')
@@ -46,17 +49,21 @@ def unit_test(nx=4, ny=5, n_grids=6, VERBOSE=False,
     # Make instance of ncgs_file() class
     #-------------------------------------
     ncgs = ncgs_file()
-    dx = 100
-    dy = 100
+    xres_sec = 900
+    yres_sec = 900
     var_name = "depth"
 
-    info = rti_files.make_info( file_name, nx, ny, dx, dy )
+    info = rti_files.make_info( file_name, ncols=nx, nrows=ny,
+                                xres=xres_sec, yres=yres_sec,
+                                x_west_edge=0.0, x_east_edge=1.0,
+                                y_south_edge=0.0, y_north_edge=1.5 )
+                                
     OK = ncgs.open_new_file( file_name, info,
                              dtype='float32',
                              var_name=var_name,
                              long_name="depth of water",
                              units_name="meters",
-                             comment="Created by TopoFlow 3.0.")
+                             comment="Created by TopoFlow 3.6.")
     if not(OK):
         print('ERROR during open_new_file().')
         return
@@ -88,7 +95,11 @@ def unit_test(nx=4, ny=5, n_grids=6, VERBOSE=False,
 
     #---------------------------------------------
     # Re-open the file and read grids one-by-one 
-    #---------------------------------------------
+    #------------------------------------------------
+    # NB!  If errors, check if there are multiple
+    # copies of the test file with a number suffix.
+    #------------------------------------------------
+    # ncgs = ncgs_file()  # not necessary
     OK = ncgs.open_file( file_name )
     if not(OK): return
     print('Reading grids from NCGS file: ')
@@ -289,7 +300,7 @@ class ncgs_file():
     
     #   get_dtype_map()
     #----------------------------------------------------------
-    def open_new_file(self, file_name, info=None,
+    def open_new_file0(self, file_name, info=None,
                       var_name='X',
                       long_name=None,
                       units_name='None',
@@ -417,6 +428,211 @@ class ncgs_file():
         self.ncgs_unit = ncgs_unit
         return OK
     
+    #   open_new_file0()
+    #----------------------------------------------------------
+    def open_new_file(self, file_name, info=None,
+                      var_name='Z',
+                      long_name=None,
+                      units_name='None',
+                      dtype='float32',
+                      ### dtype='float64'
+                      time_units='minutes', time_res='60.0',
+                      comment='',
+                      MAKE_RTI=True, MAKE_BOV=False):
+
+        #----------------------------
+        # Does file already exist ?
+        #----------------------------
+        file_name = file_utils.check_overwrite( file_name )
+        self.file_name = file_name
+        
+        #---------------------------------------
+        # Check and store the grid information
+        #---------------------------------------
+        self.check_and_store_info( file_name, info, var_name,
+                                   dtype, MAKE_RTI, MAKE_BOV )
+        if (long_name is None): long_name = var_name
+        self.long_name  = long_name
+        self.units_name = units_name
+        self.dtype      = dtype
+
+        #-----------------------------------
+        # Save the two-char data type code
+        #-----------------------------------
+        dtype_map  = self.get_dtype_map()
+        dtype_code = dtype_map[ dtype.lower() ]
+        self.dtype_code = dtype_code
+
+        #-------------------------------------
+        # Open a new netCDF file for writing
+        #-------------------------------------        
+        try:
+            ## format = 'NETCDF4'
+            format = 'NETCDF4_CLASSIC'
+            ncgs_unit = nc.Dataset(file_name, mode='w', format=format)
+            OK = True
+        except:
+            OK = False
+            return OK
+
+        #------------------------------------------------------------
+        # Option to pre-fill with fill values
+        # Set fill_value for a var with "var._Fill_Value = number"
+        # For Nio was:  opt.PreFill = False # (for efficiency)
+        #------------------------------------------------------------
+        ncgs_unit.set_fill_off()
+        # ncgs_unit.set_fill_on()
+
+        #----------------------------------------------
+        # Create grid dimensions X, Y, and time
+        #----------------------------------------------
+        # Without using "int()" here, we get this:
+        #     TypeError: size must be None or integer
+        #----------------------------------------------
+        ncols = int(self.info.ncols)
+        nrows = int(self.info.nrows)
+        ncgs_unit.createDimension('X', ncols)
+        ncgs_unit.createDimension('Y', nrows)
+        ncgs_unit.createDimension('time', None)   # (unlimited dimension)
+        ncgs_unit.createDimension('bnds', 1)
+
+        #-------------------------------
+        # Create X_vector and Y_vector
+        #-------------------------------
+        minlon = self.info.x_west_edge
+        maxlon = self.info.x_east_edge
+        minlat = self.info.y_south_edge
+        maxlat = self.info.y_north_edge
+        #-----------------------------------------------------
+        # Method 1 (maybe safer, if any bounds are wrong)
+        # xres_deg = (self.info.xres / 3600.0)  # [deg]
+        # yres_deg = (self.info.yres / 3600.0)  # [deg]
+        # X_vector = np.arange( minlon, maxlon, xres_deg, dtype='float64')
+        # Y_vector = np.arange( minlat, maxlat, yres_deg, dtype='float64' )
+        #------------------------------------------------------
+        # Method 2
+        X_vector = np.linspace( minlon, maxlon, ncols, dtype='float64' )
+        Y_vector = np.linspace( minlat, maxlat, nrows, dtype='float64' )
+
+        #------------------------------------------------------ 
+        # According to netCDF4 docs:
+        # "The dimensions themselves are usually also defined
+        # as variables, called *coordinate variables*."
+        #------------------------------------------------------
+        #('d' = float64; must match in add_grid()
+        # In netCDF4 package, use 'f8' vs. 'd'.
+        #-----------------------------------------------------------
+        # Create coordinate variables, time, X, and Y
+        #-----------------------------------------------------------        
+        tvar = ncgs_unit.createVariable('time', 'f8', ('time',))     
+        Xvar = ncgs_unit.createVariable('X', 'f8', ('X',))
+        Yvar = ncgs_unit.createVariable('Y', 'f8', ('Y',))
+
+        #-----------------------------------------
+        # Create a computed variable in the file
+        #-----------------------------------------
+        # Note:  Y must come before X here !
+        #------------------------------------------
+        var = ncgs_unit.createVariable(var_name, dtype_code,
+                                        ('time', 'Y', 'X'))
+
+        #----------------------------------
+        # Specify a "nodata" fill value ?
+        #----------------------------------
+        # var._Fill_Value = -9999.0   ## Used for pre-fill above ?
+        # var._FillValue = -9999.0    ## Was used for Nio.
+
+        #-------------------------------------
+        # Prepare and save a history string
+        #-------------------------------------
+        # Sample output from time.asctime():
+        #     "Thu Oct  8 17:10:18 2009"
+        #-------------------------------------
+        history = "Created using netCDF4 " + nc.__version__ + " on "
+        history = history + time.asctime() + ". "
+        
+        #---------------------------------------------------       
+        # Create title, summary and other metadata strings
+        #---------------------------------------------------
+        title = 'Grid stack for variable: ' + long_name
+        tf_version = str(tf_utils.TF_Version_Number())
+        summary  = 'This file contains a stack of spatial grids, indexed '
+        summary += 'by time for the single variable: ' + long_name + '.'
+        email = 'Scott.Peckham@colorado.edu'
+        date_created = str( datetime.date.today() )
+        naming_authority = 'edu.isi.workflow'
+        if (comment == ''):
+            comment = 'Created by TopoFlow version ' + tf_version + '.'
+        else:
+            history += comment
+
+        #-----------------------------------------
+        # Save some global attributes (metadata)
+        #-----------------------------------------
+        ncgs_unit.title             = title
+        ncgs_unit.summary           = summary
+        ncgs_unit.comment           = comment
+        ncgs_unit.history           = history
+        ncgs_unit.creator_email     = email
+        ncgs_unit.date_created      = date_created 
+        ncgs_unit.naming_authority  = naming_authority   
+        ncgs_unit.geospatial_bounds_crs = '+init=epsg:4979'
+        bounds = [minlon, minlat, maxlon, maxlat]   #### MINT order
+        ncgs_unit.geospatial_bounds = bounds 
+        
+        #---------------------------------------
+        # Save attributes of geospatial var X
+        #---------------------------------------
+        ncgs_unit.variables['X'][:] = X_vector
+        ncgs_unit.variables['X'].long_name = 'longitude'
+        ncgs_unit.variables['X'].units = 'degrees_east'       
+        ncgs_unit.variables['X'].geospatial_lon_min = minlon
+        ncgs_unit.variables['X'].geospatial_lon_max = maxlon
+        ncgs_unit.variables['X'].xres_sec = self.info.xres
+        # Will need something like this for UTM coords later
+        # ncgs_unit.variables['X'].x_west_edge = minlon
+        # ncgs_unit.variables['X'].x_east_edge = maxlon  
+        
+        #---------------------------------------
+        # Save attributes of geospatial var Y
+        #---------------------------------------
+        ncgs_unit.variables['Y'][:] = Y_vector
+        ncgs_unit.variables['Y'].long_name = 'latitude'
+        ncgs_unit.variables['Y'].units = 'degrees_north'     
+        ncgs_unit.variables['Y'].geospatial_lat_min = minlat
+        ncgs_unit.variables['Y'].geospatial_lat_max = maxlat
+        ncgs_unit.variables['Y'].yres_sec = self.info.yres
+        # Will need something like this for UTM coords later
+        # ncgs_unit.variables['Y'].y_south_edge  = minlat
+        # ncgs_unit.variables['Y'].y_north_edge  = maxlat
+
+        #------------------------------------------
+        # Save attributes of coordinate var, time
+        #------------------------------------------
+        ncgs_unit.variables['time'].long_name = 'time'
+        ncgs_unit.variables['time'].units = time_units
+        ncgs_unit.variables['time'].time_coverage_resolution = time_res    
+        # ncgs_unit.variables['time'].time_coverage_start = start_time 
+        # ncgs_unit.variables['time'].time_coverage_end = end_time 
+        # ncgs_unit.variables['time'].time_coverage_duration = duration
+                    
+        #---------------------------------------
+        # Save attributes of the main variable
+        #---------------------------------------
+        # ncgs_unit.variables[var_name].standard_name = standard_name 
+        ncgs_unit.variables[var_name].long_name = long_name
+        ncgs_unit.variables[var_name].units     = units_name
+        ncgs_unit.variables[var_name].n_grids   = 0   ##########
+        #----------------------------------------------------------------
+#         ncgs_unit.variables[var_name].valid_min     = valid_min
+#         ncgs_unit.variables[var_name].valid_max     = valid_max
+#         ncgs_unit.variables[var_name].valid_range   = valid_range
+#         ncgs_unit.variables[var_name].missing_value = missing_value
+#         ncgs_unit.variables[var_name].fill_value    = fill_value                         
+
+        self.ncgs_unit = ncgs_unit
+        return OK
+    
     #   open_new_file()
     #----------------------------------------------------------
     def add_grid(self, grid, grid_name, time=None,
@@ -441,13 +657,14 @@ class ncgs_file():
         #---------------------------------------
         # Write a time to existing netCDF file
         #---------------------------------------
-        times = self.ncgs_unit.variables[ 'time' ]
-        times[ time_index ] = time  ############################ CHECK
+        # times = self.ncgs_unit.variables[ 'time' ]
+        # times[ time_index ] = time  ############################ CHECK
         
         #---------------------------------------
         # Write a grid to existing netCDF file
         #---------------------------------------
         var = self.ncgs_unit.variables[ grid_name ]
+        var.n_grids += 1  ##########
         if (np.ndim(grid) == 0):
             #-----------------------------------------------
             # "grid" is actually a scalar (dynamic typing)
@@ -490,8 +707,7 @@ class ncgs_file():
     def get_var_long_name(self, var_name ):
 
         var = self.ncgs_unit.variables[ var_name ]
-        return var.long_name
-        
+        return var.long_name 
             
     #   get_var_long_name()
     #----------------------------------------------------------

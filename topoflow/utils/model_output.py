@@ -116,6 +116,11 @@ def open_new_gs_file(self, file_name, info=None,
                      time_units='minutes',
                      nx=None, ny=None, dx=None, dy=None):
 
+    #------------------------------
+    # Could also just do this now
+    #------------------------------
+    ### info = self.rti
+    
     #---------------------------
     # Was grid info provided ?
     #---------------------------
@@ -149,6 +154,9 @@ def open_new_gs_file(self, file_name, info=None,
     ncgs_unit_str = "self." + var_name + "_ncgs_unit"
     ncgs_file_str = "self." + var_name + "_ncgs_file"
     gs_file_str   = "self." + var_name + "_gs_file"
+    time_res_sec  = self.save_grid_dt    # [seconds]
+    time_res_min  = (time_res_sec / 60)  # [minutes]
+ 
     #-------------------
     # For testing only
     #-------------------
@@ -178,7 +186,7 @@ def open_new_gs_file(self, file_name, info=None,
         exec( ncgs_unit_str + "=" + "ncgs_files.ncgs_file()" )
         exec( ncgs_unit_str + ".open_new_file(" + ncgs_file_str +
               ", self.rti, var_name, long_name, units_name, " +
-              "dtype=dtype, time_units=time_units)" )
+              "dtype=dtype, time_units=time_units, time_res=time_res_min)" )
         #----------------------------------------
         # (2019-10-03)  This isn't needed here.
         #----------------------------------------
