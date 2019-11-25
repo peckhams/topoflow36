@@ -176,6 +176,10 @@ class ncgs_file():
             ### return ncgs_unit
             return True
         except:
+            print('ERROR: Could not open file:')
+            print( '   ' + file_name )
+            print( 'Current working directory =')
+            print( '   ' + os.getcwd() )
             return False
     
     #   open_file()

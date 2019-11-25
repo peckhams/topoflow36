@@ -265,15 +265,17 @@ class ncts_file():
         #-------------------------
         # Open file to read only
         #-------------------------
-#         try:
-        ncts_unit = nc.Dataset(file_name, mode='r')
-        self.ncts_unit = ncts_unit
-        ### return ncts_unit
-        return True
-#         except:
-#             print('ERROR: Could not open file:')
-#             print( file_name )
-#             return False
+        try:
+            ncts_unit = nc.Dataset(file_name, mode='r')
+            self.ncts_unit = ncts_unit
+            ### return ncts_unit
+            return True
+        except:
+            print('ERROR: Could not open file:')
+            print( '   ' + file_name )
+            print( 'Current working directory =')
+            print( '   ' + os.getcwd() )
+            return False
     
     #   open_file()
     #----------------------------------------------------------
