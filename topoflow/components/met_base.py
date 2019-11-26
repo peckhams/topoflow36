@@ -874,7 +874,7 @@ class met_component( BMI_base.BMI_component ):
         w_bad = np.where( np.logical_or( (beta < 0), (beta > np.pi / 2) ) )
         n_bad = np.size(w_bad[0])
         if (n_bad != 0):    
-            msg = array(['ERROR:  Some slope angles are out of range.', ' '])
+            msg = ['ERROR:  Some slope angles are out of range.', ' ']
             for line in msg:
                 print(line)
             ## result = GUI_Message(msg, INFO=True, TITLE='ERROR MESSAGE')

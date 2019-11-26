@@ -51,7 +51,8 @@ from topoflow.utils      import rtg_files
 #       update_flow_length_grid()
 #       update_area_grid()          # (added on 10/28/09)
 #       update_slope_grid()         # (added on 2019-11-16)
-
+#       update_aspect_grid()        # (added on 2019-11-25)
+#
 #-----------------------------------------------------------------------
 class d8_component( d8_base.d8_component ):
 
@@ -1323,9 +1324,44 @@ class d8_component( d8_base.d8_component ):
 
         pIDs = self.parent_IDs
         self.S = (self.DEM - self.DEM[ pIDs ]) / self.ds
-        self.S[ self.edge_IDs ] = 0.0
 
-        ## self.S[ self.noflow_IDs ] = 0.0
+        #----------------------------------------------------    
+        # In d8_base.py, noflow_IDs calc is commented out
+        # in update().  noflow_IDs includes edge_IDs.
+        #----------------------------------------------------
+        ## self.S[ self.edge_IDs ] = 0.0
+        self.update_noflow_IDs()
+        self.S[ self.noflow_IDs ] = 0.0
+        ## self.S[ self.S < 0 ] = 0.0
 
     #   update_slope_grid()
     #-------------------------------------------------------------------
+    def update_aspect_grid(self, SILENT=True, REPORT=False):
+
+        #------------------------------------------------------
+        # Note: This is a D8 "aspect", really the flow angle,
+        #       in radians, counterclockwise from due east.
+        #       Map Jenson 1984 D8 codes to angles.
+        #------------------------------------------------------
+        a = np.linspace( 0.0, 2 * np.pi, 9 )
+  
+        amap = {1:a[1],   2:a[0],  4:a[7],   8:a[6],
+                16:a[5], 32:a[4], 64:a[3], 128:a[2],
+                0:a[0]}
+                
+        d8_grid = self.d8_grid
+        aspect = np.zeros( self.d8_grid.shape, dtype='float32')
+        aspect[ d8_grid == 0 ]   = 0.0   # (undefined)
+        aspect[ d8_grid == 1 ]   = a[1]
+        aspect[ d8_grid == 2 ]   = a[0]
+        aspect[ d8_grid == 4 ]   = a[7]
+        aspect[ d8_grid == 8 ]   = a[6]
+        aspect[ d8_grid == 16 ]  = a[5]
+        aspect[ d8_grid == 32 ]  = a[4]
+        aspect[ d8_grid == 64 ]  = a[3]
+        aspect[ d8_grid == 128 ] = a[2]        
+        self.aspect = aspect
+
+    #   update_aspect_grid()
+    #-------------------------------------------------------------------
+    
