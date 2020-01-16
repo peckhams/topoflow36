@@ -229,6 +229,7 @@ class nccs_file():
     #   get_dtype_map()
     #----------------------------------------------------------
     def open_new_file(self, file_name, info=None,
+                      time_info=None,
                       var_name='X',
                       long_name=None,
                       units_name='None',

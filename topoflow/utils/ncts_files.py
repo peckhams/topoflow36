@@ -15,8 +15,9 @@ import datetime
 
 import numpy as np
 from . import file_utils
-from . import tf_utils
 from . import rti_files
+from . import svo_names
+from . import tf_utils
 
 import netCDF4 as nc
 
@@ -313,7 +314,9 @@ class ncts_file():
     
     #   get_dtype_map()
     #----------------------------------------------------------
-    def open_new_file(self, file_name, info,
+    def open_new_file(self, file_name,
+                      grid_info=None,
+                      time_info=None,
                       var_names=['Z_2_3'],
                       long_names=['None'],
                       units_names=['None'],
@@ -339,28 +342,28 @@ class ncts_file():
 
         #######################################################             
         # Assume for now that var_names only differ by the
-        # appended row and column info, so only need one
-        # long_name and one units_name
-        #######################################################    
+        # appended row and column info, so only need one each
+        # of svo_name, long_name and units_name.
+        # First, strip trailing row and column numbers.
+        #######################################################
+        s  = var_names[0]
+        p1 = s.rfind('_')
+        s  = s[:p1]
+        p2 = s.rfind('_')
+        short_name = s[:p2]
+        svo_name   = svo_names.get_svo_name( short_name )   
         long_name  = long_names[0]
         units_name = units_names[0]
         
         #-------------------------------------------
         # Need this to compute grid cell lat & lon
         #-------------------------------------------
-        xres_deg = (info.xres / 3600.0)
-        yres_deg = (info.yres / 3600.0)
-        minlon   = info.x_west_edge
-        maxlon   = info.x_east_edge
-        minlat   = info.y_south_edge
-        maxlat   = info.y_north_edge
-        #-------------------------------------------        
-#         xres_deg = (self.info.xres / 3600.0)
-#         yres_deg = (self.info.yres / 3600.0)
-#         minlon   = self.info.x_west_edge
-#         maxlon   = self.info.x_east_edge
-#         minlat   = self.info.y_south_edge
-#         maxlat   = self.info.y_north_edge
+        xres_deg = (grid_info.xres / 3600.0)
+        yres_deg = (grid_info.yres / 3600.0)
+        minlon   = grid_info.x_west_edge
+        maxlon   = grid_info.x_east_edge
+        minlat   = grid_info.y_south_edge
+        maxlat   = grid_info.y_north_edge
         #-------------------------------------------
         # We may not need to save these in self.
         # I don't think they're used anywhere yet.
@@ -371,6 +374,33 @@ class ncts_file():
         self.time_units  = time_units
         self.dtypes      = dtypes
 
+        #---------------------------------------------
+        # Create time metadata strings  (2020-01-14)
+        #---------------------------------------------
+        # str(datetime.datetime.now()) =
+        #   '2020-01-14 12:35:32.087911'
+        #-------------------------------------------------
+        # x = datetime.datetime(2018, 9, 15, 12, 45, 35)
+        # str(x) = '2018-09-15 12:45:35'
+        #-------------------------------------------------
+#         conversion_factor_map = { 'years': 31536000, 
+#         'days': 86400, 'hours': 3600, 'minutes': 60, 'seconds': 1 }
+#         factor = conversion_factor_map[ time_units ]
+#         time_res_sec = factor * int(time_res)
+#         time_res_sec_str = str(time_res_sec)
+        #----------------------------------------------------------
+        start_date = time_info.start_date
+        start_time = time_info.start_time
+        end_date   = time_info.end_date
+        end_time   = time_info.end_time
+        #------------------------------------------------
+        start_datetime = start_date + ' ' + start_time
+        end_datetime   = end_date   + ' ' + end_time
+        dur_units      = time_units        
+        duration = tf_utils.get_duration( start_date, start_time,
+                                          end_date, end_time,
+                                          dur_units)
+                                          
         #---------------------------------------------
         # Create array of dtype codes from dtypes
         # for multiple time series (i.e. columns).
@@ -467,9 +497,9 @@ class ncts_file():
         tvar = ncts_unit.createVariable('time', 'f8', ("time",))
         ncts_unit.variables['time'].units = time_units
         ncts_unit.variables['time'].time_coverage_resolution = time_res    
-        # ncts_unit.variables['time'].time_coverage_start = start_time 
-        # ncts_unit.variables['time'].time_coverage_end = end_time 
-        # ncts_unit.variables['time'].time_coverage_duration = duration
+        ncts_unit.variables['time'].time_coverage_start = start_datetime 
+        ncts_unit.variables['time'].time_coverage_end = end_datetime 
+        ncts_unit.variables['time'].time_coverage_duration = duration
                 
         #-----------------------------------
         # Create variables using var_names
@@ -490,18 +520,20 @@ class ncts_file():
             # ncts_unit.variables[var_name].standard_name = standard_names[k] 
             # ncts_unit.variables[var_name].long_name = long_names[k]
             # ncts_unit.variables[var_name].units     = units_names[k] 
-            #-------------------------------------------------------------            
-            # ncts_unit.variables[var_name].standard_name = standard_names[k] 
+            #-------------------------------------------------------------
+            ncts_unit.variables[var_name].svo_name  = svo_name             
             ncts_unit.variables[var_name].long_name = long_name
             ncts_unit.variables[var_name].units     = units_name       
             ncts_unit.variables[var_name].n_values  = 0   ##########
             #-------------------------------------------------------------
             # Compute & save geospatial info
-            #----------------------------------
+            #----------------------------------------------------
+            # NOTE:  var_name can have "_", so index from right
+            #----------------------------------------------------
             ## print('var_name =', var_name)
             p   = var_name.split('_')
-            row = np.int16( p[1] )
-            col = np.int16( p[2] )
+            row = np.int16( p[-2] ) 
+            col = np.int16( p[-1] )
             lon = minlon + (col * xres_deg)
             lat = minlat + (row * yres_deg)
             ncts_unit.variables[var_name].geospatial_lon = lon

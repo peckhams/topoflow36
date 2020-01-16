@@ -186,17 +186,18 @@ def open_new_gs_file(self, file_name, info=None,
               gs_file_str + ", '.nc')" )
         exec( ncgs_unit_str + "=" + "ncgs_files.ncgs_file()" )
         exec( ncgs_unit_str + ".open_new_file(" + ncgs_file_str +
-              ", self.rti, var_name, long_name, units_name, " +
-              "dtype=dtype, time_units=time_units, time_res=time_res_min)" )
-        #----------------------------------------
-        # (2019-10-03)  This isn't needed here.
-        #----------------------------------------
-#         ncgs_file_str = eval( "file_utils.replace_extension(" +
-#               gs_file_str + ", '.nc')" )
-#         expr = "ncgs_files.ncgs_file().open_new_file(" + ncgs_file_str +
-#                ", self.rti, var_name, long_name, units_name, " +
-#                "dtype=dtype, time_units=time_units)" )
-#         ncgs_unit_str = eval( expr )  ## (2019-10-03)
+              ", self.rti, self.time_info, " +
+              "var_name, long_name, units_name, dtype=dtype," +
+              "time_units=time_units, time_res=time_res_min)" )
+            #----------------------------------------
+            # (2019-10-03)  This isn't needed here.
+            #----------------------------------------
+    #         ncgs_file_str = eval( "file_utils.replace_extension(" +
+    #               gs_file_str + ", '.nc')" )
+    #         expr = "ncgs_files.ncgs_file().open_new_file(" + ncgs_file_str +
+    #                ", self.rti, var_name, long_name, units_name, " +
+    #                "dtype=dtype, time_units=time_units)" )
+    #         ncgs_unit_str = eval( expr )  ## (2019-10-03)
         
         MAKE_RTS = False
     except:
@@ -342,12 +343,12 @@ def open_new_ts_file(self, file_name, IDs, ####
     #-------------------------------------
     time_res_sec  = self.save_pixels_dt  # [seconds]
     time_res_min  = (time_res_sec / 60)  # [minutes]
-            
+         
     #--------------------------------------------
     # Open new netCDF file to write time series
     # using var_name to build variable names
     #--------------------------------------------
-    try:           
+    try:              
         ncts_unit_str = "self." + var_name + "_ncts_unit"
         ncts_file_str = "self." + var_name + "_ncts_file"
         ts_file_str   = "self." + var_name + "_ts_file"
@@ -355,8 +356,8 @@ def open_new_ts_file(self, file_name, IDs, ####
               ts_file_str + ", '.nc')" )
         exec( ncts_unit_str + "=" + "ncts_files.ncts_file()" )
         exec( ncts_unit_str + ".open_new_file(" + ncts_file_str +
-              ", self.rti, var_names, long_names, units_names," +
-              "dtypes=dtypes, "
+              ", self.rti, self.time_info," +
+              "var_names, long_names, units_names, dtypes=dtypes," +
               "time_units=time_units, time_res=time_res_min)" )
         MAKE_TTS = False
     except:
@@ -367,7 +368,7 @@ def open_new_ts_file(self, file_name, IDs, ####
         print('Will write time series to multi-column text file.')
         print(' ')
         MAKE_TTS = True
-
+                      
     #-------------------------------------------
     # Always save time series in a text file ?
     #-------------------------------------------
@@ -642,9 +643,12 @@ def open_new_cs_file(self, file_name, info=None,
               cs_file_str + ", '.nc')" )
         exec( nccs_unit_str + "=" + "nccs_files.nccs_file()" )
         exec( nccs_unit_str + ".open_new_file(" + nccs_file_str +
-              ", self.rti, var_name, long_name, units_name, " +
-              "dtype=dtype, " +  ## (11/5/13)
+              ", self.rti, self.time_info, " +
+              "var_name, long_name, units_name, dtype=dtype, " +
               "time_units=time_units)" )
+#               ", self.rti, var_name, long_name, units_name, " +
+#               "dtype=dtype, " +  ## (11/5/13)
+#               "time_units=time_units)" )
         MAKE_RT3 = False
     except:
         print('ERROR: Unable to open new netCDF file:')

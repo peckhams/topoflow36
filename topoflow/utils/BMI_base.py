@@ -140,6 +140,7 @@
 #      print_traceback()             # (10/10/10)
 #      -------------------------
 #      read_path_info()              # (2/12/17)
+#      read_time_info()              # (1/14/20)
 #      read_config_file()            # (5/17/10, 5/9/11)
 #      initialize_config_vars()      # (5/6/10)
 #      set_computed_input_vars       # (5/6/10) over-ridden by each comp.
@@ -154,6 +155,7 @@
 #      is_scalar()
 #      is_vector()
 #      is_grid()
+#      get_duration()                # (1/14/20)
 #
 #-----------------------------------------------------------------------
 
@@ -175,6 +177,7 @@ import traceback        # (10/10/10)
 from . import outlets          ## (9/19/14)
 from . import pixels
 from . import rti_files
+from . import tf_utils
 
 #---------------------------------------------
 # Experiment.  9/19/14
@@ -845,7 +848,6 @@ class BMI_component:
         ## return self.time_units  
     
     #   get_time_units()
-
     #-------------------------------------------------------------------
     def get_start_time(self):
 
@@ -1487,7 +1489,7 @@ class BMI_component:
         if (self.DEBUG):
             print('cfg_file =', cfg_file)
         if not(os.path.exists(cfg_file)):
-            print('WARNING: file info CFG file not found:')
+            print('WARNING: path info CFG file not found:')
             print('         ' + cfg_file)
             return
 
@@ -1525,6 +1527,107 @@ class BMI_component:
                 exec( "self." + var_name + " = value", {}, locals() )
 
     #   read_path_info()
+    #-------------------------------------------------------------------
+    def read_time_info(self):
+
+        #--------------------------------------------------------------
+        # Note:  Since we don't know which components a user will
+        #        select, start_date, start_time, end_date & end_time
+        #        needs to be available to every component.  This is
+        #        needed to write time metadata to netCDF output files.
+        #--------------------------------------------------------------
+        #        This is virtually identical to read_path_info().
+        #        Also see read_grid_info() in this file.
+        #--------------------------------------------------------------        
+        if not(self.SILENT):
+            print('Reading time info config file.')
+
+#         print ('In read_file_info, cfg_directory = ' + self.cfg_directory)
+#         print ('In read_file_info, cfg_file   = ' + self.cfg_file)
+#         print ('In read_file_info, cfg_prefix = ' + self.cfg_prefix)
+
+        #---------------------------------------------------
+        # Create an empty time_info object with dummy info
+        # Will add things from "*_time_info.cfg" file.
+        #---------------------------------------------------
+#         class bunch:
+#             def __init__(self, **kwds):
+#                 self.__dict__.update(kwds)
+# 
+#         time_info = bunch( dum = 0 )
+
+        class time_info_class:
+            pass
+        time_info = time_info_class()
+#         time_info.dum = 0
+
+        #---------------------------------------
+        # Construct name of path info CFG file
+        #---------------------------------------
+        cfg_extension = self.get_attribute( 'cfg_extension' )
+        cfg_prefix    = self.cfg_file.replace( cfg_extension, '' )
+        cfg_file      = (cfg_prefix + '_time_info.cfg')
+
+        #------------------------
+        # Does CFG file exist ?
+        #------------------------
+        if (self.DEBUG):
+            print('cfg_file =', cfg_file)
+        if not(os.path.exists(cfg_file)):
+            print('WARNING: time info CFG file not found:')
+            print('         ' + cfg_file)
+            return
+
+        #---------------------------------------
+        # Open file_info CFG file to read data
+        #---------------------------------------
+        cfg_unit = open( cfg_file, 'r' )
+
+        #--------------------------------------------------
+        # Recall that a "blank line", with just a (hidden)
+        # newline character will not be null and will
+        # have len(line) = 1.
+        #--------------------------------------------------
+        while (True):
+            line  = cfg_unit.readline()
+            if (line == ''):
+                break                  # (reached end of file)
+            
+            COMMENT = (line[0] == '#')
+            #----------------------------------------------
+            # Using "|" as a delimiter means we can use
+            # " ", "," or "=" in the filenames.
+            #----------------------------------------------
+            # Added ".strip()" on 10/25/11.
+            #----------------------------------------------
+            # var_names will be:  start_date, start_time,
+            #     end_date, end_time
+            #----------------------------------------------            
+            words   = line.split('|')  # (split on pipe)
+            if (len(words) == 4) and not(COMMENT):
+                var_name = words[0].strip()
+                value    = words[1].strip()
+                var_type = words[2].strip()  # (e.g. 'double', 'int', 'string', etc.)
+
+                #---------------------------------------------
+                # Note: Need to include locals() for "value"
+                #---------------------------------------------
+                ## exec( "self." + var_name + " = value", {}, locals() )
+                exec( "time_info." + var_name + " = value", {}, locals() )
+    
+        #----------------------------------------------------    
+        # Compute duration, save time_info object into self
+        #----------------------------------------------------
+        # Note that "time_res" will vary by component and
+        # is not included here.
+        #----------------------------------------------------        
+        dur_units = 'minutes'  #######
+        duration  = tf_utils.get_duration( time_info.start_date, time_info.start_time,
+                                           time_info.end_date, time_info.end_time,
+                                           dur_units )     
+        self.time_info = time_info
+
+    #   read_time_info()
     #-------------------------------------------------------------------
     def read_config_file(self):
 
@@ -1642,7 +1745,6 @@ class BMI_component:
                     #--------------------------------------------------
                     ## type_choice = ''   # (For exec in Python 3.x.)
                     ## exec( "type_choice = self." + last_var_name, {}, locals() )
-                    ## if (type_choice.lower() == 'scalar'):
                     #---------------------------------------------------------------
                     ### type_choice = eval( "self." + last_var_name )  ## OK TOO.
                     type_choice = last_value  ### (2019-10-03, for Python 3()
@@ -1786,7 +1888,8 @@ class BMI_component:
         # CFG filename was built and saved in
         # the initialize() method before now.
         #---------------------------------------
-        self.read_path_info()   ###### (2/12/17)
+        self.read_path_info()   ###### (2016-02-12)
+        self.read_time_info()   ###### (2020-01-14)
         # print '#### CALLING read_config_file()...'
         self.read_config_file()
         # print '#### AFTER read_config_file():'
@@ -2199,10 +2302,6 @@ class BMI_component:
         
     #   is_grid()
     #-------------------------------------------------------------------
-
-    
-
-
 
 
     
