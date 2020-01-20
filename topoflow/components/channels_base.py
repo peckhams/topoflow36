@@ -532,8 +532,8 @@ class channels_component( BMI_base.BMI_component ):
         if not(self.FLOOD_OPTION):
             self.SAVE_DF_GRIDS  = False
             self.SAVE_DF_PIXELS = False
-            self.df_gs_file = ''
-            self.df_ts_file = ''
+            self.d_flood_gs_file = ''
+            self.d_flood_ts_file = ''
 
         #------------------------------------------------------
         # (2019-10-08) Added CHECK_STABILITY flag to CFG file
@@ -2009,8 +2009,8 @@ class channels_component( BMI_base.BMI_component ):
         # free-surface gradient (DEM + d_flood), we should not
         # set it to zero at interior noflow_IDs.
         #-----------------------------------------------------------
-        ## d_flood[ self.d8.noflow_IDs ] = 0.0     
-        d_flood[ self.d8.edge_IDs ] = 0.0      
+        d_flood[ self.d8.noflow_IDs ] = 0.0     
+        ## d_flood[ self.d8.edge_IDs ] = 0.0      
         self.d_flood[:] = d_flood   # write in place 
 
     #   update_flood_depth()
@@ -3044,13 +3044,13 @@ class channels_component( BMI_base.BMI_component ):
         self.u_gs_file  = (self.out_directory + self.u_gs_file)
         self.d_gs_file  = (self.out_directory + self.d_gs_file) 
         self.f_gs_file  = (self.out_directory + self.f_gs_file) 
-        self.df_gs_file = (self.out_directory + self.df_gs_file) 
+        self.d_flood_gs_file = (self.out_directory + self.d_flood_gs_file) 
         #--------------------------------------------------------
         self.Q_ts_file  = (self.out_directory + self.Q_ts_file)
         self.u_ts_file  = (self.out_directory + self.u_ts_file) 
         self.d_ts_file  = (self.out_directory + self.d_ts_file) 
         self.f_ts_file  = (self.out_directory + self.f_ts_file) 
-        self.df_ts_file = (self.out_directory + self.df_ts_file) 
+        self.d_flood_ts_file = (self.out_directory + self.d_flood_ts_file) 
         
     #   update_outfile_names()
     #-------------------------------------------------------------------  
@@ -3090,8 +3090,8 @@ class channels_component( BMI_base.BMI_component ):
         long_name:get_long_name('f'), units_name:get_var_units('f')},
         #-----------------------------------------------------------------
         {var_name:'d_flood',
-        save_gs:self.SAVE_DF_GRIDS,  gs_file:self.df_gs_file,
-        save_ts:self.SAVE_DF_PIXELS, ts_file:self.df_ts_file,
+        save_gs:self.SAVE_DF_GRIDS,  gs_file:self.d_flood_gs_file,
+        save_ts:self.SAVE_DF_PIXELS, ts_file:self.d_flood_ts_file,
         long_name:get_long_name('d_flood'), units_name:get_var_units('d_flood')} ]
                                 
     #   bundle_output_files
@@ -3154,8 +3154,8 @@ class channels_component( BMI_base.BMI_component ):
                                            units_name='none')
  
         if (self.SAVE_DF_GRIDS):    
-            model_output.open_new_gs_file( self, self.df_gs_file, self.rti,
-                                           var_name='df',
+            model_output.open_new_gs_file( self, self.d_flood_gs_file, self.rti,
+                                           var_name='d_flood',
                                            long_name='land_surface_water__depth',
                                            units_name='m')
                                                       
@@ -3188,8 +3188,8 @@ class channels_component( BMI_base.BMI_component ):
                                            units_name='none')
 
         if (self.SAVE_DF_PIXELS):    
-            model_output.open_new_ts_file( self, self.df_ts_file, IDs,
-                                           var_name='df',
+            model_output.open_new_ts_file( self, self.d_flood_ts_file, IDs,
+                                           var_name='d_flood',
                                            long_name='land_surface_water__depth',
                                            units_name='m')
                                                    
@@ -3239,13 +3239,13 @@ class channels_component( BMI_base.BMI_component ):
         if (self.SAVE_U_GRIDS):  model_output.close_gs_file( self, 'u')  
         if (self.SAVE_D_GRIDS):  model_output.close_gs_file( self, 'd')   
         if (self.SAVE_F_GRIDS):  model_output.close_gs_file( self, 'f')
-        if (self.SAVE_DF_GRIDS):  model_output.close_gs_file( self, 'df')
+        if (self.SAVE_DF_GRIDS): model_output.close_gs_file( self, 'd_flood')
         #---------------------------------------------------------------
-        if (self.SAVE_Q_PIXELS): model_output.close_ts_file( self, 'Q')   
-        if (self.SAVE_U_PIXELS): model_output.close_ts_file( self, 'u')    
-        if (self.SAVE_D_PIXELS): model_output.close_ts_file( self, 'd')    
-        if (self.SAVE_F_PIXELS): model_output.close_ts_file( self, 'f')
-        if (self.SAVE_DF_PIXELS): model_output.close_ts_file( self, 'df')
+        if (self.SAVE_Q_PIXELS):  model_output.close_ts_file( self, 'Q')   
+        if (self.SAVE_U_PIXELS):  model_output.close_ts_file( self, 'u')    
+        if (self.SAVE_D_PIXELS):  model_output.close_ts_file( self, 'd')    
+        if (self.SAVE_F_PIXELS):  model_output.close_ts_file( self, 'f')
+        if (self.SAVE_DF_PIXELS): model_output.close_ts_file( self, 'd_flood')
                 
     #   close_output_files()              
     #-------------------------------------------------------------------  
@@ -3270,7 +3270,7 @@ class channels_component( BMI_base.BMI_component ):
             model_output.add_grid( self, self.f, 'f', self.time_min )     
 
         if (self.SAVE_DF_GRIDS):
-            model_output.add_grid( self, self.d_flood, 'df', self.time_min )   
+            model_output.add_grid( self, self.d_flood, 'd_flood', self.time_min )   
             
     #   save_grids()
     #-------------------------------------------------------------------  
@@ -3295,7 +3295,7 @@ class channels_component( BMI_base.BMI_component ):
             model_output.add_values_at_IDs( self, time, self.f, 'f', IDs )
 
         if (self.SAVE_DF_PIXELS):
-            model_output.add_values_at_IDs( self, time, self.d_flood, 'df', IDs )
+            model_output.add_values_at_IDs( self, time, self.d_flood, 'd_flood', IDs )
                     
     #   save_pixel_values()
     #-------------------------------------------------------------------
