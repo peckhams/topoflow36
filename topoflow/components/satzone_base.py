@@ -169,7 +169,7 @@ class satzone_component( infil_base.infil_component ):
         self.set_constants()  
         ## self.initialize_layer_vars()  # (5/11/10)
         self.initialize_config_vars() 
-        self.read_grid_info()     # (need self.rti in next part)
+        # self.read_grid_info()    # NOW IN initialize_config_vars()
         self.initialize_basin_vars()  # (5/14/10)
         #-----------------------------------------
         # This must come before "Disabled" test.

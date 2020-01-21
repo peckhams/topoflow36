@@ -300,7 +300,7 @@ class d8_component( BMI_base.BMI_component ):
         # print '### Calling initialize_config_vars()...'
         self.initialize_config_vars()
         # print '### Calling read_grid_info()...'
-        self.read_grid_info()   # (also gets & stores self.da)
+        # self.read_grid_info()    # NOW IN initialize_config_vars()
         self.initialize_basin_vars()    # (uncommented on 11/8/11.)
 
         #-------------------------------------------

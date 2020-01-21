@@ -271,7 +271,7 @@ class channels_component( BMI_base.BMI_component ):
 #         'land_surface__slope':                                 'S_bed',
         'land_surface_water__baseflow_volume_flux':            'GW',
         'land_surface_water__evaporation_volume_flux':         'ET',
-        'soil_surface_water__infiltration_volume_flux':        'IN',
+        'soil_surface_water__infiltration_volume_flux':        'v0',
         'snowpack__melt_volume_flux':                          'SM',
         'water-liquid__mass-per-volume_density':               'rho_H2O',
         #------------------------------------------------------------------------
@@ -545,7 +545,8 @@ class channels_component( BMI_base.BMI_component ):
         # Must call read_grid_info() after initialize_config_vars()
         #------------------------------------------------------------
         # print 'CHANNELS calling read_grid_info()...'
-        self.read_grid_info()
+        #### self.read_grid_info()    # NOW IN initialize_config_vars()
+
         #------------------------------------------------------------
         #print 'CHANNELS calling initialize_basin_vars()...'
         self.initialize_basin_vars()  # (5/14/10)
@@ -571,6 +572,13 @@ class channels_component( BMI_base.BMI_component ):
 ##        print 'min(d0), max(d0) =', self.d0.min(), self.d0.max()
 ##        print '################################################'
 
+        #--------------------------------------------------------
+        # Since only Grid type is allowed, these are not set in
+        # the CFG file, but need to be defined for next part.
+        #--------------------------------------------------------
+        self.code_type  = 'Grid'  # (may not need this one)
+        self.slope_type = 'Grid'
+        
         ##################################################################
         # Move this block into new: "initialize_input_file_vars()"  ???
         #---------------------------------------------------
@@ -621,6 +629,14 @@ class channels_component( BMI_base.BMI_component ):
         print('CHANNELS calling read_input_files()...')
         self.read_input_files()
 
+        #--------------------------------------------
+        # Set any input variables that are computed
+        #--------------------------------------------------
+        # NOTE:  Must be called AFTER read_input_files().
+        #--------------------------------------------------
+        print('#### CHANNELS calling set_computed_input_vars()...')
+        self.set_computed_input_vars()
+        
         #-----------------------
         # Initialize variables
         #-----------------------
@@ -632,8 +648,7 @@ class channels_component( BMI_base.BMI_component ):
         #--------------------------------------------------
         # (5/12/10) I think this is obsolete now.
         #--------------------------------------------------
-        # Make sure self.Q_ts_file is not NULL (12/22/05)
-        
+        # Make sure self.Q_ts_file is not NULL (12/22/05)  
         # This is only output file that is set by default
         # and is still NULL if user hasn't opened the
         # output var dialog for the channel process.
@@ -1272,7 +1287,7 @@ class channels_component( BMI_base.BMI_component ):
         GW = self.GW
         ### GW = self.GW_init
         ET = self.ET
-        IN = self.IN
+        IN = self.v0
         MR = self.MR
         
 ##        if (self.DEBUG):

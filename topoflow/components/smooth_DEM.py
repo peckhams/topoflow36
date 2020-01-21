@@ -277,7 +277,7 @@ class DEM_smoother( BMI_base.BMI_component ):
         self.set_constants()
         self.initialize_config_vars()
         # self.build_filenames()   ##########
-        self.read_grid_info()
+        # self.read_grid_info()    # NOW IN initialize_config_vars()
         self.initialize_basin_vars()
         #-----------------------------------------
         # This must come before "Disabled" test.

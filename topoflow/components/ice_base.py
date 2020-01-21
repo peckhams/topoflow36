@@ -416,7 +416,7 @@ class ice_component( BMI_base.BMI_component ):
         #-----------------------------------------------
         self.set_constants()        # (12/03/09)
         self.initialize_config_vars() 
-        self.read_grid_info()
+        # self.read_grid_info()    # NOW IN initialize_config_vars()
         self.initialize_basin_vars()  # (5/14/10)
         #-----------------------------------------
         # This must come before "Disabled" test.

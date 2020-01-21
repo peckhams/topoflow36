@@ -265,7 +265,7 @@ class HIS_component(BMI_base.BMI_component):
         #-----------------------------------------------
         self.set_constants()
         self.initialize_config_vars()
-        self.read_grid_info()
+        ## self.read_grid_info()    # NOW IN initialize_config_vars()
         # self.initialize_basin_vars()
         self.initialize_time_vars()
         self.dt = 1.0      # (Needed for final report.)

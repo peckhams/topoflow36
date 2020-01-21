@@ -169,16 +169,23 @@ class infil_component( BMI_base.BMI_component):
         
         #-----------------------------------------------
         # Load component parameters from a config file
-        #--------------------------------------------------------------- 
-        # NOTE!  In BMI_base.py, initialize_config_vars() calls
-        #        read_config_file() & set_computed input_vars().
-        #        read_config_file() calls initialize_layer_vars()
-        #        after reading n_layers.  (11/16/16)
-        #---------------------------------------------------------------       
+        #-------------------------------------------------------
+        # NOTE!  In BMI_base.py: function calls are nested as:
+        #        initialize_config_vars()
+        #            read_config_file()
+        #                # read n_layers...
+        #                initialize_layer_vars()
+        #            set_computed_input_vars()
+        #---------------------------------------------------------- 
+        # HOWEVER, read_input_files() is called after
+        # initialize_config_vars().
+        # Should we move set_computed_input_vars() to AFTER
+        # read_input_files() & before initialize_computed_vars()?
+        #----------------------------------------------------------              
         self.set_constants()
-        ## self.initialize_layer_vars()  # (5/11/10)
+        # Note: initialize_config_vars() calls initialize_layer_vars()
         self.initialize_config_vars() 
-        self.read_grid_info()
+        ### self.read_grid_info()  # NOW IN initialize_config_vars()
         self.initialize_basin_vars()  # (5/14/10)
         self.initialize_time_vars()
         
@@ -195,9 +202,9 @@ class infil_component( BMI_base.BMI_component):
             # IN = infiltration rate at land surface
             # Rg = vertical flow rate just above water table
             #-------------------------------------------------
-            self.IN     = self.initialize_scalar( 0, dtype='float64' )
+            self.v0     = self.initialize_scalar( 0, dtype='float64' )
             self.Rg     = self.initialize_scalar( 0, dtype='float64' )
-            self.vol_IN = self.initialize_scalar( 0, dtype='float64' )
+            self.vol_v0 = self.initialize_scalar( 0, dtype='float64' )
             self.vol_Rg = self.initialize_scalar( 0, dtype='float64' )
             
             self.DONE   = True
@@ -208,6 +215,7 @@ class infil_component( BMI_base.BMI_component):
         # Open input files needed to initialize vars 
         #---------------------------------------------
         self.open_input_files()
+        print('INFIL calling read_input_files()...')
         self.read_input_files()
 
         #----------------------------------------------
@@ -215,6 +223,16 @@ class infil_component( BMI_base.BMI_component):
         # because it uses ALL_SCALARS.
         #----------------------------------------------
         self.check_input_types()
+
+        #--------------------------------------------
+        # Set any input variables that are computed
+        #--------------------------------------------------
+        # NOTE:  Must be called AFTER read_input_files().
+        #--------------------------------------------------
+        print('INFIL calling set_computed_input_vars()...')
+        self.set_computed_input_vars()
+        
+        print('INFIL calling initialize_computed_vars()...')
         self.initialize_computed_vars()
         
         self.open_output_files()
@@ -225,7 +243,7 @@ class infil_component( BMI_base.BMI_component):
     def update(self, dt=-1.0):
 
         #-------------------------------------------------
-        # Note: self.IN already set to 0 by initialize()
+        # Note: self.v0 already set to 0 by initialize()
         #-------------------------------------------------
         if (self.comp_status == 'Disabled'): return
         self.status = 'updating'  # (OpenMI 2.0 convention)
@@ -531,19 +549,19 @@ class infil_component( BMI_base.BMI_component):
 ##        r = self.P_total   # (P_total, not R=runoff)
 ##         
 ##        if (self.method == 0):    
-##            self.IN = np.float64(0)
+##            self.v0 = np.float64(0)
 ##            ## self.r_last = ???
 ##            return
 ##        elif (self.method == 1):    
-##            self.IN = r
+##            self.v0 = r
 ##            #--------------------------------------------------------
 ##            # These next two are not totally correct but are stable
 ##            # and give results similar to the correct method
 ##            #--------------------------------------------------------
 ##        elif (self.method == 2):
-##            self.IN = Green_Ampt_Infil_Rate_v1(self, r)
+##            self.v0 = Green_Ampt_Infil_Rate_v1(self, r)
 ##        elif (self.method == 3):    
-##            self.IN = Smith_Parlange_Infil_Rate_v1(self, r)
+##            self.v0 = Smith_Parlange_Infil_Rate_v1(self, r)
 ##            #-------------------------------------------------
 ##            # These next two use the correct approach but so
 ##            # far have convergence and "jump" issues
@@ -555,29 +573,29 @@ class infil_component( BMI_base.BMI_component):
 ##            P  = self.mp.P_rain
 ##            SM = self.sp.SM
 ##            ET = self.ep.ET
-##            self.IN = Richards_Infil_Rate(self, P, SM, ET, self.Rg)
+##            self.v0 = Richards_Infil_Rate(self, P, SM, ET, self.Rg)
 ##            #########################################################
 ##            ##  Richards_Infil_Rate should also return and save Rg
 ##            #########################################################
 ##            #** 5 : IN = Beven_Exp_K_Infil_Rate_v1(self, r)    ;(no GUI yet)
 ##        else:    
-##            self.IN = np.float64(0)
+##            self.v0 = np.float64(0)
 ##        
 ##        #---------------------------
 ##        # Print min and max values
 ##        #---------------------------
 ##        #nI = np.size(Iself.N)
 ##        #if (nI == 1):
-##        #    print 'IN =', self.IN
+##        #    print 'IN =', self.v0
 ##        #else:
-##        #    imin = self.IN.min()
-##        #    imax = self.IN.max()
+##        #    imin = self.v0.min()
+##        #    imax = self.v0.max()
 ##        #    print '(imin, imax) =', imin, imax
 ##        
 ##        #--------------------------
 ##        # For debugging & testing
 ##        #--------------------------
-##        #print 'min(IN), max(IN) = ', self.IN.min(), self.IN.max()
+##        #print 'min(IN), max(IN) = ', self.v0.min(), self.v0.max()
 ##        #print 'self.dt =', self.dt
 
     #   update_infile_rate()
@@ -600,7 +618,7 @@ class infil_component( BMI_base.BMI_component):
         # if IN is a scalar.  Need to look at this more.
         #####################################################
         ## if (self.SINGLE_PROFILE):
-        if (self.IN.size == 1):
+        if (self.v0.size == 1):
             return
         
         #-------------------------------------------
@@ -629,7 +647,7 @@ class infil_component( BMI_base.BMI_component):
         ### w  = np.where( h == z )
         nw = np.size(w[0])
         if (nw != 0):   
-            self.IN[w] = np.float64(0)
+            self.v0[w] = np.float64(0)
             
         ##########################################
         #  ADD SIMILAR THING FOR GC2D
@@ -646,12 +664,14 @@ class infil_component( BMI_base.BMI_component):
         #------------------------------------------------
         # Update mass total for IN, sum over all pixels
         #------------------------------------------------   
-        volume = np.double(self.IN * self.da * self.dt)  # [m^3]
+        volume = np.double(self.v0 * self.da * self.dt)  # [m^3]
         if (np.size( volume ) == 1):
-            self.vol_IN += (volume * self.rti.n_pixels)
+            self.vol_v0 += (volume * self.rti.n_pixels)
         else:
-            self.vol_IN += np.sum(volume)
+            self.vol_v0 += np.sum(volume)
             
+        self.vol_IN = self.vol_v0  ## A synonym.
+    
     #   update_IN_integral()
     #-------------------------------------------------------------------
     def update_Rg(self):
@@ -666,7 +686,7 @@ class infil_component( BMI_base.BMI_component):
         # Set groundwater recharge rate to IN ?
         # Save last value of r for next time.
         #----------------------------------------   
-        self.Rg = self.IN
+        self.Rg = self.v0
         P_rain  = self.P_rain   # (2/3/13, new framework)
         SM      = self.SM       # (2/3/13, new framework)
         #---------------------
@@ -703,7 +723,7 @@ class infil_component( BMI_base.BMI_component):
         #
         # This becomes a grid if IN is a grid.
         #---------------------------------------
-        self.I += (self.IN * self.dt)  # [meters]
+        self.I += (self.v0 * self.dt)  # [meters]
 
         #--------------
         # For testing
@@ -744,14 +764,14 @@ class infil_component( BMI_base.BMI_component):
         # NB!  Don't set DONE = False, it may
         # already have been set to True
         #--------------------------------------
-        if (np.size( self.IN ) == 1):
-            OK = np.isfinite( self.IN )
+        if (np.size( self.v0 ) == 1):
+            OK = np.isfinite( self.v0 )
             nbad = 1
         else:
             # Should be faster than using WHERE
-            wbad = np.logical_not( np.isfinite( self.IN ) )
+            wbad = np.logical_not( np.isfinite( self.v0 ) )
             nbad = wbad.sum()
-#             wbad = np.where( np.logical_not(np.isfinite( self.IN )) )
+#             wbad = np.where( np.logical_not(np.isfinite( self.v0 )) )
 #             nbad = np.size( wbad[0] )
             OK = (nbad == 0)
         if (OK):
@@ -804,7 +824,7 @@ class infil_component( BMI_base.BMI_component):
             # P_total and Ks are both scalars
             #----------------------------------
             if (self.P_total < self.Ks[0]):    
-                self.IN = self.P_total
+                self.v0 = self.P_total
         else:    
             #---------------------------------
             # Either P_total or Ks is a grid
@@ -815,9 +835,9 @@ class infil_component( BMI_base.BMI_component):
             
             if (nw != 0):    
                 if (nPt > 1):    
-                    self.IN[w] = self.P_total[w]
+                    self.v0[w] = self.P_total[w]
                 else:    
-                    self.IN[w] = self.P_total
+                    self.v0[w] = self.P_total
 
     #   check_low_rainrate
     #-------------------------------------------------------------------  
@@ -1229,7 +1249,7 @@ class infil_component( BMI_base.BMI_component):
             print('Calling save_grids()...')
             
         if (self.SAVE_V0_GRIDS):
-            model_output.add_grid( self, self.IN, 'v0', self.time_min )
+            model_output.add_grid( self, self.v0, 'v0', self.time_min )
             
         if (self.SAVE_I_GRIDS):
             model_output.add_grid( self, self.I, 'I', self.time_min )
@@ -1254,7 +1274,7 @@ class infil_component( BMI_base.BMI_component):
         # Save a subsequence of IN var pixel values
         #--------------------------------------------  
         if (self.SAVE_V0_PIXELS):
-            model_output.add_values_at_IDs( self, time, self.IN, 'v0', IDs )
+            model_output.add_values_at_IDs( self, time, self.v0, 'v0', IDs )
         if (self.SAVE_I_PIXELS):
             model_output.add_values_at_IDs( self, time, self.I, 'I', IDs )
                                  

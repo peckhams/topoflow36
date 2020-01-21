@@ -120,8 +120,8 @@ class infil_component( infil_base.infil_component ):
         #--------------------------------------------------------------
         'model__time_step': 'dt',
         # 'model_grid_cell__area': 'da',
-        'soil_surface_water__domain_time_integral_of_infiltration_volume_flux': 'vol_IN',
-        'soil_surface_water__infiltration_volume_flux':    'IN',
+        'soil_surface_water__domain_time_integral_of_infiltration_volume_flux': 'vol_v0',
+        'soil_surface_water__infiltration_volume_flux':    'v0',
         'soil_surface_water__time_integral_of_infiltration_volume_flux': 'I',
         'soil_water__green-ampt_capillary_length':         'G',
         'soil_water__initial_hydraulic_conductivity':      'Ki',
@@ -321,7 +321,7 @@ class infil_component( infil_base.infil_component ):
         #       so IN will be a grid.
         #       z, h and IN must be compatible.
         #-----------------------------------------------------------
-        self.vol_IN = self.initialize_scalar( 0, dtype='float64')
+        self.vol_v0 = self.initialize_scalar( 0, dtype='float64')
         self.vol_Rg = self.initialize_scalar( 0, dtype='float64')
         
         if (self.ALL_SCALARS):
@@ -330,14 +330,14 @@ class infil_component( infil_base.infil_component ):
             #       by zero when first computing fc, which does
             #       have a singularity at the origin.
             #-----------------------------------------------------
-            self.IN     = self.initialize_scalar( 0,    dtype='float64')
+            self.v0     = self.initialize_scalar( 0,    dtype='float64')
             self.Rg     = self.initialize_scalar( 0,    dtype='float64') 
             self.I      = self.initialize_scalar( 1e-6, dtype='float64')
             self.tp     = self.initialize_scalar( -1,   dtype='float64')
             self.fp     = self.initialize_scalar( 0,    dtype='float64')
             # self.r_last = self.initialize_scalar( 0,  dtype='float64') # (P+SM at prev step)
         else:
-            self.IN     = self.initialize_grid( 0,    dtype='float64')
+            self.v0     = self.initialize_grid( 0,    dtype='float64')
             self.Rg     = self.initialize_grid( 0,    dtype='float64')
             self.I      = self.initialize_grid( 1e-6, dtype='float64')
             self.tp     = self.initialize_grid( -1,   dtype='float64')
@@ -528,7 +528,7 @@ def Beven_Exp_K_Infil_Rate_v1(self):
     # Ponding time, Tp, is time until (IN lt r).
     #-----------------------------------------------
     self.fc = fc
-    self.IN = np.minimum(fc, self.P_total)
+    self.v0 = np.minimum(fc, self.P_total)
     
     #-------------------------------------
     # Is P_total less than Ks anywhere ?

@@ -207,8 +207,8 @@ class infil_component(infil_base.infil_component):
         'model__time_step':                                'dt',
         ## 'model_grid_cell__area':                        'da', 
         # 'soil__porosity':                                'phi',
-        'soil_surface_water__domain_time_integral_of_infiltration_volume_flux': 'vol_IN',
-        'soil_surface_water__infiltration_volume_flux':    'IN',
+        'soil_surface_water__domain_time_integral_of_infiltration_volume_flux': 'vol_v0',
+        'soil_surface_water__infiltration_volume_flux':    'v0',
         'soil_surface_water__volume_fraction':             'q0',
         # 'soil_water__brooks-corey_b_parameter':          'b',
         'soil_water__brooks-corey_eta_parameter':          'eta',
@@ -404,6 +404,14 @@ class infil_component(infil_base.infil_component):
     #-------------------------------------------------------------------
     def set_computed_input_vars(self):
 
+        #--------------------------------------------------------
+        # Note: This must be called AFTER read_input_files() in
+        #       the initialize() function, because while some
+        #       input vars may be set by read_config_file(),
+        #       others must be read from files.
+        #-------------------------------------------------------- 
+        print('###### CALLING set_computed_input_vars()....')
+        
         self.RICHARDS = True
         self.G_file    = ''   # (still need to be defined)
         self.gam_file  = ''
@@ -444,14 +452,14 @@ class infil_component(infil_base.infil_component):
         # This ensures that K_i is consistent with theta_i.
         # But need to make sure K[0] = Ki.  ##################
         #------------------------------------------------------------        
-        for j in range(self.n_layers):
-            self.Ki_list[j] = stbc.K_of_theta( self.qi_list[j], \
-                                   self.Ks_list[j], self.qs_list[j], \
-                                   self.qr_list[j], self.lam_list[j] )
-                 
-            if (self.DEBUG):
-                print('min (Ki_list[j]) =', self.Ki_list[j].min() )
-                print('max (Ki_list[j]) =', self.Ki_list[j].max() )
+#         for j in range(self.n_layers):
+#             self.Ki_list[j] = stbc.K_of_theta( self.qi_list[j], \
+#                                    self.Ks_list[j], self.qs_list[j], \
+#                                    self.qr_list[j], self.lam_list[j] )
+#                  
+#             if (self.DEBUG):
+#                 print('min (Ki_list[j]) =', self.Ki_list[j].min() )
+#                 print('max (Ki_list[j]) =', self.Ki_list[j].max() )
                                                                   
         #---------------------------------------------------------
         # Make sure that all "save_dts" are larger or equal to
@@ -503,7 +511,7 @@ class infil_component(infil_base.infil_component):
     def initialize_computed_vars(self):
      
         dtype = 'float64'
-        self.vol_IN = self.initialize_scalar( 0, dtype=dtype)
+        self.vol_v0 = self.initialize_scalar( 0, dtype=dtype)
         self.vol_Rg = self.initialize_scalar( 0, dtype=dtype)
 
         #---------------------------------------
@@ -539,7 +547,7 @@ class infil_component(infil_base.infil_component):
         #--------------------------------------------------
         self.eta = self.build_layered_var( self.eta_list )
         self.qH  = self.build_layered_var( self.qH_list )
-
+        
         #--------------
         # For testing
         #--------------
@@ -573,7 +581,7 @@ class infil_component(infil_base.infil_component):
             self.K = np.zeros(self.nz, dtype=dtype) + self.Ki
             self.v = np.zeros(self.nz, dtype=dtype)
             #---------------------------------------------------------
-            self.IN = np.float64(0)   # (infil. rate at surface)
+            self.v0 = np.float64(0)   # (infil. rate at surface)
             self.I  = np.float64(0)   # (total infil. depth)
             self.Zw = np.float64(0)   # (wetting front depth)
             # self.Rg = np.float64(0)   # (infil. rate at water table)
@@ -602,7 +610,7 @@ class infil_component(infil_base.infil_component):
             self.K  = np.zeros((self.nz, self.ny, self.nx), dtype=dtype) 
             self.v  = np.zeros((self.nz, self.ny, self.nx), dtype=dtype)
             #---------------------------------------------------------------
-            self.IN = np.zeros([self.ny, self.nx], dtype=dtype)
+            self.v0 = np.zeros([self.ny, self.nx], dtype=dtype)
             self.I  = np.zeros([self.ny, self.nx], dtype=dtype)
             self.Zw = np.zeros([self.ny, self.nx], dtype=dtype)
             # self.Rg = np.zeros([self.ny, self.nx], dtype=dtype)
@@ -610,7 +618,6 @@ class infil_component(infil_base.infil_component):
             #--------------------------------------
             # Initialize q to qi (qi is 1D or 3D)
             #--------------------------------------
-
             if (np.size(self.qi) == self.nz):
                 for j in range(self.nz):
                     self.q[j,:,:] = self.qi[j]
@@ -628,15 +635,29 @@ class infil_component(infil_base.infil_component):
             #--------------------------------------
             # Initialize K to Ki (Ki is 1D or 3D)
             #--------------------------------------
-
             if (np.size(self.Ki) == self.nz):
                 for j in range(self.nz):
                     self.K[j,:,:] = self.Ki[j]
                 # (Can this be done with array operators instead ?)
             else:
                 self.K += self.Ki
-               
-            if (self.DEBUG): 
+
+            #----------------------------------------------------
+            # Make sure that Ks > Ki everywhere ?  (2020-01-20)
+            #----------------------------------------------------
+            # w1 = (self.Ki > self.Ks)   # boolean array
+            # if (w1.size > 0):
+            #     self.Ks[w1] = 2.0 * self.Ki[w1]
+            #----------------------------------------------------
+#             if (np.size(self.Ki) == self.nz):
+#                 for j in range(self.nz):
+#                     Ks_j = self.Ks[j,:,:]
+#                     self.Ks[j,:,:] = np.maximum(Ks_j, self.Ki[j])
+#             else:
+#                 self.Ks = np.maximum(self.Ks, self.Ki)
+           
+                    
+            if (self.DEBUG):
                 print('Initialized K to K_i.')
                 print('   min(Ki) = ', self.Ki.min() )
                 print('   max(Ki) = ', self.Ki.max() )
@@ -853,7 +874,7 @@ class infil_component(infil_base.infil_component):
         ## self.DEBUG = True
         
         #-------------------------------------------------
-        # Note: self.IN already set to 0 by initialize()
+        # Note: self.v0 already set to 0 by initialize()
         #-------------------------------------------------
         if (self.comp_status == 'Disabled'): return
         self.status = 'updating'  # (OpenMI 2.0 convention)
@@ -876,7 +897,7 @@ class infil_component(infil_base.infil_component):
         self.update_v()
         self.update_Zw()   # (not tested yet ??)
 
-        self.update_infil_rate()
+        self.update_infil_rate()    # v0, at surface
         self.adjust_infil_rate()    # ??????????
         self.update_IN_integral()
         #### self.update_Rg()
@@ -982,11 +1003,18 @@ class infil_component(infil_base.infil_component):
             p1   = self.p[1,:,:]
             Kbar = (self.K[0,:,:] + self.K[1,:,:]) / 2.0  ##############
 
+#             K0   = self.K[0,:,:]  ##### For print stmt only
+#             K1   = self.K[1,:,:]  ##### For print stmt only
+                        
             if (self.DEBUG):
                 print('###  min(p0) = ', p0.min() )
                 print('###  max(p0) = ', p0.max() )
                 print('###  min(p1) = ', p1.min() )
                 print('###  max(p1) = ', p1.max() )
+#                 print('###  min(K0) = ', K0.min() )
+#                 print('###  max(K0) = ', K0.max() )
+#                 print('###  min(K1) = ', K1.min() )
+#                 print('###  max(K1) = ', K1.max() )
                 print('###  min(Kbar) = ', Kbar.min() )
                 print('###  max(Kbar) = ', Kbar.max() )
                 print('###  min(P_total) = ', self.P_total.min() )
@@ -1559,8 +1587,14 @@ class infil_component(infil_base.infil_component):
                 S_eff = (self.q[j,:,:] - qr) / (qs - qr)      #(grid)
                 cpow  = (-c / lam)                            #(grid or scalar)
                 arg   = ((S_eff ** cpow) - 1.0) ** (1.0 / c)  #(grid)
-                self.p[j,:,:] = (pB * arg) - pA               #(grid)
 
+                #-----------------------------------------------------                
+                # (2020-01-21.  Adjust to avoid very large negatives
+                #-----------------------------------------------------
+                #######################################################
+                # self.p[j,:,:] = (pB * arg) - pA               #(grid)
+                self.p[j,:,:] = np.maximum( (pB*arg)-pA, -100.0 )
+    
                 #------------------------------------------------------
                 # S_eff = effective saturation or normalized vol frac
                 # Could be shared, but requires more storage.
@@ -1596,6 +1630,10 @@ class infil_component(infil_base.infil_component):
             print('max(pB)  =', self.pB.max() )
             print('min(pA)  =', self.pA.min() )
             print('max(pA)  =', self.pA.max() )
+            print('min(c)   =', self.c.min() )
+            print('max(c )  =', self.c.max() )
+            print('min(lam) =', self.lam.min() )
+            print('max(lam) =', self.lam.max() )
             print('min(psi) =', self.p.min() )
             print('max(psi) =', self.p.max() )
 
@@ -1950,12 +1988,13 @@ class infil_component(infil_base.infil_component):
         # Green-Ampt, etc.
         #---------------------------------------------
         if (self.SINGLE_PROFILE):    
-            self.IN = self.v[0]
-            ## self.IN = self.v[1]
+            self.v0 = self.v[0]
+            ## self.v0 = self.v[1]
         else:
-            self.IN = self.v[0,:,:]
-            ## self.IN = self.v[1,:,:]
+            self.v0 = self.v[0,:,:]
+            ## self.v0 = self.v[1,:,:]
             
+        self.IN = self.v0   # A synonym. ###########
 
 ##        print 'SINGLE_PROFILE   =', self.SINGLE_PROFILE
 ##        print 'min(IN), max(IN) =', self.IN.min(), self.IN.max()
@@ -2128,23 +2167,60 @@ class infil_component(infil_base.infil_component):
 
         for j in range(self.n_layers):        
             Ks_val = model_input.read_next(self.Ks_unit[j], self.Ks_type[j], rti)
-            if (Ks_val is not None): self.Ks_list[j] = Ks_val
+            if (Ks_val is not None):
+                #---------------------------------
+                # Make sure Ks is in valid range
+                # Could still be < Ki, however.
+                # (2020-01-21)
+                #---------------------------------
+                w1 = (Ks_val <= 0)
+                if (w1.size > 0):
+                    w2 = np.invert(w1)
+                    Ks_val[w1] = Ks_val[w2].min()  
+                #----------------------------------------
+#                 print('shape(Ks_val) =', Ks_val.shape )
+#                 print('min(Ks_val)   =', Ks_val.min() )
+#                 print('max(Ks_val)   =', Ks_val.max() )
+#                 print()
+                # sys.exit()
+                self.Ks_list[j] = Ks_val
 
+             
             Ki_val = model_input.read_next(self.Ki_unit[j], self.Ki_type[j], rti)
-            if (Ki_val is not None): self.Ki_list[j]  = Ki_val
-
+            if (Ki_val is not None): self.Ki_list[j] = Ki_val
+            
             qs_val = model_input.read_next(self.qs_unit[j], self.qs_type[j], rti)
-            if (qs_val is not None): self.qs_list[j]  = qs_val
+            if (qs_val is not None): 
+#                 print('shape(qs_val) =', qs_val.shape )
+#                 print('min(qs_val)   =', qs_val.min() )
+#                 print('max(qs_val)   =', qs_val.max() )
+#                 print()
+                self.qs_list[j] = qs_val
 
             qi_val = model_input.read_next(self.qi_unit[j], self.qi_type[j], rti)
-            if (qi_val is not None): self.qi_list[j]  = qi_val
+            if (qi_val is not None): self.qi_list[j] = qi_val
             
             qr_val = model_input.read_next(self.qr_unit[j], self.qr_type[j], rti)
-            if (qr_val is not None): self.qr_list[j]  = qr_val
+            if (qr_val is not None): self.qr_list[j] = qr_val
 
             pB_val = model_input.read_next(self.pB_unit[j], self.pB_type[j], rti)
-            if (pB_val is not None): self.pB_list[j]  = pB_val
+            if (pB_val is not None): 
+                #---------------------------------
+                # Make sure pB is in valid range
+                # (2020-01-21)
+                #---------------------------------
+                w1 = (pB_val < -3)
+                if (w1.size > 0):
+                    pB_val[w1] = -3    ####################
+                #----------------------------------------
+#                 print('shape(pB_val) =', pB_val.shape )
+#                 print('min(pB_val)   =', pB_val.min() )
+#                 print('max(pB_val)   =', pB_val.max() )
+#                 print()
+                # sys.exit()
+                self.pB_list[j] = pB_val
 
+            
             pA_val = model_input.read_next(self.pA_unit[j], self.pA_type[j], rti)
             if (pA_val is not None): self.pA_list[j]  = pA_val
 

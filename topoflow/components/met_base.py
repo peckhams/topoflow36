@@ -589,10 +589,9 @@ class met_component( BMI_base.BMI_component ):
         self.initialize_config_vars() 
         ## self.T_air_file = ''  ############################# TEST 
         ## print('self.P_file = ' + self.P_file )
+
+        ### self.read_grid_info() # NOW IN initialize_config_vars()
         
-           
-        ## print '    Calling read_grid_info()...'
-        self.read_grid_info()
         ## print '    Calling initialize_basin_vars()...'
         self.initialize_basin_vars()  # (5/14/10)
         #----------------------------------------------------
@@ -653,7 +652,15 @@ class met_component( BMI_base.BMI_component ):
         self.read_input_files()  # (initializes P)
         
         ## self.check_input_types()  # (not needed so far)
-        
+
+        #--------------------------------------------
+        # Set any input variables that are computed
+        #--------------------------------------------------
+        # NOTE:  Must be called AFTER read_input_files().
+        #--------------------------------------------------
+        print('#### CALLING set_computed_input_vars() in met_base.py...')
+        self.set_computed_input_vars()
+                
         #-----------------------
         # Initialize variables
         #-----------------------
