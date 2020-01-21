@@ -545,9 +545,9 @@ class BMI_component:
 ##            #---------------------------
 ##            # Shared infiltration vars
 ##            #---------------------------
-##            'basin_cumulative_infiltrated_water_volume':'vol_IN',
+##            'basin_cumulative_infiltrated_water_volume':'vol_v0',
 ##            'basin_cumulative_saturated_zone_infiltrated_water_volume':'vol_Rg',   ########
-##            'land_surface_water_infiltration_rate':'IN',   ### (downward_flow_rate ? remove "land"?)
+##            'land_surface_water_infiltration_rate':'v0',   ### (downward_flow_rate ? remove "land"?)
 ##            'subsurface_water_downward_flow_rate':'v',
 ##                ## 'ground_water_downward_flow_rate':'v',  ######
 ##            'water_table_recharge_rate':'Rg',  #####
@@ -966,6 +966,14 @@ class BMI_component:
         self.open_input_files()
         self.read_input_files()
 
+        #--------------------------------------------
+        # Set any input variables that are computed
+        #---------------------------------------------------
+        # NOTE:  This must be called in initialize(), AFTER
+        #        calling read_input_files().
+        #---------------------------------------------------
+        # self.set_computed_input_vars()
+        
 ##        self.open_output_files()
 
         self.status = 'initialized'  # (OpenMI 2.0 convention)
@@ -1526,6 +1534,12 @@ class BMI_component:
                 #---------------------------------------------
                 exec( "self." + var_name + " = value", {}, locals() )
 
+        #-------------------------------------
+        # Check the directories and prefixes
+        #-------------------------------------
+        # print '#### CALLING check_directories()...'
+        self.check_directories()  # (Moved here: 2020-01-21)
+        
     #   read_path_info()
     #-------------------------------------------------------------------
     def read_time_info(self):
@@ -1553,9 +1567,8 @@ class BMI_component:
 #         class bunch:
 #             def __init__(self, **kwds):
 #                 self.__dict__.update(kwds)
-# 
 #         time_info = bunch( dum = 0 )
-
+        #-----------------------------------------
         class time_info_class:
             pass
         time_info = time_info_class()
@@ -1890,6 +1903,13 @@ class BMI_component:
         #---------------------------------------
         self.read_path_info()   ###### (2016-02-12)
         self.read_time_info()   ###### (2020-01-14)
+        #---------------------------------------------
+        # May not be needed by all components.
+        # Later put grid_info in a CFG vs. RTI file?
+        # Was called by each "*_base.py" before.
+        #---------------------------------------------
+        self.read_grid_info()   # (stores rti in self, adds "da")        
+        
         # print '#### CALLING read_config_file()...'
         self.read_config_file()
         # print '#### AFTER read_config_file():'
@@ -1989,15 +2009,13 @@ class BMI_component:
         
         #--------------------------------------------
         # Set any input variables that are computed
-        #--------------------------------------------
+        #---------------------------------------------------
+        # NOTE:  This must be called in initialize(), AFTER
+        #        calling read_input_files().
+        #---------------------------------------------------
         # print '#### CALLING set_computed_input_vars()...'
-        self.set_computed_input_vars()
-        
-        #-----------------------------------------------------
-        # Not all components need this, so don't do it here.
-        #-----------------------------------------------------
-        # self.read_grid_info()   # (stores rti in self, adds "da")
-        
+        # self.set_computed_input_vars()
+     
     #   initialize_config_vars()
     #-------------------------------------------------------------------
     def set_computed_input_vars( self):
