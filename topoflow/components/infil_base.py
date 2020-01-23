@@ -34,7 +34,7 @@
 #      update_surface_influx()       #####
 #      update_infil_rate()
 #      adjust_infil_rate()           #####
-#      update_IN_integral()
+#      update_v0_integral()
 #      update_Rg()
 #      update_Rg_integral()
 #      update_I()
@@ -255,7 +255,7 @@ class infil_component( BMI_base.BMI_component):
         self.update_surface_influx()    # (P_total = P + SM)
         self.update_infil_rate()
         self.adjust_infil_rate()
-        self.update_IN_integral()
+        self.update_v0_integral()
         self.update_Rg()
         self.update_Rg_integral()
         self.update_I()   # (total infiltrated depth)
@@ -656,10 +656,10 @@ class infil_component( BMI_base.BMI_component):
       
     #   adjust_infil_rate()
     #-------------------------------------------------------------------
-    def update_IN_integral(self):
+    def update_v0_integral(self):
 
         if (self.DEBUG):
-            print('Calling update_IN_integral()...')
+            print('Calling update_v0_integral()...')
             
         #------------------------------------------------
         # Update mass total for IN, sum over all pixels
@@ -672,7 +672,7 @@ class infil_component( BMI_base.BMI_component):
             
         self.vol_IN = self.vol_v0  ## A synonym.
     
-    #   update_IN_integral()
+    #   update_v0_integral()
     #-------------------------------------------------------------------
     def update_Rg(self):
 

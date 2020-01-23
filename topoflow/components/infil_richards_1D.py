@@ -46,18 +46,33 @@ Water Resources Monograph 15, AGU.
 #      initialize_K_i()
 #      ----------------------------
 #      update()
-#      update_surface_BC()
-#      update_bottom_BC()
+#      -------------------------------
 #      update_theta()
-#      check_theta()    # (6/29/10)
-#      update_psi()
-#      update_K()
-#      update_v()
-#      update_Zw()
-#      ----------------------
-#      update_infil_rate()
-#      update_Rg()
+#      update_surface_BC_for_theta()
+#         ** check_surface_BC_for_theta()   (FUTURE)
+#      update_bottom_BC_for_theta()
+#         ** check_bottom_BC_for_theta()    (FUTURE)
+#      check_theta()
 #      update_q0()
+#      -------------------------------
+#      update_psi()
+#      update_surface_Kbar()
+#      update_surface_BC_for_psi()
+#      check_surface_BC_for_psi()
+#      update_bottom_BC_for_psi()
+#         ** check_bottom_BC_for_psi()      (FUTURE)
+#      -------------------------------
+#      update_K()
+#      -------------------------------
+#      update_v()
+#      update_surface_BC_for_v()
+#      update_bottom_BC_for_v()
+#      update_infil_rate()        (i.e.  update_v0() )
+#      -------------------------------
+#      update_Rg()
+#      update_Rg_integral()      (in infil_base.py)
+#      -------------------------------
+#      update_Zw()
 #      ----------------------
 #      open_input_files()
 #      read_input_files()
@@ -66,7 +81,7 @@ Water Resources Monograph 15, AGU.
 #      build_layered_var()    # (Moved into infil_base.py)
 
 #  Functions:
-#      Theta_TBC()          (still used)
+#      Theta_TBC()
 #      K_of_Theta_TBC()     (used by initialize_K_i())
 #      Z_Derivative_1D()    (Mar 2008)
 #      Z_Derivative_3D()    (Mar 2007)
@@ -84,6 +99,9 @@ from topoflow.components import soil_base
 from topoflow.utils import model_input
 from topoflow.utils import tf_utils  ## (for unit_test only)
 from topoflow.utils import soil_trans_BC as stbc
+
+from topoflow.utils import rtg_files  ### (2020-01-22)
+from topoflow.utils import rti_files  ### (2020-01-22)
 
 # import matplotlib.pyplot   # (not yet available on beach)
 
@@ -409,9 +427,7 @@ class infil_component(infil_base.infil_component):
         #       the initialize() function, because while some
         #       input vars may be set by read_config_file(),
         #       others must be read from files.
-        #-------------------------------------------------------- 
-        print('###### CALLING set_computed_input_vars()....')
-        
+        #--------------------------------------------------------         
         self.RICHARDS = True
         self.G_file    = ''   # (still need to be defined)
         self.gam_file  = ''
@@ -451,7 +467,10 @@ class infil_component(infil_base.infil_component):
         #------------------------------------------------------------
         # This ensures that K_i is consistent with theta_i.
         # But need to make sure K[0] = Ki.  ##################
-        #------------------------------------------------------------        
+        #------------------------------------------------------------
+        # 2020-01-22.  Including this caused immediate failure as
+        # opposed to reading a scalar value of 10^-9 from CFG file.
+        #------------------------------------------------------------                
 #         for j in range(self.n_layers):
 #             self.Ki_list[j] = stbc.K_of_theta( self.qi_list[j], \
 #                                    self.Ks_list[j], self.qs_list[j], \
@@ -584,7 +603,7 @@ class infil_component(infil_base.infil_component):
             self.v0 = np.float64(0)   # (infil. rate at surface)
             self.I  = np.float64(0)   # (total infil. depth)
             self.Zw = np.float64(0)   # (wetting front depth)
-            # self.Rg = np.float64(0)   # (infil. rate at water table)
+            self.Rg = np.float64(0)   # (infil. rate at water table)
             #---------------------------------------------------------
             # Initialize I to 1e-6 to avoid divide by zero at start?
             #---------------------------------------------------------
@@ -613,7 +632,7 @@ class infil_component(infil_base.infil_component):
             self.v0 = np.zeros([self.ny, self.nx], dtype=dtype)
             self.I  = np.zeros([self.ny, self.nx], dtype=dtype)
             self.Zw = np.zeros([self.ny, self.nx], dtype=dtype)
-            # self.Rg = np.zeros([self.ny, self.nx], dtype=dtype)
+            self.Rg = np.zeros([self.ny, self.nx], dtype=dtype)
 
             #--------------------------------------
             # Initialize q to qi (qi is 1D or 3D)
@@ -693,9 +712,12 @@ class infil_component(infil_base.infil_component):
 
         ##############################################
         # Set initial values of psi and v (11/12/10)
-        ##############################################
-        self.update_psi()
-        self.update_v()
+        #################################################
+        # NEW APPROACH; SHOULD NO LONGER BE NEEDED HERE
+        # (2020-01-23)
+        #################################################        
+#         self.update_psi()
+#         self.update_v()
         
         #-------------------------------------------------
         # Print some suggested (i.e. consistent) values
@@ -889,22 +911,38 @@ class infil_component(infil_base.infil_component):
         #------------------------------------
         # All layers processed at once
         #------------------------------------
-        self.update_surface_BC()
-        self.update_bottom_BC()
-        self.update_theta()
+        # Update psi first vs. theta ###############
+        #------------------------------------        
         self.update_psi()
+        self.update_surface_Kbar()
+        self.update_surface_BC_for_psi()
+        self.check_surface_BC_for_psi()     ###################
+        self.update_bottom_BC_for_psi()        
+        #------------------------------------
+        self.update_theta()
+        self.update_surface_BC_for_theta()
+        self.update_bottom_BC_for_theta()
+        #------------------------------------
         self.update_K()
+        ## self.update_Kbar()
+        #------------------------------------
         self.update_v()
-        self.update_Zw()   # (not tested yet ??)
-
+        self.update_surface_BC_for_v()
+        self.update_bottom_BC_for_v()
+#         print('#######  min(v0) =', self.v0.min())
+#         print('#######  max(v0) =', self.v0.max())
+#         print()
         self.update_infil_rate()    # v0, at surface
         self.adjust_infil_rate()    # ??????????
-        self.update_IN_integral()
-        #### self.update_Rg()
+        self.update_v0_integral()
+        #------------------------------------
+        self.update_Rg()
         self.update_Rg_integral()
         #### self.update_I()   # (total infiltrated depth)  ############
         self.update_q0()  # (soil moisture at surface)
-
+        #------------------------------------
+        self.update_Zw()   # (not tested yet ??)
+        
         #----------------------------------------------
         # Check for NaNs in infiltration (at surface)
         #----------------------------------------------    
@@ -953,344 +991,6 @@ class infil_component(infil_base.infil_component):
         ### self.P_total = (P_rain + SM)
 
     #   update_surface_influx()
-    #-----------------------------------------------------------------------
-    def update_surface_BC(self, REPORT=False):
-
-        #----------------------------------------------------------
-        # Notes: Boundary conditions at the surface and at the
-        #        bottom of the domain must be specified.  The
-        #        approach used here is to specify values of psi,
-        #        and to use theta(psi) (from TBC), to specify
-        #        corresponding values of theta (and maybe K?).
-        #----------------------------------------------------------
-        # At the surface, the so-called "flux boundary condition"
-        # is used prior to ponding (i.e. surface saturation).
-        # We solve the following for psi[0]:
-        #     v[0] = Kbar[0] * {1 - (psi[1] - psi[0])/dz} = r.
-        # So we get:
-        #
-        #     psi[0] = {(r/Kbar[0]) - 1} * dz + psi[1].
-        #
-        # After ponding, we have psi[0] = 0.
-        #----------------------------------------------------------
-        if (self.DEBUG):
-            print('Calling update_surface_BC()...')
-
-        if (self.dz.size == 1):
-            dz = self.dz
-        else:
-            dz = self.dz[0]
-        
-        #----------------------------------
-        # Set psi at the surface boundary
-        #----------------------------------
-        if (self.SINGLE_PROFILE):
-            r = self.P_total
-            if (self.q[0] < self.qs[0]):
-                #------------------------------
-                # Top layer is not saturated.
-                #------------------------------
-                Kbar      = (self.K[0] + self.K[1]) / 2.0  ################
-                self.p[0] = ((r / Kbar) - 1) * dz + self.p[1]
-            else:
-                #--------------------------
-                # Top layer is saturated.
-                #--------------------------
-                self.p[0] = 0.0
-                Kbar      = r   # (just for report at end)
-        else:
-            p0   = self.p[0,:,:]
-            p1   = self.p[1,:,:]
-            Kbar = (self.K[0,:,:] + self.K[1,:,:]) / 2.0  ##############
-
-#             K0   = self.K[0,:,:]  ##### For print stmt only
-#             K1   = self.K[1,:,:]  ##### For print stmt only
-                        
-            if (self.DEBUG):
-                print('###  min(p0) = ', p0.min() )
-                print('###  max(p0) = ', p0.max() )
-                print('###  min(p1) = ', p1.min() )
-                print('###  max(p1) = ', p1.max() )
-#                 print('###  min(K0) = ', K0.min() )
-#                 print('###  max(K0) = ', K0.max() )
-#                 print('###  min(K1) = ', K1.min() )
-#                 print('###  max(K1) = ', K1.max() )
-                print('###  min(Kbar) = ', Kbar.min() )
-                print('###  max(Kbar) = ', Kbar.max() )
-                print('###  min(P_total) = ', self.P_total.min() )
-                print('###  max(P_total) = ', self.P_total.max() )
-                print()
-                             
-            #-------------------------------------
-            # Where is top layer NOT saturated ?
-            #-------------------------------------
-            ## w1 = np.where( self.p[0,:,:] <  0)
-            #-----------------------------------------------------
-            # This makes w1 an array of True or False and should
-            # be faster.  Don't need to check if w1 is empty.
-            #-----------------------------------------------------
-            w1 = ( self.q[0,:,:] <  self.qs[0,:,:] )
-            if (self.P_total.size > 1):   ## BUG FIX: 2019-10-29
-                r = self.P_total[ w1 ]
-            else:
-                r = self.P_total
-            p0[w1] = ((r / Kbar[w1]) - 1) * dz + p1[w1]            
-            #----------------------------------- 
-            # This uses WHERE in the usual way
-            #-----------------------------------           
-#             w1 = np.where( self.q[0,:,:] <  self.qs[0,:,:] )
-#             n1 = w1[0].size     
-#             if (n1 != 0):
-#                 r      = self.P_total[ w1 ]  ########
-#                 p0[w1] = ((r / Kbar[w1]) - 1) * dz + p1[w1]
-
-            #---------------------------------
-            # Where is top layer saturated ?
-            #---------------------------------
-            ## w2 = np.where( self.p[0,:,:] >= 0 ) 
-            #-------------------------------------------------- 
-            ### w2 = ( self.q[0,:,:] >= self.qs[0,:,:] )
-            w2 = np.invert( w1 )
-            p0[w2] = 0.0
-            #----------------------------------- 
-            # This uses WHERE in the usual way
-            #-----------------------------------                 
-#             w2 = np.where( self.q[0,:,:] >= self.qs[0,:,:] )
-#             n2 = w2[0].size
-#             ## n2 = (self.rti.n_pixels - n1)                
-#             if (n2 != 0):
-#                 p0[w2] = 0.0
-
-            #----------------------------------                
-            # Set pressure head for top layer
-            #----------------------------------
-            self.p[0,:,:] = p0
-            if (self.DEBUG):
-                print('###  min(p0) = ', p0.min(), '(final)' )
-                print('###  max(p0) = ', p0.max(), '(final)' )
-            
-        #------------------------
-        # Check for stability ?
-        #------------------------
-        if (self.CHECK_STABILITY):
-            if (self.SINGLE_PROFILE):
-                wpos = (self.p[0] > 0)
-            else:
-                wpos = (self.p[0,:,:] > 0)
-            npos = wpos.sum()
-            if (npos > 0):
-                print('############################################')
-                print('ERROR in update_surface_BC():')
-                print('   Some pressure head values are positive.')
-                print('   Trying reducing timestep dt in CFG')
-                print('   and check dz and nz for each layer.')
-                print('############################################')
-                print()
-                self.DONE = True
-                sys.exit()
-                                                 
-        #------------------------------------
-        # Set theta at the surface boundary
-        #------------------------------------
-        ## print('SINGLE_PROFILE = ' + str(self.SINGLE_PROFILE) )  #######
-        if (self.SINGLE_PROFILE):
-            psi     = self.p[0]        # [meters]
-            theta_s = self.qs[0]
-            theta_r = self.qr[0]
-            psi_B   = self.pB[0]
-            psi_A   = self.pA[0]
-            c       = self.c[0]
-            Lambda  = self.lam[0]
-            self.q[0] = stbc.theta_of_psi(psi, theta_s, theta_r, \
-                                  psi_B, psi_A, c, Lambda)
-#             self.q[0] = Theta_TBC(psi, theta_s, theta_r, \
-#                                   psi_B, psi_A, c, Lambda)
-        else:
-            #----------------------------------------
-            # Now checking if ndim > 1 (2019-10-29)
-            #----------------------------------------
-            psi = self.p[0,:,:]    # [meters]
-            #-----------------------------
-            if (self.qs.ndim > 1):
-                theta_s = self.qs[0,:,:]
-            else:
-                theta_s = self.qs[0]
-            #-----------------------------
-            if (self.qr.ndim > 1):
-                theta_r = self.qr[0,:,:]
-            else:
-                theta_r = self.qr[0]
-            #-----------------------------
-            if (self.pB.ndim > 1):
-                psi_B = self.pB[0,:,:]
-            else:
-                psi_B = self.pB[0]
-            #------------------------------
-            if (self.pA.ndim > 1):
-                psi_A = self.pA[0,:,:]
-            else:
-                psi_A = self.pA[0]
-            #------------------------------
-            if (self.c.ndim > 1):
-                c = self.c[0,:,:]
-            else:
-                c = self.c[0]
-            #------------------------------
-            if (self.lam.ndim > 1):               
-                Lambda = self.lam[0,:,:]
-            else:
-                Lambda = self.lam[0]
-            #------------------------------
-            self.q[0,:,:] = stbc.theta_of_psi(psi, theta_s, theta_r, \
-                                      psi_B, psi_A, c, Lambda)
-#             self.q[0,:,:] = Theta_TBC(psi, theta_s, theta_r, \
-#                                       psi_B, psi_A, c, Lambda)
-
-        #----------------
-        # For debugging
-        #----------------
-        if (self.DEBUG and self.SINGLE_PROFILE):
-            print('In update_surface_BC():')
-            print('theta[0] =', self.q[0] )
-            print('theta[1] =', self.q[1] )
-            print('psi[0]   =', self.p[0])
-            print('psi[1]   =', self.p[1])
-            print('r        =', r )
-            print('Kbar     =', Kbar )
-            print('(r/Kbr - 1) =', ((r/Kbar) - 1))
-
-    #   update_surface_BC()
-    #-----------------------------------------------------------------------
-    ## def update_bottom_BC(self, REPORT=False, BC='WATER_TABLE'):
-    def update_bottom_BC(self, REPORT=False, BC='NO_FLOW'):
-        
-        #-----------------------------------------------------------
-        # Notes: Boundary conditions at the surface and at the
-        #        bottom of the domain must be specified.  The
-        #        approach used here is to specify values of psi,
-        #        and to use theta(psi) (from TBC), to specify
-        #        corresponding values of theta (and maybe K?).
-        #-----------------------------------------------------------
-        # At the bottom, one of 3 BCs can be used:
-        #
-        # (1) gravity drainage:  no gradient in capillary pressure
-        #                        (recall that H = (psi - z))
-        #                           =>  d/dz(psi) = 0
-        #                           =>  psi[n-1] = psi[n-2].
-        #
-        # (2) no flow:           v=0 => d/dz(psi) = 1
-        #                           =>  psi[n-1] = psi[n-2] + dz
-        #
-        # (3) water table:       psi[n-1] = 0
-        #
-        # (4) fixed:             psi[n-1] = (initial value always)
-        #
-        #-----------------------------------------------------------
-        if (self.DEBUG):
-            print('Calling update_bottom_BC()...')
-
-        m = (self.nz - 1)
-        
-        #----------------------------------
-        # Set psi at the bottom boundary
-        #----------------------------------
-        if (BC == 'WATER_TABLE'):
-            if (self.SINGLE_PROFILE):
-                self.p[m] = 0.0
-            else:
-                self.p[m,:,:] = 0.0
-        elif (BC == 'GRAVITY_DRAINAGE'):
-            if (self.SINGLE_PROFILE):
-                self.p[m] = self.p[m-1]
-            else:
-                self.p[m,:,:] = self.p[m-1,:,:]
-        elif (BC == 'NO_FLOW'):
-            if (self.dz.size == 1):
-                dz = self.dz
-            else:
-                dz = self.dz[m]
-            #----------------------------------------------
-            # Should we use self.dz[m] or self.dz[m-1] ??
-            #----------------------------------------------
-            if (self.SINGLE_PROFILE):
-                self.p[m] = self.p[m-1] + dz
-            else:
-                self.p[m,:,:] = self.p[m-1,:,:] + dz
-##        elif (BC == 'FIXED'):
-##            if (self.SINGLE_PROFILE):
-##                self.p[m] = value at time zero
-##            else:
-##                self.p[m,:,:] = value at time zero
-                
-        #-----------------------------------
-        # Set theta at the bottom boundary
-        #-----------------------------------
-        if (self.SINGLE_PROFILE):
-            psi     = self.p[m]       # [meters]
-            theta_s = self.qs[m]
-            theta_r = self.qr[m]
-            psi_B   = self.pB[m]
-            psi_A   = self.pA[m]
-            c       = self.c[m]
-            Lambda  = self.lam[m]
-            self.q[m] = stbc.theta_of_psi(psi, theta_s, theta_r, \
-                                  psi_B, psi_A, c, Lambda)
-#             self.q[m] = Theta_TBC(psi, theta_s, theta_r, \
-#                                   psi_B, psi_A, c, Lambda)
-        else:
-            #----------------------------------------
-            # Now checking if ndim > 1 (2019-10-29)
-            #----------------------------------------
-            psi = self.p[m,:,:]   # [meters]
-            #---------------------------------------
-            if (self.qs.ndim > 1):
-                theta_s = self.qs[m,:,:]
-            else:
-                theta_s = self.qs[m]
-            #-----------------------------
-            if (self.qr.ndim > 1):
-                theta_r = self.qr[m,:,:]
-            else:
-                theta_r = self.qr[m]
-            #-----------------------------
-            if (self.pB.ndim > 1):
-                psi_B = self.pB[m,:,:]
-            else:
-                psi_B = self.pB[m]
-            #------------------------------
-            if (self.pA.ndim > 1):
-                psi_A = self.pA[m,:,:]
-            else:
-                psi_A = self.pA[m]
-            #------------------------------
-            if (self.c.ndim > 1):
-                c = self.c[m,:,:]
-            else:
-                c = self.c[m]
-            #------------------------------
-            if (self.lam.ndim > 1):               
-                Lambda = self.lam[m,:,:]
-            else:
-                Lambda = self.lam[m]
-            #------------------------------            
-            self.q[m,:,:] = stbc.theta_of_psi(psi, theta_s, theta_r, \
-                                      psi_B, psi_A, c, Lambda)
-#             self.q[m,:,:] = Theta_TBC(psi, theta_s, theta_r, \
-#                                       psi_B, psi_A, c, Lambda)
-
-        #----------------
-        # For debugging
-        #----------------
-        ## if (self.SINGLE_PROFILE):
-        if (self.DEBUG and self.SINGLE_PROFILE):
-            print('In update_bottom_BC():')
-            print('theta[m-1] =', self.q[m-1])           
-            print('theta[m]   =', self.q[m])
-            print('psi[m-1]   =', self.p[m-1])
-            print('psi[m]     =', self.p[m] )
-            print(' ')
-            
-    #   update_bottom_BC()
     #-----------------------------------------------------------------------
     def update_theta(self, REPORT=False):
 
@@ -1362,8 +1062,8 @@ class infil_component(infil_base.infil_component):
             d_theta = (-2.0 * self.dt / z_diff) * (term1 - term2)
 
             #-----------------------------------------------
-            # Surface and bottom values of theta were
-            # already set in update_boundary_conditions().
+            # Surface and bottom values of theta will be
+            # set in update_boundary_conditions().
             # dtheta has "wrong" values at those places.
             #-----------------------------------------------
             d_theta[0]         = 0.0 
@@ -1404,6 +1104,31 @@ class infil_component(infil_base.infil_component):
         #----------------------------------------------
         self.q += d_theta
 
+        ###################################################################
+        ###################################################################
+        ENFORCE_RANGE = True
+        if (ENFORCE_RANGE):
+            #--------------------------------------------------
+            # Note:  This was needed for Baro_Gam_1min basin.
+            #--------------------------------------------------
+            
+            #--------------------------------------------
+            # Don't allow theta > theta_s. (2020-01-23) 
+            # Here, values are updated "in place".
+            #--------------------------------------------
+            np.minimum( self.q, self.qs, self.q)
+
+            #-----------------------------------------------------
+            # Don't allow theta <= theta_r. (2020-01-23)
+            # If theta = theta_r, then S_eff has divide by zero.
+            #-----------------------------------------------------
+            tol = 0.001
+            for j in range(n_dz):
+                qmin = self.qr[j] + tol
+                np.maximum( self.q[j,:,:], qmin, self.q[j,:,:] )
+        ###################################################################
+        ###################################################################
+           
         #-----------------------------------------------
         # Option to check stability, in the sense that
         # theta values are still in range.
@@ -1464,6 +1189,169 @@ class infil_component(infil_base.infil_component):
                 print()
 
     #   check_theta()
+    #-----------------------------------------------------------------------
+    def update_surface_BC_for_theta(self, REPORT=False):
+
+        if (self.DEBUG):
+            print('Calling update_surface_BC_for_theta()...')
+                                                         
+        #------------------------------------
+        # Set theta at the surface boundary
+        #------------------------------------
+        ## print('SINGLE_PROFILE = ' + str(self.SINGLE_PROFILE) )  #######
+        if (self.SINGLE_PROFILE):
+            psi     = self.p[0]        # [meters]
+            theta_s = self.qs[0]
+            theta_r = self.qr[0]
+            psi_B   = self.pB[0]
+            psi_A   = self.pA[0]
+            c       = self.c[0]
+            Lambda  = self.lam[0]
+            self.q[0] = stbc.theta_of_psi(psi, theta_s, theta_r, \
+                                  psi_B, psi_A, c, Lambda)
+#             self.q[0] = Theta_TBC(psi, theta_s, theta_r, \
+#                                   psi_B, psi_A, c, Lambda)
+        else:
+            #----------------------------------------
+            # Now checking if ndim > 1 (2019-10-29)
+            #----------------------------------------
+            psi = self.p[0,:,:]    # [meters]
+            #-----------------------------
+            if (self.qs.ndim > 1):
+                theta_s = self.qs[0,:,:]
+            else:
+                theta_s = self.qs[0]
+            #-----------------------------
+            if (self.qr.ndim > 1):
+                theta_r = self.qr[0,:,:]
+            else:
+                theta_r = self.qr[0]
+            #-----------------------------
+            if (self.pB.ndim > 1):
+                psi_B = self.pB[0,:,:]
+            else:
+                psi_B = self.pB[0]
+            #------------------------------
+            if (self.pA.ndim > 1):
+                psi_A = self.pA[0,:,:]
+            else:
+                psi_A = self.pA[0]
+            #------------------------------
+            if (self.c.ndim > 1):
+                c = self.c[0,:,:]
+            else:
+                c = self.c[0]
+            #------------------------------
+            if (self.lam.ndim > 1):               
+                Lambda = self.lam[0,:,:]
+            else:
+                Lambda = self.lam[0]
+            #------------------------------
+            self.q[0,:,:] = stbc.theta_of_psi(psi, theta_s, theta_r, \
+                                      psi_B, psi_A, c, Lambda)
+#             self.q[0,:,:] = Theta_TBC(psi, theta_s, theta_r, \
+#                                       psi_B, psi_A, c, Lambda)
+
+        #----------------
+        # For debugging
+        #----------------
+        if (self.DEBUG and self.SINGLE_PROFILE):
+            print('In update_surface_BC_for_theta():')
+            print('theta[0] =', self.q[0] )
+            print('theta[1] =', self.q[1] )
+
+    #   update_surface_BC_for_theta()
+    #-----------------------------------------------------------------------
+    def update_bottom_BC_for_theta(self, REPORT=False): 
+
+        if (self.DEBUG):
+            print('Calling update_bottom_BC_for_theta()...')
+
+        m = (self.nz - 1)
+                            
+        #-----------------------------------
+        # Set theta at the bottom boundary
+        #-----------------------------------
+        if (self.SINGLE_PROFILE):
+            psi     = self.p[m]       # [meters]
+            theta_s = self.qs[m]
+            theta_r = self.qr[m]
+            psi_B   = self.pB[m]
+            psi_A   = self.pA[m]
+            c       = self.c[m]
+            Lambda  = self.lam[m]
+            self.q[m] = stbc.theta_of_psi(psi, theta_s, theta_r, \
+                                  psi_B, psi_A, c, Lambda)
+#             self.q[m] = Theta_TBC(psi, theta_s, theta_r, \
+#                                   psi_B, psi_A, c, Lambda)
+        else:
+            #----------------------------------------
+            # Now checking if ndim > 1 (2019-10-29)
+            #----------------------------------------
+            psi = self.p[m,:,:]   # [meters]
+            #---------------------------------------
+            if (self.qs.ndim > 1):
+                theta_s = self.qs[m,:,:]
+            else:
+                theta_s = self.qs[m]
+            #-----------------------------
+            if (self.qr.ndim > 1):
+                theta_r = self.qr[m,:,:]
+            else:
+                theta_r = self.qr[m]
+            #-----------------------------
+            if (self.pB.ndim > 1):
+                psi_B = self.pB[m,:,:]
+            else:
+                psi_B = self.pB[m]
+            #------------------------------
+            if (self.pA.ndim > 1):
+                psi_A = self.pA[m,:,:]
+            else:
+                psi_A = self.pA[m]
+            #------------------------------
+            if (self.c.ndim > 1):
+                c = self.c[m,:,:]
+            else:
+                c = self.c[m]
+            #------------------------------
+            if (self.lam.ndim > 1):               
+                Lambda = self.lam[m,:,:]
+            else:
+                Lambda = self.lam[m]
+            #------------------------------            
+            self.q[m,:,:] = stbc.theta_of_psi(psi, theta_s, theta_r, \
+                                      psi_B, psi_A, c, Lambda)
+#             self.q[m,:,:] = Theta_TBC(psi, theta_s, theta_r, \
+#                                       psi_B, psi_A, c, Lambda)
+
+        #----------------
+        # For debugging
+        #----------------
+        if (self.DEBUG and self.SINGLE_PROFILE):
+            print('In update_bottom_BC_for_theta():')
+            print('theta[m-1] =', self.q[m-1])           
+            print('theta[m]   =', self.q[m])
+            print(' ')
+            
+    #   update_bottom_BC_for_theta()
+    #-------------------------------------------------------------------
+    def update_q0(self):
+
+        #------------------------------------------------
+        # NOTE:  q0 is symbol for theta at the surface.
+        #        See update_surface_BC_for_theta().
+        #------------------------------------------------
+        if (self.DEBUG):
+            print('Calling update_q0()...')
+            
+        if (self.ALL_SCALARS): 
+            self.q0 = self.q[0]
+        else:    
+            self.q0 = self.q[0,:,:]
+            
+    #   update_q0()
+    #-----------------------------------------------------------------------
     #-----------------------------------------------------------------------
     def update_psi(self, REPORT=False):
 
@@ -1586,6 +1474,18 @@ class infil_component(infil_base.infil_component):
                 #------------------------------------------------
                 S_eff = (self.q[j,:,:] - qr) / (qs - qr)      #(grid)
                 cpow  = (-c / lam)                            #(grid or scalar)
+                #-----------------------------------------------------                
+                Smin = S_eff.min()
+                Smax = S_eff.max()
+                if (Smin < 0):
+                    print('####### ERROR:  min(S_eff) < 0.)')
+                    print('#######  min(S_eff) =', Smin)
+                    # sys.exit()
+                if (Smax > 1):
+                    print('####### ERROR:  max(S_eff) > 1.)')
+                    print('#######  max(S_eff) =', Smax)
+                    # sys.exit()
+                #-----------------------------------------------------                               
                 arg   = ((S_eff ** cpow) - 1.0) ** (1.0 / c)  #(grid)
 
                 #-----------------------------------------------------                
@@ -1612,6 +1512,7 @@ class infil_component(infil_base.infil_component):
             #print,' '
 
         if (self.DEBUG):
+        ### if (True):
             print('In update_psi():')
             if (self.SINGLE_PROFILE):
                 m = (self.nz - 1)
@@ -1639,6 +1540,279 @@ class infil_component(infil_base.infil_component):
 
                         
     #   update_psi()
+    #-----------------------------------------------------------------------
+    def update_surface_Kbar(self):
+
+        #------------------------------------------------------ 
+        # Note:  This is needed by update_surface_BC_for_psi.
+        #        That function will only use Kbar in the case
+        #        where unsaturated (i.e. theta < theta_s).
+        #------------------------------------------------------
+
+        #--------------------------------------    
+        # Simplest method: Arithmetic average
+        #--------------------------------------
+        if (self.SINGLE_PROFILE):
+            self.Kbar = (self.K[0] + self.K[1]) / 2.0
+        else:
+            self.Kbar = (self.K[0,:,:] + self.K[1,:,:]) / 2.0
+            
+    #   update_surface_Kbar()
+    #-----------------------------------------------------------------------
+    def update_surface_BC_for_psi(self, REPORT=False):
+
+        #----------------------------------------------------------
+        # Notes: Boundary conditions at the surface and at the
+        #        bottom of the domain must be specified.  The
+        #        approach used here is to specify values of psi,
+        #        and to use theta(psi) (from TBC), to specify
+        #        corresponding values of theta (and maybe K?).
+        #----------------------------------------------------------
+        # At the surface, the so-called "flux boundary condition"
+        # is used prior to ponding (i.e. surface saturation).
+        # We solve the following for psi[0]:
+        #     v[0] = Kbar[0] * {1 - (psi[1] - psi[0])/dz} = r.
+        # So we get:
+        #
+        #     psi[0] = {(r/Kbar[0]) - 1} * dz + psi[1].
+        #
+        # After ponding, we have psi[0] = 0.
+        #----------------------------------------------------------
+        if (self.DEBUG):
+            print('Calling update_surface_BC()...')
+
+        if (self.dz.size == 1):
+            dz = self.dz
+        else:
+            dz = self.dz[0]
+        
+        #----------------------------------
+        # Set psi at the surface boundary
+        #----------------------------------
+        Kbar = self.Kbar
+        #----------------------------
+        if (self.SINGLE_PROFILE):
+            r = self.P_total
+            if (self.q[0] < self.qs[0]):
+                #------------------------------
+                # Top layer is not saturated.
+                #------------------------------
+                self.p[0] = ((r / Kbar) - 1) * dz + self.p[1]
+            else:
+                #--------------------------
+                # Top layer is saturated.
+                #--------------------------
+                self.p[0] = 0.0
+                Kbar      = r   # (just for report at end)
+        else:
+            p0   = self.p[0,:,:]
+            p1   = self.p[1,:,:]
+
+#             K0   = self.K[0,:,:]  ##### For print stmt only
+#             K1   = self.K[1,:,:]  ##### For print stmt only
+                        
+            if (self.DEBUG):
+                print('###  min(p0) = ', p0.min() )
+                print('###  max(p0) = ', p0.max() )
+                print('###  min(p1) = ', p1.min() )
+                print('###  max(p1) = ', p1.max() )
+#                 print('###  min(K0) = ', K0.min() )
+#                 print('###  max(K0) = ', K0.max() )
+#                 print('###  min(K1) = ', K1.min() )
+#                 print('###  max(K1) = ', K1.max() )
+                print('###  min(Kbar) = ', Kbar.min() )
+                print('###  max(Kbar) = ', Kbar.max() )
+                print('###  min(P_total) = ', self.P_total.min() )
+                print('###  max(P_total) = ', self.P_total.max() )
+                print()
+                             
+            #-------------------------------------
+            # Where is top layer NOT saturated ?
+            #-------------------------------------
+            ## w1 = np.where( self.p[0,:,:] <  0)
+            #-----------------------------------------------------
+            # This makes w1 an array of True or False and should
+            # be faster.  Don't need to check if w1 is empty.
+            #-----------------------------------------------------
+            w1 = ( self.q[0,:,:] <  self.qs[0,:,:] )
+            if (self.P_total.size > 1):   ## BUG FIX: 2019-10-29
+                r = self.P_total[ w1 ]
+            else:
+                r = self.P_total
+            p0[w1] = ((r / Kbar[w1]) - 1) * dz + p1[w1]            
+            #----------------------------------- 
+            # This uses WHERE in the usual way
+            #-----------------------------------           
+#             w1 = np.where( self.q[0,:,:] <  self.qs[0,:,:] )
+#             n1 = w1[0].size     
+#             if (n1 != 0):
+#                 r      = self.P_total[ w1 ]  ########
+#                 p0[w1] = ((r / Kbar[w1]) - 1) * dz + p1[w1]
+
+            #---------------------------------
+            # Where is top layer saturated ?
+            #---------------------------------
+            ## w2 = np.where( self.p[0,:,:] >= 0 ) 
+            #-------------------------------------------------- 
+            ### w2 = ( self.q[0,:,:] >= self.qs[0,:,:] )
+            w2 = np.invert( w1 )
+            p0[w2] = 0.0
+            #----------------------------------- 
+            # This uses WHERE in the usual way
+            #-----------------------------------                 
+#             w2 = np.where( self.q[0,:,:] >= self.qs[0,:,:] )
+#             n2 = w2[0].size
+#             ## n2 = (self.rti.n_pixels - n1)                
+#             if (n2 != 0):
+#                 p0[w2] = 0.0
+
+            #----------------------------------                
+            # Set pressure head for top layer
+            #----------------------------------
+            self.p[0,:,:] = p0
+            if (self.DEBUG):
+                print('###  min(p0) = ', p0.min(), '(final)' )
+                print('###  max(p0) = ', p0.max(), '(final)' )
+
+    #   update_surface_BC_for_psi()
+    #-----------------------------------------------------------------------
+    def check_surface_BC_for_psi(self):
+
+        #------------------------
+        # Check for stability ?
+        #------------------------
+        if not(self.CHECK_STABILITY):
+           return
+           
+        if (self.SINGLE_PROFILE):
+            wpos = (self.p[0] > 0)
+        else:
+            wpos = (self.p[0,:,:] > 0)
+
+        npos = wpos.sum()
+        if (npos == 0):
+            return
+            
+        #---------------------------------------------------
+        # (2020-01-23) Assume that ponding has occurred at
+        # at these locations and set psi = 0.  This will
+        # cause theta to be set to theta_s.
+        #---------------------------------------------------
+#         print('############################################')
+#         print('WARNING in update_surface_BC():')
+#         print('   Ponding has occurred for some cells.')
+#         print('   npos =', npos)
+#         print('############################################')
+#         print()
+        self.p[0][wpos] = -1e-6               
+        ## self.p[0][wpos] = -1e-4
+        ## self.p[0][wpos] = 0.0
+        
+        ##########################################################
+#         max_pos = self.p[0].max()
+#         min_pos = (self.p[0])[wpos].min()
+#         max_neg = (self.p[0])[self.p[0] < 0].max()
+#         min_neg = (self.p[0])[self.p[0] < 0].min()
+#         print('############################################')
+#         print('ERROR in update_surface_BC():')
+#         print('   Some pressure head values are positive.')
+#         print('   n_pos =', npos)
+#         print('   Max pos. value =', max_pos)
+#         print('   Min pos. value =', min_pos)
+#         print('   Max neg. value =', max_neg)
+#         print('   Min neg. value =', min_neg)
+#         print('   Trying reducing timestep dt in CFG')
+#         print('   and check dz and nz for each layer.')
+#         print('############################################')
+#         print()
+#         #-----------------------------------------------------
+#         # Write a mask grid (RTG format) with problem cells.
+#         #-----------------------------------------------------
+#         z = np.zeros( (self.ny, self.nx) )
+#         z[ wpos ] = 1.0
+#         pos_file = (self.site_prefix + '_POS_PSI2.rtg')
+#         rti_file = (self.site_prefix + '.rti')
+#         grid_info = rti_files.read_info( rti_file, REPORT=False )
+#         rtg_files.write_grid(z, pos_file, grid_info, RTG_type='FLOAT')
+#         self.DONE = True
+#         sys.exit()    
+    
+    #   check_surface_BC_for_psi()
+    #-----------------------------------------------------------------------
+    ## def update_bottom_BC_for_psi(self, REPORT=False, BC='WATER_TABLE'):
+    ## def update_bottom_BC_for_psi(self, REPORT=False, BC='NO_FLOW'):
+    def update_bottom_BC_for_psi(self, REPORT=False, BC='GRAVITY_DRAINAGE'):
+
+        #-----------------------------------------------------------
+        # Notes: Boundary conditions at the surface and at the
+        #        bottom of the domain must be specified.  The
+        #        approach used here is to specify values of psi,
+        #        and to use theta(psi) (from TBC), to specify
+        #        corresponding values of theta (and maybe K?).
+        #-----------------------------------------------------------
+        # At the bottom, one of 3 BCs can be used:
+        #
+        # (1) gravity drainage:  no gradient in capillary pressure
+        #                        (recall that H = (psi - z))
+        #                           =>  d/dz(psi) = 0
+        #                           =>  psi[n-1] = psi[n-2].
+        #
+        # (2) no flow:           v=0 => d/dz(psi) = 1
+        #                           =>  psi[n-1] = psi[n-2] + dz
+        #
+        # (3) water table:       psi[n-1] = 0
+        #
+        # (4) fixed:             psi[n-1] = (initial value always)
+        #
+        #-----------------------------------------------------------
+        if (self.DEBUG):
+            print('Calling update_bottom_BC_for_psi()...')
+
+        m = (self.nz - 1)
+        
+        #----------------------------------
+        # Set psi at the bottom boundary
+        #----------------------------------
+        if (BC == 'WATER_TABLE'):
+            if (self.SINGLE_PROFILE):
+                self.p[m] = 0.0
+            else:
+                self.p[m,:,:] = 0.0
+        elif (BC == 'GRAVITY_DRAINAGE'):
+            if (self.SINGLE_PROFILE):
+                self.p[m] = self.p[m-1]
+            else:
+                self.p[m,:,:] = self.p[m-1,:,:]
+        elif (BC == 'NO_FLOW'):
+            if (self.dz.size == 1):
+                dz = self.dz
+            else:
+                dz = self.dz[m]
+            #----------------------------------------------
+            # Should we use self.dz[m] or self.dz[m-1] ??
+            #----------------------------------------------
+            if (self.SINGLE_PROFILE):
+                self.p[m] = self.p[m-1] + dz
+            else:
+                self.p[m,:,:] = self.p[m-1,:,:] + dz
+##        elif (BC == 'FIXED'):
+##            if (self.SINGLE_PROFILE):
+##                self.p[m] = value at time zero
+##            else:
+##                self.p[m,:,:] = value at time zero
+
+        #----------------
+        # For debugging
+        #----------------
+        ## if (self.SINGLE_PROFILE):
+        if (self.DEBUG and self.SINGLE_PROFILE):
+            print('In update_bottom_BC_for_psi():')
+            print('psi[m-1]   =', self.p[m-1])
+            print('psi[m]     =', self.p[m] )
+            print(' ')
+            
+    #   update_bottom_BC_for_psi()
+    #-----------------------------------------------------------------------
     #-----------------------------------------------------------------------
     def update_K(self, REPORT=False):
 
@@ -1807,11 +1981,6 @@ class infil_component(infil_base.infil_component):
             K_bar  = Z_Forward_Average( self.K )
             self.v = K_bar * (1.0 - dp_dz)   # (bottom of cell)
 
-            #-------------------
-            # See Notes above.
-            #-------------------
-            m = self.nz - 1
-            self.v[ m ] = self.v[ m-1 ]
         else:
             #----------------------------------------
             # Theta, psi, K and v are all 3D arrays
@@ -1821,12 +1990,6 @@ class infil_component(infil_base.infil_component):
             dp_dz  = Z_Derivative_3D( self.p, self.dz )
             K_bar  = Z_Forward_Average( self.K )
             self.v = K_bar * (1.0 - dp_dz)   # (bottom of cell)
-            
-            #-------------------
-            # See Notes above.
-            #-------------------
-            m = self.nz - 1
-            self.v[ m,:,: ] = self.v[ m-1,:,: ]
         
         #----------------
         # For debugging
@@ -1838,120 +2001,56 @@ class infil_component(infil_base.infil_component):
 ##        print 'shape(vB) =', np.shape(vB)
 ##        print 'shape(v)  =', np.shape(self.v)
 
-        #-----------------------------------
+        #-----------------------------------------
+        # NOW DONE in update_Rg().  (2020-01-23)
         # Return flow rate in bottom layer
-        #-----------------------------------
-        if (self.SINGLE_PROFILE):    
-            self.Rg = self.v[self.nz - 1]
-        else:    
-            self.Rg = self.v[self.nz - 1,:,:]
+        #-----------------------------------------
+#         if (self.SINGLE_PROFILE):    
+#             self.Rg = self.v[self.nz - 1]
+#         else:    
+#             self.Rg = self.v[self.nz - 1,:,:]
 
         if (self.DEBUG):
             print('min(v), max(v) =', self.v.min(), self.v.max())
         
     #   update_v()
     #-----------------------------------------------------------------------
-    def update_Zw(self, REPORT=False):
-
-        #------------------------------------------------------------
-        # Note: This procedure attempts to identify the depth of the
-        #       wetting front from examination of the theta values.
-
-        #       Notice that it is not assumed that the soil moisture
-        #       profile is a decreasing function from surface down.
-        #       If soil moisture profile starts to increase as we
-        #       approach the water table, this should still work.
-
-        #       Notice also that limiting theta value may not be
-        #       equal to theta_s.  For example, it approaches a
-        #       smaller value for a sustained (R lt K_s).
-        #------------------------------------------------------------
-        if (self.DEBUG):
-            print('Calling update_Zw()...')
+    def update_surface_BC_for_v(self):
+ 
+        #--------------------------------------------------       
+        # NOTE:  IS THIS STILL OKAY AFTER PONDING OCCURS?
+        #--------------------------------------------------
+        
+        #-----------------------
+        # Set BC at the surface
+        #------------------------
+        if (self.SINGLE_PROFILE):
+            self.v[0] = self.P_total
+        else:
+            self.v[0,:,:] = self.P_total
+ 
+    #   update_surface_BC_for_v()
+    #-----------------------------------------------------------------------
+    def update_bottom_BC_for_v(self):
+      
+        #-----------------------
+        # Set BC at the bottom
+        #------------------------
+        m = self.nz - 1
             
         if (self.SINGLE_PROFILE):    
-            q_below = np.roll(self.q, -1, axis=0)
-            diff = (self.q - q_below)
-            diff[self.nz - 1] = np.float64(0)
-            indices = np.where(diff > 0)        # (must be > not >=)
-            nd = indices[0].size    
-            
-            if (nd == 0):    
-                #----------------------------------
-                # Wetting front is at the surface
-                #----------------------------------------------
-                # This can happen for an equilibrium profile
-                # that is monotonically increasing with depth
-                # or for case where theta = theta_i for all z
-                #----------------------------------------------
-                self.Zw = np.float64(0)
-            else:    
-                imax = indices[0][nd - 1]  ########################
-                
-                #----------------------------------------------
-                # Get min and max theta of decreasing section
-                #----------------------------------------------
-                frac = np.float64(0.2)
-                tmax = np.nanmax( self.q[indices] )
-                tmin = np.nanmin( self.q[indices] )
-                tmid = tmin + frac * (tmax - tmin)
-                w    = np.where( self.q[0: (imax+1)] > tmid )
-                nw2  = np.size( w[0] )
-                if (nw2 > 0):    
-                    imax2 = w[0][nw2 - 1]   ###################
-                    self.Zw = imax2 * self.dz
-                else:    
-                    self.Zw = np.float64(0)         #####  IS THIS RIGHT ?
-        else:    
-            
-            q_below = np.roll( self.q, -1, axis=0 )
-            diff = (self.q - q_below)
-            diff[self.nz - np.int32(1),:,:] = np.float64(0)
-            n_dz = self.dz.size     #(either 1 or self.nz)
-            
-            #--------------------------------
-            # Zero out the 2D array self.Zw
-            #------------------------------------------
-            # Note: *self.Zw should have already been
-            # set to be a 2D array of correct size
-            #------------------------------------------
-            self.Zw = np.minimum( np.maximum(self.Zw, np.float64(0)), np.float64(0) )
-            
-            #---------------------------------------
-            # Loop over the z-levels to find Z_wet
-            #---------------------------------------
-            for j in range(self.nz - 1):           #(nz-1) vs. nz
-                diff_j = diff[j,:,:]
-                next_diff_j = diff[j + 1,:,:]     #*******
-                if (n_dz == 1):    
-                    dz = self.dz
-                else:    
-                    dz = self.dz[j]
-                
-                #--------------------------------------------------------
-                # NB!  We are looking for a local min in theta profile.
-                #--------------------------------------------------------
-                # NB!  If theta is same at all levels, then we will
-                # never get (diff_j GT 0) so Z_wet will remain at 0,
-                # even if (theta eq theta_s) at all levels !!!!    **********
-                # How can we get Z_wet = Z_bot = (nz-1) * dz ???   **********
-                #--------------------------------------------------------
-                # NB!  If theta increases at all levels, which can
-                # happen for an equilibrium profile with water table,
-                # then we will never get (diff_j GT 0.0) and Z_wet will
-                # remain at 0.
-                #--------------------------------------------------------
-                # NB!  For (j eq (nz-2)), we have (next_diff_j EQ 0.0).
-                #--------------------------------------------------------
-                IDs = np.where( np.logical_and((diff_j > 0), \
-                                               (next_diff_j <= 0)))
-                n_IDs = IDs[0].size
-                
-                if (n_IDs != 0):    
-                    self.Zw[IDs] = (j * dz)
+            #----------------------------------------
+            # Theta, psi, K and v are all 1D arrays
+            #----------------------------------------
+            self.v[ m ] = self.v[ m-1 ]
+        else:
+            #----------------------------------------
+            # Theta, psi, K and v are all 3D arrays
+            #----------------------------------------
+            self.v[ m,:,: ] = self.v[ m-1,:,: ]
 
-    #   update_Zw()
-    #-------------------------------------------------------------------
+    #   update_bottom_BC_for_v()
+    #-----------------------------------------------------------------------
     def update_infil_rate(self):
 
         #------------------------------------------------------------
@@ -2088,10 +2187,11 @@ class infil_component(infil_base.infil_component):
                 matplotlib.pyplot.ylabel(ytitle)
                 matplotlib.pyplot.show()
                   
-    #   update_infil_rate() 
+    #   update_infil_rate()
     #-------------------------------------------------------------------
     def update_Rg(self):
-        
+
+        #  OUTDATED COMMENT (2020-01-23)        
         #-----------------------------------------------------
         # Notes:  Override infil_base's method by same name.
         #-----------------------------------------------------
@@ -2101,21 +2201,117 @@ class infil_component(infil_base.infil_component):
         if (self.DEBUG):
             print('Calling update_Rg()...')
             
-        pass
-    
-    #   update_Rg()
-    #-------------------------------------------------------------------
-    def update_q0(self):
-
-        if (self.DEBUG):
-            print('Calling update_q0()...')
-            
-        if (self.ALL_SCALARS): 
-            self.q0 = self.q[0]
+        #-----------------------------------
+        # Return flow rate in bottom layer
+        #-----------------------------------
+        if (self.SINGLE_PROFILE):    
+            self.Rg = self.v[self.nz - 1]
         else:    
-            self.q0 = self.q[0,:,:]
+            self.Rg = self.v[self.nz - 1,:,:]
+ 
+    #   update_Rg()
+    #-----------------------------------------------------------------------
+    def update_Zw(self, REPORT=False):
+
+        #------------------------------------------------------------
+        # Note: This procedure attempts to identify the depth of the
+        #       wetting front from examination of the theta values.
+
+        #       Notice that it is not assumed that the soil moisture
+        #       profile is a decreasing function from surface down.
+        #       If soil moisture profile starts to increase as we
+        #       approach the water table, this should still work.
+
+        #       Notice also that limiting theta value may not be
+        #       equal to theta_s.  For example, it approaches a
+        #       smaller value for a sustained (R lt K_s).
+        #------------------------------------------------------------
+        if (self.DEBUG):
+            print('Calling update_Zw()...')
             
-    #   update_q0()
+        if (self.SINGLE_PROFILE):    
+            q_below = np.roll(self.q, -1, axis=0)
+            diff = (self.q - q_below)
+            diff[self.nz - 1] = np.float64(0)
+            indices = np.where(diff > 0)        # (must be > not >=)
+            nd = indices[0].size    
+            
+            if (nd == 0):    
+                #----------------------------------
+                # Wetting front is at the surface
+                #----------------------------------------------
+                # This can happen for an equilibrium profile
+                # that is monotonically increasing with depth
+                # or for case where theta = theta_i for all z
+                #----------------------------------------------
+                self.Zw = np.float64(0)
+            else:    
+                imax = indices[0][nd - 1]  ########################
+                
+                #----------------------------------------------
+                # Get min and max theta of decreasing section
+                #----------------------------------------------
+                frac = np.float64(0.2)
+                tmax = np.nanmax( self.q[indices] )
+                tmin = np.nanmin( self.q[indices] )
+                tmid = tmin + frac * (tmax - tmin)
+                w    = np.where( self.q[0: (imax+1)] > tmid )
+                nw2  = np.size( w[0] )
+                if (nw2 > 0):    
+                    imax2 = w[0][nw2 - 1]   ###################
+                    self.Zw = imax2 * self.dz
+                else:    
+                    self.Zw = np.float64(0)         #####  IS THIS RIGHT ?
+        else:    
+            
+            q_below = np.roll( self.q, -1, axis=0 )
+            diff = (self.q - q_below)
+            diff[self.nz - np.int32(1),:,:] = np.float64(0)
+            n_dz = self.dz.size     #(either 1 or self.nz)
+            
+            #--------------------------------
+            # Zero out the 2D array self.Zw
+            #------------------------------------------
+            # Note: *self.Zw should have already been
+            # set to be a 2D array of correct size
+            #------------------------------------------
+            self.Zw = np.minimum( np.maximum(self.Zw, np.float64(0)), np.float64(0) )
+            
+            #---------------------------------------
+            # Loop over the z-levels to find Z_wet
+            #---------------------------------------
+            for j in range(self.nz - 1):           #(nz-1) vs. nz
+                diff_j = diff[j,:,:]
+                next_diff_j = diff[j + 1,:,:]     #*******
+                if (n_dz == 1):    
+                    dz = self.dz
+                else:    
+                    dz = self.dz[j]
+                
+                #--------------------------------------------------------
+                # NB!  We are looking for a local min in theta profile.
+                #--------------------------------------------------------
+                # NB!  If theta is same at all levels, then we will
+                # never get (diff_j GT 0) so Z_wet will remain at 0,
+                # even if (theta eq theta_s) at all levels !!!!    **********
+                # How can we get Z_wet = Z_bot = (nz-1) * dz ???   **********
+                #--------------------------------------------------------
+                # NB!  If theta increases at all levels, which can
+                # happen for an equilibrium profile with water table,
+                # then we will never get (diff_j GT 0.0) and Z_wet will
+                # remain at 0.
+                #--------------------------------------------------------
+                # NB!  For (j eq (nz-2)), we have (next_diff_j EQ 0.0).
+                #--------------------------------------------------------
+                IDs = np.where( np.logical_and((diff_j > 0), \
+                                               (next_diff_j <= 0)))
+                n_IDs = IDs[0].size
+                
+                if (n_IDs != 0):    
+                    self.Zw[IDs] = (j * dz)
+
+    #   update_Zw()
+    #------------------------------------------------------------------- 
     #-------------------------------------------------------------------  
     def open_input_files(self):
 
