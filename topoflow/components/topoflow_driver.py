@@ -2,7 +2,7 @@
 ###### 
 ###### channels_base.py called diversions.update() COMMENTED OUT !!!!!
 
-## Copyright (c) 2001-2014, Scott D. Peckham
+## Copyright (c) 2001-2020, Scott D. Peckham
 ##
 ## Jan 2013. Revised handling of input/output names.
 ##

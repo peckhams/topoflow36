@@ -12,7 +12,7 @@ changes (e.g. discontinuities) in hydraulic conductivity.
 See: Smith, R.E. (2002) Infiltration Theory for Hydrologic Applications,
 Water Resources Monograph 15, AGU.
 """
-## Copyright (c) 2001-2019, Scott D. Peckham
+## Copyright (c) 2001-2020, Scott D. Peckham
 ##
 ## January 2013   (Revised handling of input/output names).
 ## October 2012   (CSDMS Standard Names and BMI)
@@ -21,8 +21,13 @@ Water Resources Monograph 15, AGU.
 ## May 2010  (changes to unit_test() and read_cfg_file()
 ## June 2010 (Bug fix: Added qH_list and eta_list in
 ##            set_computed_input_vars(). Unit test. )
-## November 2010 (New approach to BCs and update_theta().)
-
+## November 2010 (New approach to BCs and update_theta().
+#---------------------------------------------------------------------
+## Jan 2020  Separate functions to apply boundary conditions.
+##           All trans. Brooks-Corey functions in soil_trans_BC.py.
+##           Conditioning in various places for stability.
+##           Soil properties from ISRIC plus pedotransfer.py
+##           Applications to Ethiopian river basins.
 #---------------------------------------------------------------------
 #
 #  unit_test()
@@ -81,12 +86,18 @@ Water Resources Monograph 15, AGU.
 #      build_layered_var()    # (Moved into infil_base.py)
 
 #  Functions:
-#      Theta_TBC()
-#      K_of_Theta_TBC()     (used by initialize_K_i())
 #      Z_Derivative_1D()    (Mar 2008)
 #      Z_Derivative_3D()    (Mar 2007)
 #      Z_Forward_Average()
 #      Z_Backward_Average()
+#
+# Plotting functions
+#      plot_theta_profile()
+#      plot_psi_profile()
+#
+# Obsolete functions (see soil_trans_BC.py instead)
+#      Theta_TBC()
+#      K_of_Theta_TBC()     (used by initialize_K_i())
 #
 #-----------------------------------------------------------------------
 
@@ -97,13 +108,16 @@ from topoflow.components import infil_base
 from topoflow.components import soil_base
 
 from topoflow.utils import model_input
-from topoflow.utils import tf_utils  ## (for unit_test only)
+# This provides all the "transitional Brooks-Corey" equations.
+# It could easily be replaced with "van Genuchten equations".
 from topoflow.utils import soil_trans_BC as stbc
-
 from topoflow.utils import rtg_files  ### (2020-01-22)
 from topoflow.utils import rti_files  ### (2020-01-22)
+from topoflow.utils import tf_utils  ## (for unit_test only)
 
-# import matplotlib.pyplot   # (not yet available on beach)
+# For plotting the vertical profiles of theta and psi.
+import time
+import matplotlib.pyplot as plt   ###########################
 
 #-----------------------------------------------------------------------
 def unit_test():
@@ -454,10 +468,6 @@ class infil_component(infil_base.infil_component):
                                    self.qs_list[j], self.qr_list[j], \
                                    self.pB_list[j], self.pA_list[j], \
                                    self.c_list[j],  self.lam_list[j] )
-#             self.qH_list[j] = Theta_TBC( self.psi_hygro, \
-#                                          self.qs_list[j], self.qr_list[j], \
-#                                          self.pB_list[j], self.pA_list[j], \
-#                                          self.c_list[j],  self.lam_list[j] )
 
         #------------------------------------------------------------
         # 2019-10-30  #############################
@@ -470,7 +480,7 @@ class infil_component(infil_base.infil_component):
         #------------------------------------------------------------
         # 2020-01-22.  Including this caused immediate failure as
         # opposed to reading a scalar value of 10^-9 from CFG file.
-        #------------------------------------------------------------                
+        #------------------------------------------------------------                                                   
 #         for j in range(self.n_layers):
 #             self.Ki_list[j] = stbc.K_of_theta( self.qi_list[j], \
 #                                    self.Ks_list[j], self.qs_list[j], \
@@ -716,9 +726,10 @@ class infil_component(infil_base.infil_component):
         # NEW APPROACH; SHOULD NO LONGER BE NEEDED HERE
         # (2020-01-23)
         #################################################        
-#         self.update_psi()
-#         self.update_v()
-        
+        self.update_psi()  # psi is a function of theta
+        self.update_v()    # v = K_bar * (1.0 - dp_dz)
+        self.last_print_time = time.time()
+
         #-------------------------------------------------
         # Print some suggested (i.e. consistent) values
         # for theta_r, theta_i and K_i.  (10/12/10)
@@ -763,10 +774,6 @@ class infil_component(infil_base.infil_component):
 #                              self.qs, self.qr, \
 #                              self.pB, self.pA, \
 #                              self.c,  self.lam )
-# #         self.qi = Theta_TBC( self.psi_field, \
-# #                              self.qs, self.qr, \
-# #                              self.pB, self.pA, \
-# #                              self.c,  self.lam )
 #                                                 
 #     #   initialize_theta_i()
     #-------------------------------------------------------------------
@@ -774,9 +781,6 @@ class infil_component(infil_base.infil_component):
 
         self.Ki = stbc.K_of_theta( self.qi, self.Ks, self.qs,
                                    self.qr, self.lam )
-                                  
-#         self.Ki = K_of_Theta_TBC( self.qi, self.Ks, self.qs,
-#                                   self.qr, self.lam )
 
     #   initialize_K_i()
     #-------------------------------------------------------------------
@@ -849,28 +853,6 @@ class infil_component(infil_base.infil_component):
                                       self.qs_list[k],
                                       theta_res,        #######
                                       self.lam_list[k] )
-                                     
-#             theta_hygro = Theta_TBC( self.psi_hygro,
-#                                      self.qs_list[k],
-#                                      self.qr_list[k],
-#                                      self.pB_list[k],
-#                                      self.pA_list[k],
-#                                      self.c_list[k],
-#                                      self.lam_list[k] )
-#             
-#             theta_init = Theta_TBC( self.psi_field,
-#                                     self.qs_list[k],
-#                                     theta_res,         #######
-#                                     self.pB_list[k],
-#                                     self.pA_list[k],
-#                                     self.c_list[k],
-#                                     self.lam_list[k] )
-# 
-#             K_init = K_of_Theta_TBC( theta_init,       #######
-#                                      self.Ks_list[k],
-#                                      self.qs_list[k],
-#                                      theta_res,        #######
-#                                      self.lam_list[k] )
 
             theta_r = self.qr_list[k]
             theta_i = self.qi_list[k]
@@ -910,30 +892,68 @@ class infil_component(infil_base.infil_component):
         # Update the Richards eqn variables
         #------------------------------------
         # All layers processed at once
-        #------------------------------------
-        # Update psi first vs. theta ###############
-        #------------------------------------        
-        self.update_psi()
-        self.update_surface_Kbar()
-        self.update_surface_BC_for_psi()
-        self.check_surface_BC_for_psi()     ###################
-        self.update_bottom_BC_for_psi()        
-        #------------------------------------
+        #------------------------------------------
+        # Update psi first vs. theta (2020-01-23)
+        #------------------------------------------        
+#         self.update_psi()
+#         self.update_surface_Kbar()
+#         self.update_surface_BC_for_psi()
+#         self.check_surface_BC_for_psi()   ###############
+#         self.update_bottom_BC_for_psi( BC='GRAVITY_DRAINAGE' ) 
+        #-----------------------------------------------
+        # Note: The BCs for psi must be applied BEFORE
+        #       the BCs for theta.
+        #-----------------------------------------------
+#         if (self.time_index > 0):
+#             self.update_surface_Kbar()
+#             self.update_surface_BC_for_psi()
+#             self.check_surface_BC_for_psi()   ###############
+#             self.update_bottom_BC_for_psi( BC='GRAVITY_DRAINAGE' )    
+        #----------------------------------------------------------
+        # (2020-01-30) update_theta() computes theta in terms of
+        # forward and backward derivatives of psi. Therefore, top
+        # and bottom BCs must be applied afterwards.
+        #----------------------------------------------------------
         self.update_theta()
         self.update_surface_BC_for_theta()
         self.update_bottom_BC_for_theta()
-        #------------------------------------
+        ### self.update_theta()   # Apply BCs first ?? #################
+        if (self.CHECK_STABILITY or self.DEBUG):
+            self.check_theta()
+        #----------------------------------------------------------
+        # (2020-01-30) update_psi() computes psi directly as a
+        # function of theta and does not use derivatives.  So the
+        # BCs applied to theta produce corresponding BCs for psi.
+        # For example, if theta = theta_s, then psi=0.
+        # Applying BCs to psi after update_psi() is therefore
+        # likely to cause problems.
+        #----------------------------------------------------------       
+#        self.update_psi()
+#         self.update_surface_Kbar()
+#         self.update_surface_BC_for_psi()
+#         self.check_surface_BC_for_psi()   ###############
+#         self.update_bottom_BC_for_psi( BC='GRAVITY_DRAINAGE' ) 
+        self.update_psi()   # Apply BCs first ?? #############
+        #---------------------------------------------------
+        # (2020-01-30) update_K() computes K directly as a
+        # function of psi and does not use derivatives.
+        # BCs aren't needed.  
+        #---------------------------------------------------        
         self.update_K()
         ## self.update_Kbar()
         #------------------------------------
         self.update_v()
-        self.update_surface_BC_for_v()
+        ####### self.update_surface_BC_for_v()   ### INCORRECT ??
         self.update_bottom_BC_for_v()
 #         print('#######  min(v0) =', self.v0.min())
 #         print('#######  max(v0) =', self.v0.max())
 #         print()
         self.update_infil_rate()    # v0, at surface
-        self.adjust_infil_rate()    # ??????????
+        #---------------------------------
+        # Next function may have problems
+        # and should not be needed here.
+        #---------------------------------
+        ## self.adjust_infil_rate()    ####################
         self.update_v0_integral()
         #------------------------------------
         self.update_Rg()
@@ -1003,6 +1023,8 @@ class infil_component(infil_base.infil_component):
         #      This is OK, as long as we explicitly set the
         #      first (surface) and last (bottom) values of
         #      theta using the boundary conditions.
+        #      See update_surface_BC_for_theta() and
+        #          update_bottom_BC_for_theta().
         #----------------------------------------------------------
         if (self.DEBUG):
             print('Calling update_theta()...')
@@ -1062,6 +1084,8 @@ class infil_component(infil_base.infil_component):
             d_theta = (-2.0 * self.dt / z_diff) * (term1 - term2)
 
             #-----------------------------------------------
+            # Don't need this if BC is applied after this.
+            #-----------------------------------------------
             # Surface and bottom values of theta will be
             # set in update_boundary_conditions().
             # dtheta has "wrong" values at those places.
@@ -1090,7 +1114,9 @@ class infil_component(infil_base.infil_component):
             else:    
                 for j in range(n_dz):
                     d_theta[j,:,:] = d_theta[j,:,:] / z_diff[j]
-   
+ 
+            #-----------------------------------------------
+            # Don't need this if BC is applied after this.  
             #-----------------------------------------------
             # Surface and bottom values of theta were
             # already set in update_boundary_conditions().
@@ -1106,7 +1132,7 @@ class infil_component(infil_base.infil_component):
 
         ###################################################################
         ###################################################################
-        ENFORCE_RANGE = True
+        ENFORCE_RANGE = False
         if (ENFORCE_RANGE):
             #--------------------------------------------------
             # Note:  This was needed for Baro_Gam_1min basin.
@@ -1128,28 +1154,21 @@ class infil_component(infil_base.infil_component):
                 np.maximum( self.q[j,:,:], qmin, self.q[j,:,:] )
         ###################################################################
         ###################################################################
-           
-        #-----------------------------------------------
-        # Option to check stability, in the sense that
-        # theta values are still in range.
-        #-----------------------------------------------
-        # Recall that: S_eff  = (q - qr) / (qs - qr)
-        # and that S_eff must be in [0, 1].
-        #-----------------------------------------------
-        if (self.CHECK_STABILITY):
-            self.check_theta()
 
-        if (self.DEBUG):
-            self.check_theta()
+        #-------------------------------------------      
+        # Do this in update(), after applying BCs.     
+        #-------------------------------------------
+#         if (self.CHECK_STABILITY or self.DEBUG):
+#             self.check_theta()
 
     #   update_theta()
     #-----------------------------------------------------------------------
     def check_theta(self):
 
-        ## bad1 = (self.q < self.qH)  ####### (was triggered, theta=0.217)
+        ## bad1 = (self.q < self.qH)  #### (was triggered, theta=0.217)
         ## bad1 = (self.q < self.qr)  #### (wrong shape)
         tol  = 0.01
-        bad1 = (self.q < 0.01)
+        bad1 = (self.q < tol)
         bad2 = (self.q > self.qs + tol)
         bad3 = np.logical_not( np.isfinite( self.q ) )
         nb1  = bad1.sum()
@@ -1159,19 +1178,26 @@ class infil_component(infil_base.infil_component):
             print('################################################')
             print('ERROR detected in update_theta():')
             print('  theta is the soil water content.')
+            print('  theta_s is the saturated water content.')
+            #-------------------------------------------------------------
             if (nb1 > 0):
-                print('  theta < 0.01 (a residual value)')
+                print('  theta <', str(tol), 'for:', nb1, 'cells.')
                 ## print('  theta < theta_H (hygroscopic lower limit)')
                 qmin = self.q.min()
-                print('  min(theta) = ' + str(qmin) )
+                print('    min(theta) = ' + str(qmin) )
 #                 if (self.SINGLE_PROFILE):
 #                     print('theta_H    = ' + str(self.qH) )
+            #-------------------------------------------------------------
             if (nb2 > 0):
-                print('  theta > theta_s (saturated upper limit)')
+                print('  theta > theta_s for:', nb2, 'cells.')
                 qmax = self.q.max()
-                print('  max(theta) = ' + str(qmax) )
+                print('     max(theta) = ' + str(qmax) )
 #                 if (self.SINGLE_PROFILE):
 #                     print('theta_s    = ' + str(self.qs) )
+            #-------------------------------------------------------------
+            if (nb3 > 0):
+                print('  theta is NaN/Inf for:', nb3, 'cells.')
+            #-------------------------------------------------------------
             print('Try reducing infil. timestep, dt, in CFG file.')
             print('################################################')
             print()
@@ -1192,6 +1218,12 @@ class infil_component(infil_base.infil_component):
     #-----------------------------------------------------------------------
     def update_surface_BC_for_theta(self, REPORT=False):
 
+        #--------------------------------------------------------
+        # Note:  This assumes that psi has already been set at
+        #        the surface, and uses TBC relation to compute
+        #        theta at the surface.
+        #        So must call udpate_surface_BC_for_psi() 1st.
+        #--------------------------------------------------------
         if (self.DEBUG):
             print('Calling update_surface_BC_for_theta()...')
                                                          
@@ -1209,13 +1241,14 @@ class infil_component(infil_base.infil_component):
             Lambda  = self.lam[0]
             self.q[0] = stbc.theta_of_psi(psi, theta_s, theta_r, \
                                   psi_B, psi_A, c, Lambda)
-#             self.q[0] = Theta_TBC(psi, theta_s, theta_r, \
-#                                   psi_B, psi_A, c, Lambda)
         else:
             #----------------------------------------
             # Now checking if ndim > 1 (2019-10-29)
             #----------------------------------------
-            psi = self.p[0,:,:]    # [meters]
+            if (self.p.ndim > 1):
+                psi = self.p[0,:,:]  # [meters]
+            else:
+                psi = self.p[0]
             #-----------------------------
             if (self.qs.ndim > 1):
                 theta_s = self.qs[0,:,:]
@@ -1249,8 +1282,6 @@ class infil_component(infil_base.infil_component):
             #------------------------------
             self.q[0,:,:] = stbc.theta_of_psi(psi, theta_s, theta_r, \
                                       psi_B, psi_A, c, Lambda)
-#             self.q[0,:,:] = Theta_TBC(psi, theta_s, theta_r, \
-#                                       psi_B, psi_A, c, Lambda)
 
         #----------------
         # For debugging
@@ -1282,8 +1313,6 @@ class infil_component(infil_base.infil_component):
             Lambda  = self.lam[m]
             self.q[m] = stbc.theta_of_psi(psi, theta_s, theta_r, \
                                   psi_B, psi_A, c, Lambda)
-#             self.q[m] = Theta_TBC(psi, theta_s, theta_r, \
-#                                   psi_B, psi_A, c, Lambda)
         else:
             #----------------------------------------
             # Now checking if ndim > 1 (2019-10-29)
@@ -1322,8 +1351,6 @@ class infil_component(infil_base.infil_component):
             #------------------------------            
             self.q[m,:,:] = stbc.theta_of_psi(psi, theta_s, theta_r, \
                                       psi_B, psi_A, c, Lambda)
-#             self.q[m,:,:] = Theta_TBC(psi, theta_s, theta_r, \
-#                                       psi_B, psi_A, c, Lambda)
 
         #----------------
         # For debugging
@@ -1417,23 +1444,17 @@ class infil_component(infil_base.infil_component):
         if (self.SINGLE_PROFILE):    
             #--------------------------------
             # All of the vars are 1D arrays
-            #--------------------------------
-            S_eff  = (self.q - self.qr) / (self.qs - self.qr)
-            cpow   = (-self.c / self.lam)
-            arg    = ((S_eff ** cpow )- 1.0) ** (1.0 / self.c)
-            self.p = (self.pB * arg) - self.pA
-            
-            #------------------------------------------------------
-            # S_eff = effective saturation or normalized vol frac
-            # Could be shared, but requires more storage.
-            # b = brooks-corey_b_parameter = 1 / lambda.
-            #------------------------------------------------------
-            ## self.S_eff = S_eff
-            ## self.b = 1 / self.lam
+            #--------------------------------------------
+            # MIN_VALUE = -150 [m] is wilting point psi
+            #-------------------------------------------- 
+            self.p[:] = stbc.psi_of_theta(self.q, self.qs, self.qr,
+                                          self.lam, self.c, self.pB, self.pA)
+                                          ## MIN_VALUE=-150.0 )
         else:    
             #--------------------------------------
             # Each var is either a 1D or 3D array
             #--------------------------------------
+            dim_q   = np.ndim(self.q)
             dim_qs  = np.ndim(self.qs)
             dim_qr  = np.ndim(self.qr)
             dim_pB  = np.ndim(self.pB)
@@ -1445,6 +1466,10 @@ class infil_component(infil_base.infil_component):
                 #--------------------------------------------------
                 # At a given z, every input var is scalar or grid
                 #--------------------------------------------------
+                if (dim_q == 3):    
+                    q = self.q[j,:,:]
+                else:    
+                    q = self.q[j]
                 if (dim_qs == 3):    
                     qs = self.qs[j,:,:]
                 else:    
@@ -1469,45 +1494,17 @@ class infil_component(infil_base.infil_component):
                     c = self.c[j,:,:]
                 else:    
                     c = self.c[j]
-                #------------------------------------------------
-                # NB!  It is OK to raise a grid to a grid power
-                #------------------------------------------------
-                S_eff = (self.q[j,:,:] - qr) / (qs - qr)      #(grid)
-                cpow  = (-c / lam)                            #(grid or scalar)
-                #-----------------------------------------------------                
-                Smin = S_eff.min()
-                Smax = S_eff.max()
-                if (Smin < 0):
-                    print('####### ERROR:  min(S_eff) < 0.)')
-                    print('#######  min(S_eff) =', Smin)
-                    # sys.exit()
-                if (Smax > 1):
-                    print('####### ERROR:  max(S_eff) > 1.)')
-                    print('#######  max(S_eff) =', Smax)
-                    # sys.exit()
-                #-----------------------------------------------------                               
-                arg   = ((S_eff ** cpow) - 1.0) ** (1.0 / c)  #(grid)
-
-                #-----------------------------------------------------                
-                # (2020-01-21.  Adjust to avoid very large negatives
-                #-----------------------------------------------------
-                #######################################################
-                # self.p[j,:,:] = (pB * arg) - pA               #(grid)
-                self.p[j,:,:] = np.maximum( (pB*arg)-pA, -100.0 )
-    
-                #------------------------------------------------------
-                # S_eff = effective saturation or normalized vol frac
-                # Could be shared, but requires more storage.
-                # b = brooks-corey_b_parameter = 1 / lambda.
-                #------------------------------------------------------
-                ## self.S_eff = S_eff
-                ## self.b = 1 / lam
+                 
+                #--------------------------------------------
+                # MIN_VALUE = -150 [m] is wilting point psi
+                #--------------------------------------------              
+                self.p[j,:,:] = stbc.psi_of_theta(q, qs, qr, lam, c, pB, pA ) 
+                                                  ### MIN_VALUE=-150.0)
 
         #------------------
         # Optional report
         #------------------
         if (REPORT):    
-            print('S_eff = ', S_eff[0:4])
             print('psi   = ', self.p[0:3])
             #print,' '
 
@@ -1519,14 +1516,17 @@ class infil_component(infil_base.infil_component):
                 print('psi[0], theta[0] =', self.p[0], ', ', self.q[0])
                 print('psi[m], theta[m] =', self.p[m], ', ', self.q[m])
             #-----------------------------------
+            print('min(psi) =', self.p.min() )
+            print('max(psi) =', self.p.max() )
+            #-----------------------------------
             print('min(q)   =', self.q.min() )
             print('max(q)   =', self.q.max() )
             print('min(qs)  =', self.qs.min() )
             print('max(qs)  =', self.qs.max() )
             print('min(qr)  =', self.qr.min() )
             print('max(qr)  =', self.qr.max() )
-            print('min(Se)  =', S_eff.min()  )
-            print('max(Se)  =', S_eff.max() )
+#             print('min(Se)  =', S_eff.min()  )
+#             print('max(Se)  =', S_eff.max() )
             print('min(pB)  =', self.pB.min() )
             print('max(pB)  =', self.pB.max() )
             print('min(pA)  =', self.pA.min() )
@@ -1535,10 +1535,9 @@ class infil_component(infil_base.infil_component):
             print('max(c )  =', self.c.max() )
             print('min(lam) =', self.lam.min() )
             print('max(lam) =', self.lam.max() )
-            print('min(psi) =', self.p.min() )
-            print('max(psi) =', self.p.max() )
-
-                        
+            print('min(-c/lam) =', np.min( -self.c / self.lam ) )
+            print('max(-c/lam) =', np.max( -self.c / self.lam ) )
+                      
     #   update_psi()
     #-----------------------------------------------------------------------
     def update_surface_Kbar(self):
@@ -1568,6 +1567,9 @@ class infil_component(infil_base.infil_component):
         #        and to use theta(psi) (from TBC), to specify
         #        corresponding values of theta (and maybe K?).
         #----------------------------------------------------------
+        # For all z, v is defined (see update_v()) as:
+        #  v = K_bar * (1.0 - dp_dz)   # (bottom of cell)
+        #----------------------------------------------------------        
         # At the surface, the so-called "flux boundary condition"
         # is used prior to ponding (i.e. surface saturation).
         # We solve the following for psi[0]:
@@ -1576,7 +1578,10 @@ class infil_component(infil_base.infil_component):
         #
         #     psi[0] = {(r/Kbar[0]) - 1} * dz + psi[1].
         #
-        # After ponding, we have psi[0] = 0.
+        # After ponding, we have psi[0] = 0, K = Ks.
+        #
+        # See Appendix 3, eqn. (A3.7) and paragraph below in
+        # Smith's book; also paragraph below eqn (A3.1) re: p=1.
         #----------------------------------------------------------
         if (self.DEBUG):
             print('Calling update_surface_BC()...')
@@ -1605,11 +1610,11 @@ class infil_component(infil_base.infil_component):
                 self.p[0] = 0.0
                 Kbar      = r   # (just for report at end)
         else:
-            p0   = self.p[0,:,:]
-            p1   = self.p[1,:,:]
+            p0 = self.p[0,:,:]
+            p1 = self.p[1,:,:]
 
-#             K0   = self.K[0,:,:]  ##### For print stmt only
-#             K1   = self.K[1,:,:]  ##### For print stmt only
+#             K0 = self.K[0,:,:]  ##### For print stmt only
+#             K1 = self.K[1,:,:]  ##### For print stmt only
                         
             if (self.DEBUG):
                 print('###  min(p0) = ', p0.min() )
@@ -1629,7 +1634,7 @@ class infil_component(infil_base.infil_component):
             #-------------------------------------
             # Where is top layer NOT saturated ?
             #-------------------------------------
-            ## w1 = np.where( self.p[0,:,:] <  0)
+            # w1 = np.where( self.p[0,:,:] <  0)
             #-----------------------------------------------------
             # This makes w1 an array of True or False and should
             # be faster.  Don't need to check if w1 is empty.
@@ -1704,9 +1709,9 @@ class infil_component(infil_base.infil_component):
 #         print('   npos =', npos)
 #         print('############################################')
 #         print()
-        self.p[0][wpos] = -1e-6               
+        # self.p[0][wpos] = -1e-6
         ## self.p[0][wpos] = -1e-4
-        ## self.p[0][wpos] = 0.0
+        self.p[0][wpos] = 0.0
         
         ##########################################################
 #         max_pos = self.p[0].max()
@@ -1751,6 +1756,7 @@ class infil_component(infil_base.infil_component):
         #        corresponding values of theta (and maybe K?).
         #-----------------------------------------------------------
         # At the bottom, one of 3 BCs can be used:
+        # See App. 3, paragraph below eqn. A3.7 in Smith's book. 
         #
         # (1) gravity drainage:  no gradient in capillary pressure
         #                        (recall that H = (psi - z))
@@ -1819,8 +1825,9 @@ class infil_component(infil_base.infil_component):
         #------------------------------------------------------------
         # Notes: This procedure updates the hydraulic conductivity,
         #        K, as a function of the pressure head, psi, via
-        #        the "Brooks-Corey" (B-C) or "transitional Brooks-
-        #        Corey" (TB-C) relation.
+        #        "transitional Brooks-Corey" (TB-C) relation.
+        #        The standard "Brooks-Corey" (B-C) relation is the
+        #        special case of c=1, pA=0.
 
         #        lambda = pore size distribution parameter
         #        eta    = "pore-disconnectedness" parameter
@@ -1833,8 +1840,8 @@ class infil_component(infil_base.infil_component):
         #        tions" by R.E. Smith (2002), p. 21-22.
 
         #        For standard Brooks-Corey we would have:
-        #            pow = -1d * (*eta)
-        #            K_r = (*p / *pB)^pow
+        #            pow = -1d * (eta)
+        #            Kr = (p / pB)^pow
         #------------------------------------------------------------
         if (self.DEBUG):
             print('Calling update_K()...')
@@ -1849,15 +1856,16 @@ class infil_component(infil_base.infil_component):
         if (self.SINGLE_PROFILE):    
             #--------------------------------
             # All of the vars are 1D arrays
-            #--------------------------------
-            epow = (-self.eta / self.c)
-            Kr = (1.0 + ((self.p + self.pA) / self.pB) ** self.c) ** epow
-            Kr = np.maximum( np.minimum(Kr, 1.0), 0.0)
-            self.K = self.Ks * Kr
+            #-----------------------------------------
+            # Can there still be multiple layers ???
+            #-----------------------------------------            
+            self.K[:] = stbc.K_of_psi(self.p, self.pB, self.pA,
+                                      self.Ks, self.eta, self.c)
         else:    
             #--------------------------------------
             # Each var is either a 1D or 3D array
             #--------------------------------------
+            dim_p   = np.ndim( self.p )
             dim_Ks  = np.ndim( self.Ks )
             dim_pB  = np.ndim( self.pB )
             dim_pA  = np.ndim( self.pA )
@@ -1868,6 +1876,10 @@ class infil_component(infil_base.infil_component):
                 #--------------------------------------------------
                 # At a given z, every input var is scalar or grid
                 #--------------------------------------------------
+                if (dim_p == 3):    
+                    p = self.p[j,:,:]
+                else:    
+                    p = self.p[j]
                 if (dim_Ks == 3):    
                     Ks = self.Ks[j,:,:]
                 else:    
@@ -1888,24 +1900,13 @@ class infil_component(infil_base.infil_component):
                     c = self.c[j,:,:]
                 else:    
                     c = self.c[j]
-                #------------------------------------------------
-                # NB!  It is OK to raise a grid to a grid power
-                #------------------------------------------------
-                arg  = (self.p[j,:,:] + pA) / pB        #(grid)
-                epow = (-eta / c)                       #(grid or scalar)
-                Kr = (1.0 + arg ** c) ** epow           #(grid)
-                Kr = np.maximum( np.minimum(Kr, 1.0), 0.0)   #(grid)
-                self.K[j,:,:] = (Ks * Kr)               #(grid)
-
-                #--------------------------------------------------                
-                # Kr = (K/Ks) = relative hydraulic conductivity
-                # This allows sharing, but requires more storage.
-                #--------------------------------------------------
-                ## self.Krel = Kr
+                #-----------------------------------------------------
+                self.K[j,:,:] = stbc.K_of_psi(p, pB, pA, Ks, eta, c)
 
         if (self.DEBUG):
-            print('min(K), max(K) =', self.K.min(), self.K.max())
-        
+            print('min(K) =', self.K.min())
+            print('max(K) =', self.K.max())
+                    
         #------------------
         # Optional report
         #------------------
@@ -1977,20 +1978,18 @@ class infil_component(infil_base.infil_component):
             #----------------------------------------
             # dp_dz = (p_below - p) / dz
             #----------------------------------------         
-            dp_dz  = Z_Derivative_1D( self.p, self.dz )
-            K_bar  = Z_Forward_Average( self.K )
-            self.v = K_bar * (1.0 - dp_dz)   # (bottom of cell)
-
+            dp_dz = Z_Derivative_1D( self.p, self.dz )
         else:
             #----------------------------------------
             # Theta, psi, K and v are all 3D arrays
             #----------------------------------------
             # dp_dz = (p_below - p) / dz
             #----------------------------------------
-            dp_dz  = Z_Derivative_3D( self.p, self.dz )
-            K_bar  = Z_Forward_Average( self.K )
-            self.v = K_bar * (1.0 - dp_dz)   # (bottom of cell)
-        
+            dp_dz = Z_Derivative_3D( self.p, self.dz )
+
+        K_bar  = Z_Forward_Average( self.K )
+        self.v = K_bar * (1.0 - dp_dz)   # (bottom of cell)
+                    
         #----------------
         # For debugging
         #----------------
@@ -2015,21 +2014,56 @@ class infil_component(infil_base.infil_component):
         
     #   update_v()
     #-----------------------------------------------------------------------
-    def update_surface_BC_for_v(self):
- 
-        #--------------------------------------------------       
-        # NOTE:  IS THIS STILL OKAY AFTER PONDING OCCURS?
-        #--------------------------------------------------
-        
-        #-----------------------
-        # Set BC at the surface
-        #------------------------
-        if (self.SINGLE_PROFILE):
-            self.v[0] = self.P_total
-        else:
-            self.v[0,:,:] = self.P_total
- 
-    #   update_surface_BC_for_v()
+#     def update_surface_BC_for_v(self):
+#  
+#         #----------------------------------------------------
+#         # NOTE:  update_v() computes derivatives using only
+#         #        values below, and should therefore give a
+#         #        a valid value at the surface, v0.
+#         #---------------------------------------------------
+#                 
+#         #-----------------------
+#         # Set BC at the surface
+#         #------------------------
+#         if (self.SINGLE_PROFILE):
+#             if (self.q[0] < self.qs[0]):
+#                 #------------------------------
+#                 # Top layer is not saturated.
+#                 #------------------------------
+#                 self.v[0] = self.P_total
+#             else:
+#                 #--------------------------
+#                 # Top layer is saturated.
+#                 #--------------------------
+#                 pass
+#                 ## self.v[0] = ????????
+#         else:
+#             #-------------------------------------
+#             # Where is top layer NOT saturated ?
+#             #-----------------------------------------------------
+#             # This makes w1 an array of True or False and should
+#             # be faster.  Don't need to check if w1 is empty.
+#             #-----------------------------------------------------
+#             v0 = self.v[0,:,:]
+#             w1 = ( self.q[0,:,:] <  self.qs[0,:,:] )
+#             if (self.P_total.size > 1):   ## BUG FIX: 2019-10-29
+#                 r = self.P_total[ w1 ]
+#             else:
+#                 r = self.P_total
+#             v0[w1] = r
+# 
+#             #---------------------------------
+#             # Where is top layer saturated ?
+#             #-------------------------------------------------- 
+#             w2 = np.invert( w1 )
+#             ## v0[w2] = ?????????
+# 
+#             #---------------------------------------                
+#             # Set vertical flow rate for top layer
+#             #---------------------------------------
+#             self.v[0,:,:] = v0
+#  
+#     #   update_surface_BC_for_v()
     #-----------------------------------------------------------------------
     def update_bottom_BC_for_v(self):
       
@@ -2093,11 +2127,23 @@ class infil_component(infil_base.infil_component):
             self.v0 = self.v[0,:,:]
             ## self.v0 = self.v[1,:,:]
             
-        self.IN = self.v0   # A synonym. ###########
+        ## self.IN = self.v0   # A synonym. ###########
 
 ##        print 'SINGLE_PROFILE   =', self.SINGLE_PROFILE
-##        print 'min(IN), max(IN) =', self.IN.min(), self.IN.max()
-        
+##        print 'min(v0), max(v0) =', self.v0.min(), self.v0.max()
+       
+        #--------------------------------------
+        # For testing:  Plot the soil profiles
+        #---------------------------------------
+        PLOT = False
+        if (PLOT): 
+            plot_theta_profile( self )
+            # plot_psi_profile( self )
+                 
+    #   update_infil_rate()
+    #-------------------------------------------------------------------
+    def update_Rg(self):
+
         #-------------------------------------------------------------
         # Richards' equation is only used in the so-called "upper
         # layers".  There can be between 1 and 3 of these layers.
@@ -2133,64 +2179,6 @@ class infil_component(infil_base.infil_component):
         # can be drawn upward from the water table.
         #-------------------------------------------------------------
         
-        #----------------------------------------
-        # For testing:  Plot the theta profiles
-        #----------------------------------------
-        PLOT = False
-        if (PLOT):    
-            matplotlib.pyplot.figure(1)
-            #** wait, 0.005
-            
-            ymin = self.qi.min()
-            ymax = (self.qs + np.float64(0.05)).max()
-            if (self.SINGLE_PROFILE):    
-                matplotlib.pyplot.plot(self.z, self.q, marker='+')
-                matplotlib.pyplot.xlabel('Depth [meters]')
-                matplotlib.pyplot.ylim(np.array(ymin, ymax))
-                matplotlib.pyplot.axis('image')
-                matplotlib.pyplot.ylabel('Soil moisture')
-                matplotlib.pyplot.show()
-            else:    
-                matplotlib.pyplot.plot(self.z, self.q[:,2,2], marker='+')
-                matplotlib.pyplot.xlabel('Depth [meters]')
-                matplotlib.pyplot.ylim(np.array(ymin, ymax))
-                matplotlib.pyplot.axis('image')
-                matplotlib.pyplot.ylabel('Soil moisture')
-                matplotlib.pyplot.show()
-        
-        #--------------------------------------
-        # For testing:  Plot the psi profiles
-        #--------------------------------------
-        if (PLOT):    
-            matplotlib.pyplot.figure(2)
-            ### wait, 0.005
-            yrange = np.array([-np.float32(3.0), np.float32(0.5)])    #(Log case)
-            ytitle = '-Log(-Pressure head) [m]'
-            #--------------------------------------
-            # ytitle = 'Pressure head [m]'
-            # yrange = [-20.0, 0.0]  ;(Linear case)
-            #--------------------------------------
-            if (self.SINGLE_PROFILE):    
-                y = -np.float64(1) * np.log(np.absolute(self.p) + 1)
-                matplotlib.pyplot.plot(self.z, y, marker='+')
-                matplotlib.pyplot.xlabel('Depth [meters]')
-                matplotlib.pyplot.ylim(yrange)
-                matplotlib.pyplot.axis('image')
-                matplotlib.pyplot.ylabel(ytitle)
-                matplotlib.pyplot.show()
-            else:    
-                y = -np.float64(1) * np.log(np.absolute((self.p)[:,2,2]) + 1)
-                matplotlib.pyplot.plot(self.z, y, marker='+')
-                matplotlib.pyplot.xlabel('Depth [meters]')
-                matplotlib.pyplot.ylim(yrange)
-                matplotlib.pyplot.axis('image')
-                matplotlib.pyplot.ylabel(ytitle)
-                matplotlib.pyplot.show()
-                  
-    #   update_infil_rate()
-    #-------------------------------------------------------------------
-    def update_Rg(self):
-
         #  OUTDATED COMMENT (2020-01-23)        
         #-----------------------------------------------------
         # Notes:  Override infil_base's method by same name.
@@ -2423,6 +2411,16 @@ class infil_component(infil_base.infil_component):
             lam_val = model_input.read_next(self.lam_unit[j], self.lam_type[j], rti)
             if (lam_val is not None):
                 #---------------------------------------------------------
+                # For Baro basin and ISRIC soil data, computed lambda
+                # value can be very small so that (-c/lam) > -1000 and
+                # get extremely large, negative values of psi.
+                # Here we adjust lambda to avoid this.
+                #----------------------------------------------------------
+                w1 = (lam_val < 0.1)
+                if (w1.size > 0):
+                    lam_val[w1] = 0.1
+                ##########################################################            
+                #---------------------------------------------------------
                 # If we read a lambda value from a file, then we need to
                 # compute and save corresponding eta = [2 + (3*lambda)]
                 # BUG FIX:  2019-10-29
@@ -2476,107 +2474,6 @@ class infil_component(infil_base.infil_component):
     #   close_input_files()
     #-------------------------------------------------------------------
 
-#-----------------------------------------------------------------------
-#-----------------------------------------------------------------------
-def Theta_TBC(psi, theta_s, theta_r, psi_B, psi_A, c, Lambda,
-              REPORT=False, CM_TO_M=False):
-
-    #---------------------------------------------------------------
-    # Notes: This function computes the soil water content, theta
-    #        for the give value of pressure head, psi (in cm),
-    #        using the soil characteristic relation called
-    #        "transitional Brooks-Corey" (TBC).
-    #
-    #        psi = -1000000 => theta = theta_min (air dry)
-    #        psi = -31000   => theta = theta_H (hygroscopic)
-    #        psi = -15000   => theta = theta_w (perm. wilting pt.)
-    #        psi = -340     => theta = theta_f (field capacity)
-    #
-    #---------------------------------------------------------------
-    # Notes: Note that for both B-C and TB-C, psi goes to
-    #        -Infinity as theta goes to theta_r (S_eff goes
-    #        to zero).  However, natural soils do not have heads
-    #        (tensions) less than -31,000 cm.  In this range they
-    #        absorb water from the air (H = hygroscopic).  While
-    #        initial theta values will always be set to a number
-    #        greater than theta_r, evaporation at the surface can
-    #        cause theta to drop to values near theta_r.  Here we
-    #        use the T-BC equation for theta(psi) to compute a
-    #        value theta_H corresponding to psi_H=-31,000 cm.
-    #---------------------------------------------------------------
-    
-    #--------------------------------------
-    # Convert psi units from cm to meters
-    #--------------------------------------
-    if (CM_TO_M):
-        psi_m = (psi/ np.float64(100))        # [cm -> meters]
-        ratio = (psi_m + psi_A) / psi_B    # (should be > 0)
-    else:
-        ratio = (psi + psi_A) / psi_B      # (should be > 0)
-        
-    theta = (1.0 + (ratio ** c)) ** (-Lambda / c)
-    theta = theta * (theta_s - theta_r) + theta_r
-    
-    #------------------
-    # Optional report
-    #------------------
-    if (REPORT):    
-        print('theta_s = ', theta_s)
-        print('theta   = ', theta)
-        print('theta_r = ', theta_r)
-        print(' ')
-    
-    return theta
-    
-#   Theta_TBC()
-#-----------------------------------------------------------------------
-def K_of_Theta_TBC(theta, K_s, theta_s, theta_r, Lambda,
-                   REPORT=False):
-
-    #--------------------------------------------------------------
-    # Notes: This function returns the hydraulic conductivity, K,
-    #        as a function of the soil moisture, theta, using an
-    #        equation that holds for both the "Brooks-Corey" (B-C)
-    #        and "transitional Brooks-Corey" (TB-C) cases.
-
-    #        Called by Get_Soil_Params to compute K_i.
-
-    #        lambda = pore size distribution parameter
-    #        eta    = "pore-disconnectedness" parameter
-    #        eta    = 2d + (3d * lambda)
-    #        eps    = eta/lambda
-
-    #        See "Infiltration Theory for Hydrologic Applica-
-    #        tions" by R.E. Smith (2002), p. 19-22.
-    #--------------------------------------------------------------
-    
-    #----------------------------
-    # Compute exponent, epsilon
-    #----------------------------
-    eta = (np.float64(2) + (np.float64(3) * Lambda))
-    eps = eta / Lambda
-    
-    #--------------------------------------
-    # Compute the "relative conductivity"
-    #--------------------------------------
-    K_r = ((theta - theta_r) / (theta_s - theta_r)) ** eps
-    
-    #-----------------------------
-    # Compute K from K_s and K_r
-    #-----------------------------
-    K_r = np.maximum( np.minimum(K_r, 1.0), 0.0 )
-    K = K_s * K_r
-    
-    #------------------
-    # Optional report
-    #------------------
-    if (REPORT):    
-        print('K = ', K[0:4])
-        # print ' '
-    
-    return K
-    
-#   K_of_Theta_TBC()
 #-----------------------------------------------------------------------
 #-----------------------------------------------------------------------
 def Z_Derivative_1D(v, dz, BACKWARD=False):
@@ -2656,12 +2553,16 @@ def Z_Derivative_3D(v, dz, BACKWARD=False):
 def Z_Forward_Average( v ):
 
     #----------------------------------------------
-    # Notes: This should work for both 1D and 3D.
-    #        For 3D, "axis=0" is the z-axis.
-    #----------------------------------------------
+    # Note: This should work for both 1D and 3D.
+    #       For 3D, "axis=0" is the z-axis.
+    #-----------------------------------------------
+    # Note: This assigns a valid value at surface,
+    #       but a a bottom BC for the bottom must
+    #       be applied AFTER this is called.    
+    #-----------------------------------------------    
     v_below = np.roll(v, -1, axis=0)
     v_avg   = (v_below + v) / 2.0
-    ## v_avg[self.nz - 1] = ?????
+    ## v_avg[self.nz - 1] = bottom boundary condition
     
     return v_avg
 
@@ -2670,18 +2571,233 @@ def Z_Forward_Average( v ):
 def Z_Backward_Average( v ):
 
     #----------------------------------------------
-    # Notes: This should work for both 1D and 3D.
-    #        For 3D, "axis=0" is the z-axis.
+    # Note: This should work for both 1D and 3D.
+    #       For 3D, "axis=0" is the z-axis.
     #----------------------------------------------
+    # Note: This assigns a valid value at bottom,
+    #       but a surface BC for the surface must
+    #       be applied AFTER this is called.
+    #-----------------------------------------------
     v_above = np.roll(v, 1, axis=0)
     v_avg   = (v + v_above) / 2.0
-    ## v_avg[0] = ??????
+    ## v_avg[0] = surface boundary condition
     
     return v_avg
 
 #   Z_Backward_Average()
 #-----------------------------------------------------------------------
+def plot_theta_profile( self ):
 
+    plot_interval = 600.0  # [real seconds]
+    elapsed_time = (time.time() - self.last_print_time)
+    if (elapsed_time < plot_interval):
+        return
+    self.last_print_time = time.time() 
+  
+#     
+# #         if (self.time_units == 'seconds'):
+# #             cur_time = self.time_min
+# #             time_units_str = ' [min]'
+# #         else:
+# #             cur_time = self.time
+# #             time_units_str = ' [' + self.time_units + ']' 
+# #         time_str = 'Time = ' + ("%10.2f" % cur_time)
+# #         time_str = time_str + time_units_str
+# #         #-------------------------------------------------
+# #         var_str  = var_name + ' = ' + ("%10.5f" % var)
+# #         var_str  = var_str  + ' ' + units_name          
+# #         #-------------------------------------------------      
+# #         print((time_str + ',  ' + var_str))
+# #         #-----------------------------------------------------
+# #         if (PRINT_INDEX):
+# #             index = (self.time_index + 1)  # (starts at 0)
+# #             print('n =', index, 'of', self.n_steps)
+# #         #-----------------------------------------------------                
+#         self.last_print_time = time.time()          
+
+    xwin = 8.0
+    ywin = 6.0
+    plt.figure(1, figsize=(xwin, ywin))
+    #** wait, 0.005
+
+    #-----------------------
+    # Set the aspect ratio
+    #-----------------------
+    # aspect_ratio = (ywin / xwin)
+    aspect_ratio = 'auto'
+    # aspect_ratio = 'equal'
+    ## plt.axes().set_aspect('auto', 'datalim')
+        
+    if (self.SINGLE_PROFILE):
+        theta = self.q
+        ymin = self.qi.min()
+        ymax = (self.qs + 0.05).max()
+    else:
+        theta = self.q[:,2,2]
+        if (self.qi.ndim == 3):
+            ymin  = self.qi[:,2,2].min()
+        else:
+            ymin = self.qi.min()
+        ymax = 0.37   ##########################################
+        ## ymax  = (self.qs[:,2,2] + 0.05).max()
+    yrange = [ymin, ymax]
+            
+    plt.plot(self.z, theta, marker='+')
+    # plt.axes().set_aspect( aspect_ratio )
+    plt.xlabel('Depth [meters]')
+    plt.ylim( yrange )
+    plt.ylabel('Soil moisture')
+    plt.show()
+                
+#   plot_theta_profile()
+#-----------------------------------------------------------------------
+def plot_psi_profile( self ):
+
+    plot_interval = 180.0  # [real seconds]
+    elapsed_time = (time.time() - self.last_print_time)
+    if (elapsed_time < plot_interval):
+        return
+    self.last_print_time = time.time() 
+     
+    xwin = 8.0
+    ywin = 6.0
+    plt.figure(2, figsize=(xwin, ywin))
+
+    ### wait, 0.005
+    #-----------------------
+    # Set the aspect ratio
+    #-----------------------
+    # aspect_ratio = (ywin / xwin)
+    aspect_ratio = 'auto'
+    # aspect_ratio = 'equal'
+    ## plt.axes().set_aspect('auto', 'datalim')
+            
+    ## yrange = np.array([-3.0, 0.5])    # (Log case)
+    yrange = [-3.0, 0.5]              # (Log case)
+    ytitle = '-Log(-Pressure head) [m]'
+    #------------------------------------------
+    # yrange = [-20.0, 0.0]           # (Linear case)
+    # ytitle = 'Pressure head [m]'
+    #------------------------------------------
+    if (self.SINGLE_PROFILE):
+        psi = self.p
+    else: 
+        psi = self.p[:,2,2]    
+    y = -1 * np.log(1.0 + np.absolute( psi )) 
+    #----------------------------------------
+    ## plt.plot(self.z, psi, marker='+')
+    plt.plot(self.z, y, marker='+')
+    # plt.axes().set_aspect( aspect_ratio )
+    plt.xlabel('Depth [meters]')
+    plt.ylim(yrange)
+    plt.ylabel(ytitle)
+    plt.show()
+   
+#   plot_psi_profile()
+#-----------------------------------------------------------------------
+#-----------------------------------------------------------------------
+# See functions in soil_trans_BC.py in topoflow.utils
+#-----------------------------------------------------------------------
+# def Theta_TBC(psi, theta_s, theta_r, psi_B, psi_A, c, Lambda,
+#               REPORT=False, CM_TO_M=False):
+# 
+#     #---------------------------------------------------------------
+#     # Notes: This function computes the soil water content, theta
+#     #        for the give value of pressure head, psi (in cm),
+#     #        using the soil characteristic relation called
+#     #        "transitional Brooks-Corey" (TBC).
+#     #
+#     #        psi = -1000000 => theta = theta_min (air dry)
+#     #        psi = -31000   => theta = theta_H (hygroscopic)
+#     #        psi = -15000   => theta = theta_w (perm. wilting pt.)
+#     #        psi = -340     => theta = theta_f (field capacity)
+#     #
+#     #---------------------------------------------------------------
+#     # Notes: Note that for both B-C and TB-C, psi goes to
+#     #        -Infinity as theta goes to theta_r (S_eff goes
+#     #        to zero).  However, natural soils do not have heads
+#     #        (tensions) less than -31,000 cm.  In this range they
+#     #        absorb water from the air (H = hygroscopic).  While
+#     #        initial theta values will always be set to a number
+#     #        greater than theta_r, evaporation at the surface can
+#     #        cause theta to drop to values near theta_r.  Here we
+#     #        use the T-BC equation for theta(psi) to compute a
+#     #        value theta_H corresponding to psi_H=-31,000 cm.
+#     #---------------------------------------------------------------
+#     
+#     #--------------------------------------
+#     # Convert psi units from cm to meters
+#     #--------------------------------------
+#     if (CM_TO_M):
+#         psi_m = (psi/ np.float64(100))        # [cm -> meters]
+#         ratio = (psi_m + psi_A) / psi_B    # (should be > 0)
+#     else:
+#         ratio = (psi + psi_A) / psi_B      # (should be > 0)
+#         
+#     theta = (1.0 + (ratio ** c)) ** (-Lambda / c)
+#     theta = theta * (theta_s - theta_r) + theta_r
+#     
+#     #------------------
+#     # Optional report
+#     #------------------
+#     if (REPORT):    
+#         print('theta_s = ', theta_s)
+#         print('theta   = ', theta)
+#         print('theta_r = ', theta_r)
+#         print(' ')
+#     
+#     return theta
+#     
+# #   Theta_TBC()
+# #-----------------------------------------------------------------------
+# def K_of_Theta_TBC(theta, K_s, theta_s, theta_r, Lambda,
+#                    REPORT=False):
+# 
+#     #--------------------------------------------------------------
+#     # Notes: This function returns the hydraulic conductivity, K,
+#     #        as a function of the soil moisture, theta, using an
+#     #        equation that holds for both the "Brooks-Corey" (B-C)
+#     #        and "transitional Brooks-Corey" (TB-C) cases.
+# 
+#     #        Called by Get_Soil_Params to compute K_i.
+# 
+#     #        lambda = pore size distribution parameter
+#     #        eta    = "pore-disconnectedness" parameter
+#     #        eta    = 2d + (3d * lambda)
+#     #        eps    = eta/lambda
+# 
+#     #        See "Infiltration Theory for Hydrologic Applica-
+#     #        tions" by R.E. Smith (2002), p. 19-22.
+#     #--------------------------------------------------------------
+#     
+#     #----------------------------
+#     # Compute exponent, epsilon
+#     #----------------------------
+#     eta = (np.float64(2) + (np.float64(3) * Lambda))
+#     eps = eta / Lambda
+#     
+#     #--------------------------------------
+#     # Compute the "relative conductivity"
+#     #--------------------------------------
+#     K_r = ((theta - theta_r) / (theta_s - theta_r)) ** eps
+#     
+#     #-----------------------------
+#     # Compute K from K_s and K_r
+#     #-----------------------------
+#     K_r = np.maximum( np.minimum(K_r, 1.0), 0.0 )
+#     K = K_s * K_r
+#     
+#     #------------------
+#     # Optional report
+#     #------------------
+#     if (REPORT):    
+#         print('K = ', K[0:4])
+#         # print ' '
+#     
+#     return K
+#     
+# #   K_of_Theta_TBC()
+#-----------------------------------------------------------------------
 
 
 

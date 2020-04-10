@@ -162,7 +162,7 @@ class channels_component( BMI_base.BMI_component ):
         'glacier_ice__melt_volume_flux',                   # (MR)
         'land_surface_water__baseflow_volume_flux',        # (GW)
         'land_surface_water__evaporation_volume_flux',     # (ET)
-        'soil_surface_water__infiltration_volume_flux',    # (IN)
+        'soil_surface_water__infiltration_volume_flux',    # (v0)
         'snowpack__melt_volume_flux',                      # (SM)
         'water-liquid__mass-per-volume_density' ]          # (rho_H2O)
         #------------------------------------------------------------------
