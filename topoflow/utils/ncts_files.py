@@ -27,13 +27,15 @@ import netCDF4 as nc
 #
 #   unit_test1()
 #   unit_test2()
+#
 #   save_as_text()   # (not ready yet)
+#   get_dtype_map()
+#   get_dtype_codes()      # 2020-01-26 (separate function)
 #
 #   class ncts_file():
 #
 #       import_netCDF4()
 #       open_file()
-#       get_dtype_map()
 #       open_new_file()
 #       update_time_index()
 #-----------------------------
@@ -234,6 +236,63 @@ def save_as_text(ncts_file_name=None, text_file_name=None):
     text_unit.close()
 
 #   save_as_text()
+#----------------------------------------------------------
+def get_dtype_map():
+
+    #----------------------------------------
+    # Possible settings for "dtype_code"
+    #----------------------------------------------------
+    # These two-char codes are used for netCDF4 package
+    #----------------------------------------------------
+    # See:  http://unidata.github.io/netcdf4-python/
+    #----------------------------------------------------
+    dtype_map = {'float64':'f8', 'float32':'f4',
+                 'int64':'i8', 'int32':'i4',
+                 'int16':'i2', 'int8':'i1',
+                 'S|100':'S1'}  # ( ????? )       
+    
+    #-------------------------------------------------
+    # These one-char codes are used for Nio in PyNIO
+    #-------------------------------------------------
+    # dtype_code = "d"  # (double, Float64)
+    # dtype_code = "f"  # (float,  Float32)
+    # dtype_code = "l"  # (long,   Int64)
+    # dtype_code = "i"  # (int,    Int32)
+    # dtype_code = "h"  # (short,  Int16)
+    # dtype_code = "b"  # (byte,   Int8)
+    # dtype_code = "S1" # (char)
+    #-------------------------------------------
+#         dtype_map = {'float64':'d', 'float32':'f',
+#                         'int64':'l', 'int32':'i',
+#                         'int16':'s', 'int8':'b',
+#                         'S|100':'S1'}  # (check last entry)                      
+
+    return dtype_map
+
+#   get_dtype_map()
+#----------------------------------------------------------
+def get_dtype_codes( dtypes, var_names ):
+
+    #---------------------------------------------
+    # Create array of dtype codes from dtypes
+    # for multiple time series (i.e. columns).
+    #---------------------------------------------
+    n_vars = len(var_names)
+    dtype_map   = get_dtype_map()
+    dtype_codes = []
+    if (len(dtypes) == n_vars):
+        for dtype in dtypes:
+           dtype_code = dtype_map[ dtype.lower() ]
+           dtype_codes.append( dtype_code )
+    else:
+        dtype = dtypes[0]
+        dtype_code = dtype_map[ dtype.lower() ]
+        for k in range(n_vars):
+            dtype_codes.append( dtype_code ) 
+                    
+    return dtype_codes               
+
+#   get_dtype_codes()
 #-------------------------------------------------------------------
 class ncts_file():
 
@@ -280,40 +339,6 @@ class ncts_file():
     
     #   open_file()
     #----------------------------------------------------------
-    def get_dtype_map(self):
-
-        #----------------------------------------
-        # Possible settings for "dtype_code"
-        #----------------------------------------------------
-        # These two-char codes are used for netCDF4 package
-        #----------------------------------------------------
-        # See:  http://unidata.github.io/netcdf4-python/
-        #----------------------------------------------------
-        dtype_map = {'float64':'f8', 'float32':'f4',
-                     'int64':'i8', 'int32':'i4',
-                     'int16':'i2', 'int8':'i1',
-                     'S|100':'S1'}  # ( ????? )       
-        
-        #-------------------------------------------------
-        # These one-char codes are used for Nio in PyNIO
-        #-------------------------------------------------
-        # dtype_code = "d"  # (double, Float64)
-        # dtype_code = "f"  # (float,  Float32)
-        # dtype_code = "l"  # (long,   Int64)
-        # dtype_code = "i"  # (int,    Int32)
-        # dtype_code = "h"  # (short,  Int16)
-        # dtype_code = "b"  # (byte,   Int8)
-        # dtype_code = "S1" # (char)
-        #-------------------------------------------
-#         dtype_map = {'float64':'d', 'float32':'f',
-#                         'int64':'l', 'int32':'i',
-#                         'int16':'s', 'int8':'b',
-#                         'S|100':'S1'}  # (check last entry)                      
-
-        return dtype_map
-    
-    #   get_dtype_map()
-    #----------------------------------------------------------
     def open_new_file(self, file_name,
                       grid_info=None,
                       time_info=None,
@@ -330,7 +355,7 @@ class ncts_file():
         # Does file already exist ?
         #----------------------------
         file_name = file_utils.check_overwrite( file_name )
-        
+                
         #---------------------------------------
         # Check and store the time series info
         #---------------------------------------
@@ -364,6 +389,7 @@ class ncts_file():
         maxlon   = grid_info.x_east_edge
         minlat   = grid_info.y_south_edge
         maxlat   = grid_info.y_north_edge
+
         #-------------------------------------------
         # We may not need to save these in self.
         # I don't think they're used anywhere yet.
@@ -405,17 +431,7 @@ class ncts_file():
         # Create array of dtype codes from dtypes
         # for multiple time series (i.e. columns).
         #---------------------------------------------
-        dtype_map   = self.get_dtype_map()
-        dtype_codes = []
-        if (len(dtypes) == len(var_names)):
-            for dtype in dtypes:
-               dtype_code = dtype_map[ dtype.lower() ]
-               dtype_codes.append( dtype_code )
-        else:
-            dtype = dtypes[0]
-            dtype_code = dtype_map[ dtype.lower() ]
-            for k in range(len(var_names)):
-                dtype_codes.append( dtype_code )                
+        dtype_codes = get_dtype_codes( dtypes, var_names )
         self.dtype_codes = dtype_codes
             
         #-------------------------------------
@@ -503,8 +519,6 @@ class ncts_file():
                 
         #-----------------------------------
         # Create variables using var_names
-        #-----------------------------------
-        # Returns "var" as a PyNIO object
         #---------------------------------------------------
         # NB! The 3rd argument here (dimension), must be a
         #     tuple.  If there is only one dimension, then

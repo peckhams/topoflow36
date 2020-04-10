@@ -1,5 +1,5 @@
 
-#  Copyright (c) 2019, Scott D. Peckham
+#  Copyright (c) 2019-2020, Scott D. Peckham
 #  October 2019  (moved from components/infil_richards_1d.py)
 
 #  Note: This file implements soil retention functions for the
@@ -12,6 +12,7 @@
 
 # theta_of_psi()      # theta = soil_water__volume_fraction
 # K_of_theta()        # K = soil_water__hydraulic_conductivity
+# K_of_psi()
 # psi_of_theta()
 
 # print_suggested_values()
@@ -99,7 +100,7 @@ def theta_of_psi(psi, theta_s, theta_r, psi_B, psi_A, c, Lambda,
 #     print('min(lam)   = ' + str(Lambda.min()) )
 #     print('max(lam)   = ' + str(Lambda.max()) )
 #     print()
-         
+     
     cap_theta = (1.0 + (ratio ** c)) ** (-Lambda / c)   # S_eff
     theta = cap_theta * (theta_s - theta_r) + theta_r
     
@@ -164,17 +165,100 @@ def K_of_theta(theta, K_s, theta_s, theta_r, Lambda,
     
 #   K_of_theta()
 #-----------------------------------------------------------------------
-def psi_of_theta(theta, K_s, theta_s, theta_r, Lambda, c,
-                 psi_B, psi_A, REPORT=False):
+def K_of_psi(p, pB, pA, Ks, eta, c, REPORT=False):
+                                      
+    #--------------------------------------------------------------
+    # Notes: This function returns the hydraulic conductivity, K,
+    #        as a function of the pressure head, psi, using an
+    #        equation the "transitional Brooks-Corey" (TB-C) case.
+    #        The equation for "standard Brooks-Corey" (BC) is the
+    #        special case of c=1, pA=0.
+    #
+    #        lambda = pore size distribution parameter
+    #        eta    = "pore-disconnectedness" parameter
+    #        eta    = 2d + (3d * lambda)
+    #
+    #        When p and pA are both zero, then K = Ks.
+    #
+    #        See "Infiltration Theory for Hydrologic Applica-
+    #        tions" by R.E. Smith (2002), p. 19-22.
+    #--------------------------------------------------------------
+                   
+    #----------------------------
+    # Compute exponent, epow
+    #----------------------------
+    epow = (-eta / c)
 
-    #----------------------------------------
-    # S_eff = effective saturation in [0,1]
-    #----------------------------------------
-    S_eff = (theta - theta_r) / (theta_s - theta_r)
-    cpow  = (-c / Lambda)
-    arg   = ((S_eff ** cpow )- 1.0) ** (1.0 / c)
-    psi   = (psi_B * arg) - psi_A
-   
+    #----------------------------------
+    # Compute the pressure head ratio
+    #----------------------------------
+    ratio  = (p + pA) / pB
+            
+    #--------------------------------------
+    # Compute the "relative conductivity"
+    #------------------------------------------------
+    # NB!  It is OK to raise a grid to a grid power
+    #------------------------------------------------
+    Kr = (1.0 + ratio ** c) ** epow
+    Kr = np.maximum( np.minimum(Kr, 1.0), 0.0 )
+        
+    #-----------------------------
+    # Compute K from Ks and Kr
+    #-----------------------------
+    K = Ks * Kr
+    
+    #------------------
+    # Optional report
+    #------------------
+    if (REPORT):
+        print('In K_of_psi():')
+        print('min(K) =', K.min())
+        print('max(K) =', K.max())    
+        # print('K = ', K[0:4])
+        print()
+    
+    return K
+    
+#   K_of_psi()
+#-----------------------------------------------------------------------
+def psi_of_theta(q, qs, qr, lam, c, pB, pA, MIN_VALUE=None,
+                 REPORT=False):
+                                                  
+    #------------------------------------------------------
+    # First compute effective saturation, S_eff, in [0,1]
+    #------------------------------------------------------
+    S_eff = (q - qr) / (qs - qr)
+
+    #----------------------------------------- 
+    # Option to check that S_eff is in range
+    #-----------------------------------------
+    if (REPORT):              
+        Smin = S_eff.min()
+        Smax = S_eff.max()
+        if (Smin < 0):
+            print('####### ERROR:  min(S_eff) < 0.)')
+            print('#######  min(S_eff) =', Smin)
+            # sys.exit()
+        if (Smax > 1):
+            print('####### ERROR:  max(S_eff) > 1.)')
+            print('#######  max(S_eff) =', Smax)
+            # sys.exit()
+                    
+    #------------------------------------------------
+    # NB!  It is OK to raise a grid to a grid power
+    #------------------------------------------------
+    cpow = (-c / lam)
+    arg  = ((S_eff ** cpow ) - 1.0) ** (1.0 / c)
+    psi  = (pB * arg) - pA
+
+    #-----------------------------------------------------                
+    # (2020-01-21.  Adjust to avoid very large negatives
+    #---------------------------------------------------------
+    # See psi_constants(): psi_wilt = -150 [m] (wilting pt.)
+    #---------------------------------------------------------
+    if (MIN_VALUE is not None):
+        np.maximum( psi, MIN_VALUE, psi )
+                   
     return psi
     
 #   psi_of_theta()         
