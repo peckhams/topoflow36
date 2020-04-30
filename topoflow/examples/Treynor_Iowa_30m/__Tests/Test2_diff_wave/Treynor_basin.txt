@@ -1,0 +1,28 @@
+----------------------------------------------------------------------
+ Attributes of the Treynor Basin
+----------------------------------------------------------------------
+ 
+ Outlet x-coordinate:     278390.36
+ Outlet y-coordinate:     4560330.4
+ Outlet pixel ID:         1062
+ Outlet parent pix. ID:   1092
+ Outlet elevation:        341.000  (m)
+ 
+ Basin area:              0.42390007  (km^2)
+ Basin relief:            0.029000000  (km)
+ 
+ Pruning method:          Order
+ Pruning threshold:       3.00000
+ Strahler order:          3
+ Network magnitude:       6
+ Network diameter:        5
+ Longest channel length:  0.95698488  (km)
+ Total channel length:    1.6139697  (km)
+ Drainage density:        3.8074296  (km^-1)
+ Source density:          14.154280  (km^-2)
+ 
+----------------------------------------------------------------------
+ Note: The last set of attributes depend on
+       the user-selected pruning method.
+----------------------------------------------------------------------
+ 
