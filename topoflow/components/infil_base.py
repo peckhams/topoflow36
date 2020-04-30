@@ -1,6 +1,7 @@
 
-## Copyright (c) 2001-2019, Scott D. Peckham
+## Copyright (c) 2001-2020, Scott D. Peckham
 
+## April 2020.  Added set_new_defaults(), disable_all_output().
 ## January 2013  (Removed "get_port_data" calls, etc.)
 ## January 2009  (converted from IDL)
 ## May, August 2009
@@ -19,6 +20,7 @@
 #  class infil_component
 #
 #      set_constants()
+#      set_new_defaults()    # (2020-04-29)
 #      initialize()
 #      update()
 #      update_nondrivers()          ####### (OBSOLETE ??)
@@ -46,6 +48,7 @@
 #      close_input_files()
 #      ------------------------
 #      update_outfile_names()
+#      disable_all_output()    # (2020-04-29)
 #      open_output_files()
 #      write_output_files()
 #      close_output_files()
@@ -136,6 +139,41 @@ class infil_component( BMI_base.BMI_component):
         
     #   set_constants()
     #-------------------------------------------------------------------
+    def set_new_defaults(self):
+ 
+        #------------------------------------------------------
+        # Notes:  Set defaults for flags or vars that may not
+        #         be found in older CFG files. (2020-04-29)
+        #------------------------------------------------------
+        # This is much better than putting them in the
+        # save_computed_input_vars() function.
+        #------------------------------------------------------        
+        self.CHECK_STABILITY = False
+
+        #----------------------------------------------
+        # These may not be defined in older CFG files
+        # and are needed by open_output_files(), etc.
+        #----------------------------------------------
+        self.SAVE_Q0_GRIDS  = False
+        self.SAVE_ZW_GRIDS  = False
+        #-----------------------------
+        self.SAVE_Q0_PIXELS = False
+        self.SAVE_ZW_PIXELS = False
+        #-----------------------------
+        self.SAVE_Q_CUBES   = False
+        self.SAVE_P_CUBES   = False
+        self.SAVE_K_CUBES   = False
+        self.SAVE_V_CUBES   = False
+
+        #----------------------------------------
+        # These may no longer be needed;  check.
+        #----------------------------------------
+        self.q_cs_file = ''
+        self.p_cs_file = ''
+        self.K_cs_file = ''
+        self.v_cs_file = ''
+        self.save_cube_dt = np.float64( 60 )          
+    #-------------------------------------------------------------------
     def initialize(self, cfg_file=None, mode="nondriver",
                    SILENT=False):
 
@@ -183,14 +221,15 @@ class infil_component( BMI_base.BMI_component):
         # read_input_files() & before initialize_computed_vars()?
         #----------------------------------------------------------              
         self.set_constants()
+        self.set_new_defaults()
         # Note: initialize_config_vars() calls initialize_layer_vars()
         self.initialize_config_vars() 
         ### self.read_grid_info()  # NOW IN initialize_config_vars()
         self.initialize_basin_vars()  # (5/14/10)
         self.initialize_time_vars()
         
-        if not(hasattr(self, 'CHECK_STABILITY')):
-           self.CHECK_STABILITY = False
+        ## if not(hasattr(self, 'CHECK_STABILITY')):
+        ##    self.CHECK_STABILITY = False
 
         #----------------------------------
         # Has component been turned off ?
@@ -198,6 +237,7 @@ class infil_component( BMI_base.BMI_component):
         if (self.comp_status == 'Disabled'):
             if not(SILENT):
                 print('Infiltration component: Disabled in CFG file.')
+            self.disable_all_output()
             #-------------------------------------------------
             # IN = infiltration rate at land surface
             # Rg = vertical flow rate just above water table
@@ -432,31 +472,11 @@ class infil_component( BMI_base.BMI_component):
     def set_computed_input_vars(self):
 
         # self.nz = 1  # (needed by self.save_profiles() ??)
-        
-        #--------------------------------------------------------
-        # Define these here, so all components can use the same
-        # output file functions, like "open_output_files()".
-        #--------------------------------------------------------
-        self.SAVE_Q0_GRIDS  = False
-        self.SAVE_ZW_GRIDS  = False
-        #-----------------------------
-        self.SAVE_Q0_PIXELS = False
-        self.SAVE_ZW_PIXELS = False
-        #-----------------------------
-        self.SAVE_Q_CUBES   = False
-        self.SAVE_P_CUBES   = False
-        self.SAVE_K_CUBES   = False
-        self.SAVE_V_CUBES   = False
-
-        #--------------------------------------------
-        # Can maybe remove this when GUI info file
-        # has the "save cubes" part put back in.
-        #--------------------------------------------
-        self.q_cs_file = ''
-        self.p_cs_file = ''
-        self.K_cs_file = ''
-        self.v_cs_file = ''
-        self.save_cube_dt = np.float64( 60 )
+    
+        #------------------------------------------    
+        # Note: Moved some things from here to:
+        #       set_new_defaults() on 2020-04-29.
+        #------------------------------------------
         
         #---------------------------------------------------------
         # Make sure that all "save_dts" are larger or equal to
@@ -615,7 +635,7 @@ class infil_component( BMI_base.BMI_component):
 
         #####################################################
         # (10/8/10) The rest of this routine doesn't work
-        # if IN is a scalar.  Need to look at this more.
+        # if v0 is a scalar.  Need to look at this more.
         #####################################################
         ## if (self.SINGLE_PROFILE):
         if (self.v0.size == 1):
@@ -983,7 +1003,31 @@ class infil_component( BMI_base.BMI_component):
 ##        self.K_ps_file = (self.case_prefix + '_1D_K.txt')
 ##        self.v_ps_file = (self.case_prefix + '_1D_v.txt')
 
-    #   update_outfile_names()   
+    #   update_outfile_names()
+    #-------------------------------------------------------------------
+    def disable_all_output(self):
+    
+        self.SAVE_V0_GRIDS = False
+        self.SAVE_Q0_GRIDS = False
+        self.SAVE_I_GRIDS  = False
+        self.SAVE_ZW_GRIDS = False
+        #-----------------------------
+        self.SAVE_V0_PIXELS = False
+        self.SAVE_Q0_PIXELS = False
+        self.SAVE_I_PIXELS  = False
+        self.SAVE_ZW_PIXELS = False
+        #-----------------------------
+        self.SAVE_Q_PROFILES = False
+        self.SAVE_P_PROFILES = False
+        self.SAVE_K_PROFILES = False
+        self.SAVE_V_PROFILES = False
+        #-----------------------------
+        self.SAVE_Q_CUBES = False
+        self.SAVE_P_CUBES = False
+        self.SAVE_K_CUBES = False
+        self.SAVE_V_CUBES = False
+                               
+    #   disable_all_output()  
     #-------------------------------------------------------------------  
     def open_output_files(self):
 

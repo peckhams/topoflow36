@@ -3,8 +3,10 @@
 
 ## See "(5/13/10)" for a temporary fix.
 #------------------------------------------------------------------------
-#  Copyright (c) 2001-2019, Scott D. Peckham
+#  Copyright (c) 2001-2020, Scott D. Peckham
 #
+#  Apr 2020.  Added set_new_defaults(), disable_all_output().
+#  Oct 2019.  Added FLOOD_OPTION and CHECK_STABILITY flags.
 #  Sep 2014.  Wrote new update_diversions().
 #             New standard names and BMI updates and testing.
 #  Nov 2013.  Converted TopoFlow to a Python package.
@@ -65,6 +67,7 @@
 #      get_var_units()           # (5/15/12)
 #-----------------------------
 #      set_constants()
+#      set_new_defaults()
 #      initialize()
 #      update()
 #      finalize()
@@ -113,6 +116,7 @@
 #----------------------------------
 #      update_outfile_names()
 #      bundle_output_files()        # (9/21/14. Not used yet)
+#      disable_all_output()         # (04/29/20)
 #      open_output_files()
 #      write_output_files()
 #      close_output_files()
@@ -505,6 +509,31 @@ class channels_component( BMI_base.BMI_component ):
     
     #   set_constants()
     #-------------------------------------------------------------------
+    def set_new_defaults(self):    
+
+        #------------------------------------------------------
+        # (2019-10-08) Added CHECK_STABILITY flag to CFG file
+        # so stability check be turned off to increase speed.
+        #------------------------------------------------------
+        self.CHECK_STABILITY = True
+             
+        #--------------------------------------------------------------        
+        # (2019-10-03) Added FLOOD_OPTION flag to CFG file.
+        # If not(FLOOD_OPTION), don't write flood depths (all zeros).
+        #--------------------------------------------------------------
+        if not(hasattr(self, 'FLOOD_OPTION')):
+            self.FLOOD_OPTION = False
+
+        #------------------------------------------- 
+        # Also new in 2019, not in older CFG files
+        # Not used then, but still need to be set.
+        #-------------------------------------------
+        self.d_bankfull_type = 'Scalar'  # or Grid
+        self.d_bankfull = 10.0  # [meters]
+        self.d_bankfull_file = ''
+
+    #   set_new_defaults()
+    #-------------------------------------------------------------------
     def initialize(self, cfg_file=None, mode="nondriver", SILENT=False): 
 
         if not(SILENT):
@@ -518,28 +547,18 @@ class channels_component( BMI_base.BMI_component ):
         #-----------------------------------------------
         # Load component parameters from a config file
         #-----------------------------------------------
-        self.set_constants()           # (12/7/09)
+        self.set_constants()       # (12/7/09)
+        self.set_new_defaults()    # (04/29/20)
         #--------------------------------------------------------
         # print 'CHANNELS calling initialize_config_vars()...'
         self.initialize_config_vars()
 
-        #--------------------------------------------------------------        
-        # (2019-10-03) Added FLOOD_OPTION flag to CFG file.
-        # If not(FLOOD_OPTION), don't write flood depths (all zeros).
-        #--------------------------------------------------------------
-        if not(hasattr(self, 'FLOOD_OPTION')):
-            self.FLOOD_OPTION = False
+        # New option, see set_new_defaults().
         if not(self.FLOOD_OPTION):
             self.SAVE_DF_GRIDS  = False
             self.SAVE_DF_PIXELS = False
             self.d_flood_gs_file = ''
             self.d_flood_ts_file = ''
-
-        #------------------------------------------------------
-        # (2019-10-08) Added CHECK_STABILITY flag to CFG file
-        #------------------------------------------------------
-        if not(hasattr(self, 'CHECK_STABILITY')):
-             self.CHECK_STABILITY = True
 
         #------------------------------------------------------------
         # Must call read_grid_info() after initialize_config_vars()
@@ -562,8 +581,7 @@ class channels_component( BMI_base.BMI_component ):
         if (self.comp_status == 'Disabled'):
             if not(SILENT):
                 print('Channels component: Disabled in CFG file.')
-            self.SAVE_Q_GRIDS  = False   # (It is True by default.)
-            self.SAVE_Q_PIXELS = False   # (It is True by default.)
+            self.disable_all_output()   # (04/29/2020)
             self.DONE = True
             self.status = 'initialized'  # (OpenMI 2.0 convention) 
             return
@@ -1007,6 +1025,8 @@ class channels_component( BMI_base.BMI_component ):
         ### S_bed = (S_bed / self.sinu)     #*************
         self.slope = (self.slope / self.sinu)
         self.S_bed  = self.slope
+        self.S_free = self.S_bed.copy()  # (2020-04-29)
+
         ###################################################
         ###################################################
         
@@ -3110,6 +3130,22 @@ class channels_component( BMI_base.BMI_component ):
         long_name:get_long_name('d_flood'), units_name:get_var_units('d_flood')} ]
                                 
     #   bundle_output_files
+    #------------------------------------------------------------------- 
+    def disable_all_output(self):
+    
+        self.SAVE_Q_GRIDS  = False
+        self.SAVE_U_GRIDS  = False
+        self.SAVE_D_GRIDS  = False
+        self.SAVE_F_GRIDS  = False
+        self.SAVE_DF_GRIDS = False
+        #----------------------------
+        self.SAVE_Q_PIXELS  = False
+        self.SAVE_U_PIXELS  = False
+        self.SAVE_D_PIXELS  = False
+        self.SAVE_F_PIXELS  = False
+        self.SAVE_DF_PIXELS = False
+        
+    #   disable_all_output()
     #-------------------------------------------------------------------  
     def open_output_files(self):
 

@@ -14,8 +14,9 @@ Water Resources Monograph 15, AGU.
 """
 ## Copyright (c) 2001-2020, Scott D. Peckham
 ##
-## January 2013   (Revised handling of input/output names).
-## October 2012   (CSDMS Standard Names and BMI)
+## April   2020  (Added update_saturation(). Checked soln method.)
+## January 2013  (Revised handling of input/output names).
+## October 2012  (CSDMS Standard Names and BMI)
 ## January 2009  (converted from IDL)
 ## May, August 2009
 ## May 2010  (changes to unit_test() and read_cfg_file()
@@ -59,6 +60,7 @@ Water Resources Monograph 15, AGU.
 #         ** check_bottom_BC_for_theta()    (FUTURE)
 #      check_theta()
 #      update_q0()
+#      update_saturation() # (04/30/20)
 #      -------------------------------
 #      update_psi()
 #      update_surface_Kbar()
@@ -917,6 +919,7 @@ class infil_component(infil_base.infil_component):
         self.update_theta()
         self.update_surface_BC_for_theta()
         self.update_bottom_BC_for_theta()
+        self.update_saturation()
         ### self.update_theta()   # Apply BCs first ?? #################
         if (self.CHECK_STABILITY or self.DEBUG):
             self.check_theta()
@@ -1077,11 +1080,17 @@ class infil_component(infil_base.infil_component):
             dp_dz_1 = Z_Derivative_1D( self.p, self.dz )
             dp_dz_2 = Z_Derivative_1D( self.p, self.dz, BACKWARD=True )
             K_bar_1 = Z_Forward_Average( self.K )
-            K_bar_2 = Z_Backward_Average( self.K )
-            term1   = K_bar_2 * (dp_dz_2 - 1.0)
-            term2   = K_bar_1 * (dp_dz_1 - 1.0)
-            #------------------------------------------------------
-            d_theta = (-2.0 * self.dt / z_diff) * (term1 - term2)
+            K_bar_2 = Z_Backward_Average( self.K )          
+            term1   = K_bar_1 * (dp_dz_1 - 1.0)
+            term2   = K_bar_2 * (dp_dz_2 - 1.0)
+            #--------------------------------------------------------
+            # (2020-04-30) Double-checked that the 2nd expression
+            # here is correct with a "Richards" Jupyter notebook.
+            # However, equation A3.1 given in Smith (2002),
+            # Appendix 3, has the opposite sign.
+            #--------------------------------------------------------            
+            # d_theta = (-2.0 * self.dt / z_diff) * (term1 - term2)
+            d_theta = (2.0 * self.dt / z_diff) * (term1 - term2)
 
             #-----------------------------------------------
             # Don't need this if BC is applied after this.
@@ -1104,10 +1113,16 @@ class infil_component(infil_base.infil_component):
             dp_dz_2 = Z_Derivative_3D( self.p, self.dz, BACKWARD=True )
             K_bar_1 = Z_Forward_Average( self.K )
             K_bar_2 = Z_Backward_Average( self.K )
-            term1   = K_bar_2 * (dp_dz_2 - 1.0)
-            term2   = K_bar_1 * (dp_dz_1 - 1.0)
-            #----------------------------------------------
-            d_theta = (-2.0 * self.dt) * (term1 - term2)
+            term1   = K_bar_1 * (dp_dz_1 - 1.0)
+            term2   = K_bar_2 * (dp_dz_2 - 1.0)
+            #--------------------------------------------------------
+            # (2020-04-30) Double-checked that the 2nd expression
+            # here is correct with a "Richards" Jupyter notebook.
+            # However, equation A3.1 given in Smith (2002),
+            # Appendix 3, has the opposite sign.
+            #--------------------------------------------------------
+            # d_theta = (-2.0 * self.dt) * (term1 - term2)
+            d_theta = (2.0 * self.dt) * (term1 - term2)
             
             if (n_dz == 1):    
                 d_theta = d_theta / z_diff   # (z_diff is a scalar)
@@ -1219,14 +1234,83 @@ class infil_component(infil_base.infil_component):
     def update_surface_BC_for_theta(self, REPORT=False):
 
         #--------------------------------------------------------
-        # Note:  This assumes that psi has already been set at
-        #        the surface, and uses TBC relation to compute
-        #        theta at the surface.
-        #        So must call udpate_surface_BC_for_psi() 1st.
+        # Note:  This uses the following reasoning to update the
+        #        water content, theta(0) = q0, at the surface.
+        #
+        #        (0) r = self.P_total
+        #        (1) dVw = (r - v0) * dA * dt
+        #        (2) q0(t) = Vw(t) / (dA * dz)
+        #        (3) q0(t + dt) = [Vw(t) + dVw] / (dA * dz)
+        #        (4) q0(t + dt) = q0(t) + [dVw / (dA * dz)]
+        #        (5) q0(t + dt) = q0(t) + (r - v0) * dt / dz
+        #        (6) del q0(t)  = (r - v0) * dt / dz
+        #
+        # Note:  Before 04-18-20, used a more complicated but
+        #        equivalent approach, where psi[0] was updated
+        #        first and then theta(psi) was used.
         #--------------------------------------------------------
         if (self.DEBUG):
             print('Calling update_surface_BC_for_theta()...')
-                                                         
+
+        if (self.dz.size == 1):
+            dz = self.dz     # [m]
+        else:
+            dz = self.dz[0]  # [m]
+        #----------------------------
+        dt = self.dt         # [s]
+        r  = self.P_total    # [m/s] (scalar or grid)
+        #----------------------------
+        if (self.SINGLE_PROFILE):
+            v0 = self.v[0]
+        else:
+            v0 = self.v[0,:,:]
+        #----------------------------
+        dq = (r - v0) * dt / dz     # [1]   (scalar or grid)
+
+        ######################################
+        # CLEAN THIS UP TOO
+        ######################################
+                
+        #------------------------------------
+        # Set theta at the surface boundary
+        #------------------------------------
+        if (self.SINGLE_PROFILE):
+            #----------------------------------------
+            # Add dq, but don't allow to exceed qs.
+            #----------------------------------------
+            np.minimum( self.q[0] + dq, self.qs[0], self.q[0])
+        else:
+            np.minimum( self.q[0,:,:] + dq, self.qs[0,:,:], self.q[0,:,:])
+          
+            if (self.DEBUG):
+                q0 = self.q[0,:,:]
+                print('###  min(q0) = ', q0.min() )
+                print('###  max(q0) = ', q0.max() )
+                print('###  min(P_total) = ', r.min() )
+                print('###  max(P_total) = ', r.max() )
+                print()
+
+        #----------------
+        # For debugging
+        #----------------
+        if (self.DEBUG and self.SINGLE_PROFILE):
+            print('In update_surface_BC_for_theta():')
+            print('theta[0] =', self.q[0] )
+            print('theta[1] =', self.q[1] )
+
+    #   update_surface_BC_for_theta()
+    #-----------------------------------------------------------------------
+    def update_surface_BC_for_theta0(self, REPORT=False):
+
+        #--------------------------------------------------------
+        # Note:  This assumes that psi has already been set at
+        #        the surface, and uses TBC relation to compute
+        #        theta at the surface.
+        #        So must call update_surface_BC_for_psi() 1st.
+        #--------------------------------------------------------
+        if (self.DEBUG):
+            print('Calling update_surface_BC_for_theta()...')
+
         #------------------------------------
         # Set theta at the surface boundary
         #------------------------------------
@@ -1291,7 +1375,7 @@ class infil_component(infil_base.infil_component):
             print('theta[0] =', self.q[0] )
             print('theta[1] =', self.q[1] )
 
-    #   update_surface_BC_for_theta()
+    #   update_surface_BC_for_theta0()
     #-----------------------------------------------------------------------
     def update_bottom_BC_for_theta(self, REPORT=False): 
 
@@ -1378,6 +1462,66 @@ class infil_component(infil_base.infil_component):
             self.q0 = self.q[0,:,:]
             
     #   update_q0()
+    #-------------------------------------------------------------------
+    def update_saturation(self):
+        #-------------------------------------------------------
+        # Notes: Compute effective saturation, S_eff, in [0,1]
+        # This is used by both update_psi() and update_K().
+        #-------------------------------------------------------
+        if (self.DEBUG):
+            print('Calling update_saturation()...')
+
+        if (self.SINGLE_PROFILE):    
+            #--------------------------------
+            # All of the vars are 1D arrays
+            #--------------------------------------------
+            # MIN_VALUE = -150 [m] is wilting point psi
+            #--------------------------------------------
+            self.Se[:] = (self.q - self.qr) / (self.qs - self.qr)
+        else:
+            #--------------------------------------
+            # Each var is either a 1D or 3D array
+            #--------------------------------------
+            dim_q   = np.ndim(self.q)
+            dim_qs  = np.ndim(self.qs)
+            dim_qr  = np.ndim(self.qr)
+
+            ############################################
+            # Try to get rid of this for loop !!
+            ############################################
+            for j in range(self.nz):
+                #--------------------------------------------------
+                # At a given z, every input var is scalar or grid
+                #--------------------------------------------------
+                if (dim_q == 3):    
+                    q = self.q[j,:,:]
+                else:    
+                    q = self.q[j]
+                if (dim_qs == 3):    
+                    qs = self.qs[j,:,:]
+                else:    
+                    qs = self.qs[j]
+                if (dim_qr == 3):    
+                    qr = self.qr[j,:,:]
+                else:    
+                    qr = self.qr[j]
+                #-------------------------        
+                self.Se[j,:,:] = (q - qr) / (qs - qr)
+     
+    #----------------------------------------- 
+    # Option to check that S_eff is in range
+    #-----------------------------------------
+    if (REPORT):              
+        Smin = self.Se.min()
+        Smax = self.Se.max()
+        if (Smin < 0):
+            print('####### ERROR:  min(S_eff) < 0.)')
+            print('#######  min(S_eff) =', Smin)
+        if (Smax > 1):
+            print('####### ERROR:  max(S_eff) > 1.)')
+            print('#######  max(S_eff) =', Smax)
+         
+    #   update_saturation()
     #-----------------------------------------------------------------------
     #-----------------------------------------------------------------------
     def update_psi(self, REPORT=False):
