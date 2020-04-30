@@ -1588,7 +1588,18 @@ class BMI_component:
             print('cfg_file =', cfg_file)
         if not(os.path.exists(cfg_file)):
             print('WARNING: time info CFG file not found:')
+            print('         Using arbitrary defaults.')
             print('         ' + cfg_file)
+            #------------------
+            # Set to defaults?
+            #------------------
+            time_info.start_date = '2020-01-01'
+            time_info.start_time = '00:00:00'
+            time_info.end_date   = '2020-01-02'
+            time_info.end_time   = '00:00:00'
+            time_info.duration   = 1440.0
+            time_info.duration_units = 'minutes'
+            self.time_info = time_info
             return
 
         #---------------------------------------
@@ -1637,7 +1648,9 @@ class BMI_component:
         dur_units = 'minutes'  #######
         duration  = tf_utils.get_duration( time_info.start_date, time_info.start_time,
                                            time_info.end_date, time_info.end_time,
-                                           dur_units )     
+                                           dur_units )
+        time_info.duration = duration  # (2020-04-29) 
+        time_info.duration_units = dur_units   
         self.time_info = time_info
 
     #   read_time_info()
