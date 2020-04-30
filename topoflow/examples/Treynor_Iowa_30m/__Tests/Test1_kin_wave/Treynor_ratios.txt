@@ -1,0 +1,26 @@
+Stream Ratio Estimates
+
+Ratio  Slope   R^2       Name
+
+Undefined.               Stream numbers
+Undefined.               Drainage area 
+Undefined.               Straight-line length 
+Undefined.               Along-channel length 
+Undefined.               Elevation drop 
+Undefined.               Straight-line slope 
+Undefined.               Along-channel slope 
+Undefined.               Total length 
+Undefined.               Shreve magnitude 
+Undefined.               Main channel length 
+Undefined.               Relief 
+Undefined.               Network diameter 
+Undefined.               Sinuosity
+Undefined.               Drainage density
+Undefined.               Source density
+Undefined.               Links per stream
+Undefined.               Tribs of order (w-1) 
+Undefined.               Tribs of order (w-2) 
+Undefined.               Tribs of order (w-3) 
+
+Equal-weight regression, with 
+minimum order = 2 and maximum order = 1.
