@@ -1,6 +1,10 @@
-
+"""
+Cross-component (global) SVO name handling functions
+"""
 # Copyright (c) 2020, Scott D. Peckham
-# Cross-component (global) SVO name handling functions
+
+# May 2020.  Added:  SVO name for 'vol_swe'.
+#            Added:  SVO name for 'vol_soil'.
 
 # import <something> here, if needed
 
@@ -182,7 +186,7 @@ def get_short_name_map():
     'land_surface_net-total-energy__energy_flux' : 'Q_sum',
     'land_surface_soil__conduction_heat_flux' : 'Qc',
     'land_surface_water__area_integral_of_depth' : 'vol_land',
-    'land_surface_water__baseflow_volume_flux' : 'GW',
+    'land_surface_water__baseflow_volume_flux' : 'GW',    
     'land_surface_water__depth' : 'd_flood',
     'land_surface_water__domain_time_integral_of_baseflow_volume_flux' : 'vol_GW',
     'land_surface_water__domain_time_integral_of_evaporation_volume_flux' : 'vol_ET',
@@ -217,6 +221,7 @@ def get_short_name_map():
     'snowpack__degree-day_coefficient' : 'c0',
     'snowpack__degree-day_threshold_temperature' : 'T0',
     'snowpack__depth' : 'h_snow',
+    'snowpack__domain_time_integral_of_liquid-equivalent_depth' : 'vol_swe',
     'snowpack__domain_time_integral_of_melt_volume_flux' : 'vol_SM',
     'snowpack__energy-per-area_cold_content' : 'Ecc',
     'snowpack__initial_depth' : 'h0_snow',
@@ -230,8 +235,8 @@ def get_short_name_map():
     'soil__temperature_reference_depth' : 'soil_x',
     'soil__thermal_conductivity' : 'K_soil',
     'soil_surface__temperature' : 'T_surf',
-    'soil_surface_water__domain_time_integral_of_infiltration_volume_flux' : 'vol_v0',
-    'soil_surface_water__infiltration_volume_flux' : 'v0',
+    'soil_surface_water__domain_time_integral_of_infiltration_volume_flux' : 'vol_IN',
+    'soil_surface_water__infiltration_volume_flux' : 'IN',
     'soil_surface_water__time_integral_of_infiltration_volume_flux' : 'I',
     'soil_surface_water__volume_fraction' : 'q0',
     'soil_top-layer__porosity' : 'qs_layer_0',
@@ -243,6 +248,7 @@ def get_short_name_map():
     'soil_water__brooks-corey-smith_c_parameter' : 'c',
     'soil_water__brooks-corey-smith_pressure_head_offset_parameter' : 'pA',
     'soil_water__bubbling_pressure_head' : 'pB',
+    'soil_water__domain_time_integral_of_volume_fraction' : 'vol_soil',
     'soil_water__field-capacity_volume_fraction' : 'qf',
     'soil_water__green-ampt_capillary_length' : 'G',
     'soil_water__hydraulic_conductivity' : 'K',

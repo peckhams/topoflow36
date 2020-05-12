@@ -1,6 +1,7 @@
 
 #  Copyright (c) 2019-2020, Scott D. Peckham
-#  October 2019  (moved from components/infil_richards_1d.py)
+#  Apr 2020.  K_of_sat() and psi_of_sat().
+#  Oct 2019.  Moved from components/infil_richards_1d.py
 
 #  Note: This file implements soil retention functions for the
 #        transitional Brooks-Corey model (Smith, 2002).
@@ -9,12 +10,16 @@
 #-------------------------------------------------------------------
 
 # get_psi_constants()
-
+#-----------------
+# psi_of_sat()        # psi = pressure head
+# K_of_sat()          # K = soil_water__hydraulic_conductivity
+#-----------------
 # theta_of_psi()      # theta = soil_water__volume_fraction
-# K_of_theta()        # K = soil_water__hydraulic_conductivity
 # K_of_psi()
+#-----------------
 # psi_of_theta()
-
+# K_of_theta()
+#-----------------
 # print_suggested_values()
 
 #-----------------------------------------------------------------------
@@ -54,7 +59,72 @@ def get_psi_constants(self):
 
 #   get_psi_constants()
 #-----------------------------------------------------------------------
-def theta_of_psi(psi, theta_s, theta_r, psi_B, psi_A, c, Lambda,
+def psi_of_sat(Se, lam, c, pB, pA, MIN_VALUE=None,
+               REPORT=False):
+                                                  
+    #---------------------------------------------------
+    # Note:  Se  = effective saturation, in [0,1]
+    #        pB  = bubbling pressure head
+    #        pA  = pressure head offset (usually 0)
+    #        lam =
+    #        c   =
+    #---------------------------------------------------
+    # NB!  It is OK to raise a grid to a grid power
+    #---------------------------------------------------
+    cpow = (-c / lam)
+    arg  = ((Se ** cpow ) - 1.0) ** (1.0 / c)
+    psi  = (pB * arg) - pA
+
+    #-----------------------------------------------------                
+    # (2020-01-21.  Adjust to avoid very large negatives
+    #---------------------------------------------------------
+    # See psi_constants(): psi_wilt = -150 [m] (wilting pt.)
+    #---------------------------------------------------------
+    if (MIN_VALUE is not None):
+        np.maximum( psi, MIN_VALUE, psi )
+                   
+    return psi
+    
+#   psi_of_sat()
+#-----------------------------------------------------------------------
+def K_of_sat(Se, Ks, lam, eta, REPORT=False):
+
+    #--------------------------------------------------------------
+    # Notes: This function returns the hydraulic conductivity, K,
+    #        as a function of the soil moisture, theta, using an
+    #        equation that holds for both the "Brooks-Corey" (B-C)
+    #        and "transitional Brooks-Corey" (TB-C) cases.
+
+    #        Called by Get_Soil_Params to compute K_i.
+
+    #        Se  = eff. saturation (q - qr)/(qs - qr).
+    #        Ks  = sat. hydraulic conductivity
+    #        Kr  = relative hydraulic conductivity
+    #        lam = pore size distribution parameter (lambda)
+    #        eta = "pore-disconnectedness" parameter
+    #        eta = 2d + (3d * lambda)
+    #        eps = eta/lambda
+
+    #        See "Infiltration Theory for Hydrologic Applica-
+    #        tions" by R.E. Smith (2002), p. 19-22.
+    #--------------------------------------------------------------
+    ## eta = (np.float64(2) + (np.float64(3) * lam))
+    eps = eta / lam
+    Kr  = Se ** eps
+    K   = Ks * Kr
+    
+    #------------------
+    # Optional report
+    #------------------
+    if (REPORT):    
+        print('K = ', K[0:4])
+        # print ' '
+
+    return K
+    
+#   K_of_sat()
+#-----------------------------------------------------------------------
+def theta_of_psi(p, qs, qr, pB, pA, c, lam,
                  REPORT=False, CM_TO_M=False):
 
     #---------------------------------------------------------------
@@ -68,6 +138,14 @@ def theta_of_psi(psi, theta_s, theta_r, psi_B, psi_A, c, Lambda,
     #        psi = -15000   => theta = theta_w (perm. wilting pt.)
     #        psi = -340     => theta = theta_f (field capacity)
     #
+    #        q   = theta = water content
+    #        qs  = saturated water content
+    #        qr  = residual water content
+    #        Se  = eff. saturation (q - qr)/(qs - qr).
+    #        p   = pressure head (psi)
+    #        pB  = bubbling pressure head
+    #        pA  = pressure head offset (usually 0)
+    #        lam = pore size distribution parameter (lambda)
     #---------------------------------------------------------------
     # Notes: Note that for both B-C and TB-C, psi goes to
     #        -Infinity as theta goes to theta_r (S_eff goes
@@ -85,10 +163,10 @@ def theta_of_psi(psi, theta_s, theta_r, psi_B, psi_A, c, Lambda,
     # Convert psi units from cm to meters
     #--------------------------------------
     if (CM_TO_M):
-        psi_m = (psi / np.float64(100))    # [cm -> meters]
-        ratio = (psi_m + psi_A) / psi_B    # (should be > 0)
+        pm = (p / np.float64(100))    # [cm -> meters]
+        ratio = (pm + pA) / pB    # (should be > 0)
     else:
-        ratio = (psi + psi_A) / psi_B      # (should be > 0)
+        ratio = (p + pA) / pB     # (should be > 0)
 
 #     print('min(ratio)   = ' + str(ratio.min()) )
 #     print('max(ratio)   = ' + str(ratio.max()) )
@@ -97,73 +175,25 @@ def theta_of_psi(psi, theta_s, theta_r, psi_B, psi_A, c, Lambda,
     #------------------------------------------------
 #     print('min(c)     = ' + str(c.min()) )
 #     print('max(c)     = ' + str(c.max()) )
-#     print('min(lam)   = ' + str(Lambda.min()) )
-#     print('max(lam)   = ' + str(Lambda.max()) )
+#     print('min(lam)   = ' + str(lam.min()) )
+#     print('max(lam)   = ' + str(lam.max()) )
 #     print()
      
-    cap_theta = (1.0 + (ratio ** c)) ** (-Lambda / c)   # S_eff
-    theta = cap_theta * (theta_s - theta_r) + theta_r
+    Se = (1.0 + (ratio ** c)) ** (-lam / c)
+    q = Se * (qs - qr) + qr
     
     #------------------
     # Optional report
     #------------------
     if (REPORT):   
-        print('theta_s = ', theta_s)
-        print('theta   = ', theta)
-        print('theta_r = ', theta_r)
+        print('theta_s = ', qs)
+        print('theta   = ', q)
+        print('theta_r = ', qr)
         print(' ')
     
-    return theta
+    return q
     
 #   theta_of_psi()
-#-----------------------------------------------------------------------
-def K_of_theta(theta, K_s, theta_s, theta_r, Lambda,
-               REPORT=False):
-
-    #--------------------------------------------------------------
-    # Notes: This function returns the hydraulic conductivity, K,
-    #        as a function of the soil moisture, theta, using an
-    #        equation that holds for both the "Brooks-Corey" (B-C)
-    #        and "transitional Brooks-Corey" (TB-C) cases.
-
-    #        Called by Get_Soil_Params to compute K_i.
-
-    #        lambda = pore size distribution parameter
-    #        eta    = "pore-disconnectedness" parameter
-    #        eta    = 2d + (3d * lambda)
-    #        eps    = eta/lambda
-
-    #        See "Infiltration Theory for Hydrologic Applica-
-    #        tions" by R.E. Smith (2002), p. 19-22.
-    #--------------------------------------------------------------
-    
-    #----------------------------
-    # Compute exponent, epsilon
-    #----------------------------
-    eta = (np.float64(2) + (np.float64(3) * Lambda))
-    eps = eta / Lambda
-    
-    #--------------------------------------
-    # Compute the "relative conductivity"
-    #--------------------------------------
-    K_r = ((theta - theta_r) / (theta_s - theta_r)) ** eps
-    
-    #-----------------------------
-    # Compute K from K_s and K_r
-    #-----------------------------
-    K_r = np.maximum( np.minimum(K_r, 1.0), 0.0 )
-    K = K_s * K_r
-    
-    #------------------
-    # Optional report
-    #------------------
-    if (REPORT):    
-        print('K = ', K[0:4])
-        # print ' '
-    
-    return K
-    
-#   K_of_theta()
 #-----------------------------------------------------------------------
 def K_of_psi(p, pB, pA, Ks, eta, c, REPORT=False):
                                       
@@ -174,38 +204,28 @@ def K_of_psi(p, pB, pA, Ks, eta, c, REPORT=False):
     #        The equation for "standard Brooks-Corey" (BC) is the
     #        special case of c=1, pA=0.
     #
-    #        lambda = pore size distribution parameter
-    #        eta    = "pore-disconnectedness" parameter
-    #        eta    = 2d + (3d * lambda)
+    #        Se  = eff. saturation (q - qr)/(qs - qr).
+    #        p   = pressure head (psi)
+    #        Ks  = sat. hydraulic conductivity
+    #        Kr  = relative hydraulic conductivity
+    #        lam = pore size distribution parameter (lambda)
+    #        eta = "pore-disconnectedness" parameter
+    #        eta = 2d + (3d * lam)
     #
     #        When p and pA are both zero, then K = Ks.
     #
     #        See "Infiltration Theory for Hydrologic Applica-
     #        tions" by R.E. Smith (2002), p. 19-22.
     #--------------------------------------------------------------
-                   
-    #----------------------------
-    # Compute exponent, epow
-    #----------------------------
-    epow = (-eta / c)
-
-    #----------------------------------
-    # Compute the pressure head ratio
-    #----------------------------------
-    ratio  = (p + pA) / pB
-            
-    #--------------------------------------
-    # Compute the "relative conductivity"
-    #------------------------------------------------
     # NB!  It is OK to raise a grid to a grid power
-    #------------------------------------------------
-    Kr = (1.0 + ratio ** c) ** epow
+    #---------------------------------------------------        
+    epow  = (-eta / c)       # (exponent)
+    ratio = (p + pA) / pB  # (pressure head ratio)
+    Kr    = (1.0 + ratio ** c) ** epow
+ 
+    ##############################################    
     Kr = np.maximum( np.minimum(Kr, 1.0), 0.0 )
-        
-    #-----------------------------
-    # Compute K from Ks and Kr
-    #-----------------------------
-    K = Ks * Kr
+    K  = Ks * Kr
     
     #------------------
     # Optional report
@@ -225,16 +245,16 @@ def psi_of_theta(q, qs, qr, lam, c, pB, pA, MIN_VALUE=None,
                  REPORT=False):
                                                   
     #------------------------------------------------------
-    # First compute effective saturation, S_eff, in [0,1]
+    # First compute effective saturation, Se, in [0,1]
     #------------------------------------------------------
-    S_eff = (q - qr) / (qs - qr)
+    Se = (q - qr) / (qs - qr)
 
-    #----------------------------------------- 
-    # Option to check that S_eff is in range
-    #-----------------------------------------
+    #-------------------------------------- 
+    # Option to check that Se is in range
+    #--------------------------------------
     if (REPORT):              
-        Smin = S_eff.min()
-        Smax = S_eff.max()
+        Smin = Se.min()
+        Smax = Se.max()
         if (Smin < 0):
             print('####### ERROR:  min(S_eff) < 0.)')
             print('#######  min(S_eff) =', Smin)
@@ -248,7 +268,7 @@ def psi_of_theta(q, qs, qr, lam, c, pB, pA, MIN_VALUE=None,
     # NB!  It is OK to raise a grid to a grid power
     #------------------------------------------------
     cpow = (-c / lam)
-    arg  = ((S_eff ** cpow ) - 1.0) ** (1.0 / c)
+    arg  = ((Se ** cpow ) - 1.0) ** (1.0 / c)
     psi  = (pB * arg) - pA
 
     #-----------------------------------------------------                
@@ -261,7 +281,48 @@ def psi_of_theta(q, qs, qr, lam, c, pB, pA, MIN_VALUE=None,
                    
     return psi
     
-#   psi_of_theta()         
+#   psi_of_theta()              
+#-----------------------------------------------------------------------
+def K_of_theta(q, Ks, qs, qr, lam, REPORT=False):
+
+    #--------------------------------------------------------------
+    # Notes: This function returns the hydraulic conductivity, K,
+    #        as a function of the soil moisture, theta, using an
+    #        equation that holds for both the "Brooks-Corey" (B-C)
+    #        and "transitional Brooks-Corey" (TB-C) cases.
+
+    #        Called by Get_Soil_Params to compute K_i.
+
+    #        Ks  = saturated hydraulic conductivity
+    #        Kr  = relative hydraulic conductivity
+    #        q   = theta = water content
+    #        qs  = saturated water content
+    #        qr  = residual water content
+    #        lam = pore size distribution parameter (lambda)
+    #        eta = "pore-disconnectedness" parameter
+    #        eta = 2d + (3d * lambda)
+    #        eps = eta/lambda
+
+    #        See "Infiltration Theory for Hydrologic Applica-
+    #        tions" by R.E. Smith (2002), p. 19-22.
+    #--------------------------------------------------------------
+    eta = (np.float64(2) + (np.float64(3) * lam))
+    eps = eta / lam
+    Kr  = ((q - qr) / (qs - qr)) ** eps
+    #############################################
+    Kr = np.maximum( np.minimum(Kr, 1.0), 0.0 )
+    K  = Ks * Kr
+
+    #------------------
+    # Optional report
+    #------------------
+    if (REPORT):    
+        print('K = ', K[0:4])
+        # print ' '
+    
+    return K
+    
+#   K_of_theta()        
 #-----------------------------------------------------------------------
 # def print_suggested_values():
 # 

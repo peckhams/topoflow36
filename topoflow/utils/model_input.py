@@ -125,7 +125,7 @@ def read_next2(self, var_name, rti, dtype='Float32', factor=1.0):
 #   read_next2()
 #-------------------------------------------------------------------
 def read_next(file_unit, var_type, rti, \
-              dtype='Float32', factor=1.0):
+              dtype='float32', factor=1.0):
 
     if (var_type.lower() == 'scalar'): 
         #-------------------------------------------
@@ -166,11 +166,11 @@ def read_next(file_unit, var_type, rti, \
         return data
     else:
         return np.float64( data )
-    ## return data
+        ## return data
 
 #   read_next()
 #-------------------------------------------------------------------
-def read_scalar(file_unit, dtype='Float32'):
+def read_scalar(file_unit, dtype='float32'):
 
     #-------------------------------------------------
     # Note:  Scalar values are read from text files.
@@ -206,30 +206,45 @@ def read_scalar(file_unit, dtype='Float32'):
 
 #   read_scalar()  
 #-------------------------------------------------------------------
-def read_grid(file_unit, rti, dtype='Float32'):
+def read_grid(file_unit, rti, dtype='float32'):
 
-    #-------------------------------------------
-    # Note:  Grids are read from binary files.
-    #        Return "None" if end of file.
-    #-------------------------------------------
-    file_size = os.path.getsize(file_unit.name)
-    file_pos  = file_unit.tell()
-    END_OF_FILE = (file_pos == file_size)
-    if (END_OF_FILE):
-        grid = None
-        return grid
-    
+    #----------------------------------------------------
+    # Note:  Read 2D grid from row-major, binary file.
+    #        If there is no more data left to read from
+    #        file_unit (end of file), then fromfile
+    #        returns an empty array (size 0) with same
+    #        dtype.  In this case, return None.
+    #----------------------------------------------------
     grid = np.fromfile(file_unit, count=rti.n_pixels, dtype=dtype)
+    if (grid.size == 0):
+        return None
+
     grid = np.reshape(grid, (rti.nrows, rti.ncols))
     if (rti.SWAP_ENDIAN):
-        grid.byteswap(True)
-
-    #--------------
-    # For testing
-    #--------------
-    # print 'In model_input.read_grid(), dtype =', grid.dtype
-        
-    return grid
+        grid.byteswap(True)        
+        return grid
+    
+    #----------------------------------------------
+    # Original method, after conversion from IDL
+    #----------------------------------------------    
+#     file_size = os.path.getsize(file_unit.name)
+#     file_pos  = file_unit.tell()
+#     END_OF_FILE = (file_pos == file_size)
+#     if (END_OF_FILE):
+#         grid = None
+#         return grid
+#     
+#     grid = np.fromfile(file_unit, count=rti.n_pixels, dtype=dtype)
+#     grid = np.reshape(grid, (rti.nrows, rti.ncols))
+#     if (rti.SWAP_ENDIAN):
+#         grid.byteswap(True)
+# 
+#     #--------------
+#     # For testing
+#     #--------------
+#     # print 'In model_input.read_grid(), dtype =', grid.dtype
+#         
+#     return grid
 
 #   read_grid()
 #-------------------------------------------------------------------

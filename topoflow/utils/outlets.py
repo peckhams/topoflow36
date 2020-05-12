@@ -64,7 +64,9 @@ def read_outlet_file( self ):
         outlet_file = self.pixel_file    # (10/25/11)
     else:
         outlet_file = (self.case_prefix + '_outlets.txt')
-    self.outlet_file = (self.in_directory + outlet_file)
+    # 2020-05-03. Now using cfg_dir vs. in_dir.
+    self.outlet_file = (self.cfg_directory + outlet_file)
+    ## self.outlet_file = (self.in_directory + outlet_file)
     ## print '### self.outlet_file =', self.outlet_file
 
     #--------------------------------------

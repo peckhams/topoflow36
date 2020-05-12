@@ -2,8 +2,9 @@
 #  We should use "initialize_scalar()" for all scalar assignments.
 #  See the Notes for that method.  Search for "np.float64(0".
 #      
-#  Copyright (c) 2009-2019, Scott D. Peckham
+#  Copyright (c) 2009-2020, Scott D. Peckham
 #
+#  May 2020. Revamped version of set_directories()
 #  Sep 2019. Updates to allow TF to run in Python 3, including
 #            print() and exec() functions.  For exec(), see:
 #            https://docs.python.org/3.1/library/functions.html#exec 
@@ -18,24 +19,17 @@
 #            function, unless the name was already assigned to in that function.
 #            However, in most of these cases we can use "eval()" instead.
 #            And it is okay to set a variable into "self" directly.
-#
 #  Nov 2016. Added new BMI version 2 functions.
 #            In get_grid_shape(),   ordering is now [nz, ny, nx].
 #            In get_grid_spacing(), ordering is now [dz, dy, dx].
 #            In get_grid_origin(),  ordering is now [z0, y0, x0].
-#
 #  Sep 2014. New initialize_basin_vars(), using outlets.py.
 #            Removed obsolete functions.
-#
 #  Jan 2013. Added "initialize_scalar()" method.
-#
 #  Feb 2012. Complete BMI, starting from CSDMS_base.py
 #            This now takes the place of CSDMS_base.py.
-#
 #  Nov 2011. Cleanup and conversion to BMI function names.
-#
 #  May 2010. initialize_config_vars(), cleanup, etc.
-#
 #  Aug 2009. Created, as CSDMS_base.py.
 #
 #-----------------------------------------------------------------------
@@ -147,7 +141,7 @@
 #      initialize_basin_vars()       # (9/19/14) New version that uses outlets.py.
 #      -------------------------
 #      prepend_directory()           # (may not work yet)
-#      check_directories()
+#      set_directories()             # revamped, renamed (5/3/20)
 #      -------------------------
 #      initialize_scalar()           # (2/5/13, for ref passing)
 #      initialize_grid()
@@ -160,7 +154,7 @@
 #-----------------------------------------------------------------------
 
 import numpy as np
-import os
+import os, os.path
 import sys
 import time
 import traceback        # (10/10/10)
@@ -396,9 +390,9 @@ class BMI_component:
         if (self.DEBUG):
             print('Process component: Reading grid info...')
         
-        self.grid_info_file = (self.in_directory +
-                               self.site_prefix + '.rti')
-        info = rti_files.read_info( self.grid_info_file )
+        rti_file = (self.site_prefix + '.rti')
+        self.grid_info_file = self.topo_directory + rti_file
+        info = rti_files.read_info( self.grid_info_file, SILENT=True )
         if (info == None):
             #-------------------------------------------------------
             # The RTI file is usually in "in_directory" and
@@ -406,14 +400,25 @@ class BMI_component:
             # created, as for Erode (see erode_base.py), then
             # it uses "out_directory" and "case_prefix". (2/17/13)
             #-------------------------------------------------------
-            print('### In BMI_base.read_grid_info():')
-            print('### out_directory =', self.out_directory)
-            print(' ')
-            
-            self.grid_info_file = (self.out_directory +
-                                   self.case_prefix + '.rti')
-            info = rti_files.read_info( self.grid_info_file )
-
+            print('ERROR: RTI file: ' + rti_file + ' not found in input directory:')
+            ## print('In the input_directory:')
+            print( self.topo_directory )
+            #-------------------------------------------------------
+            print('RTI file names usually begin with site_prefix')
+            print('   and are stored in the input (or topo) directory.')
+            print('In rare cases, they begin with the case_prefix')
+            print('   and are stored in the output directory.')
+            print('Looking in the output directory...')
+            print()
+            rti_file = (self.case_prefix + '.rti') 
+            self.grid_info_file = self.out_directory + rti_file
+            info = rti_files.read_info( self.grid_info_file, SILENT=True )
+            if (info == None):
+                print('ERROR: RTI file: ' + rti_file + ' not found in output directory.')
+                ## print('In the output_directory:')
+                print( self.out_directory )
+                sys.exit()   ####################
+                
         # print '##### In BMI_base.read_grid_info():'
         # print '##### in_directory   =', self.in_directory
         # print '##### grid_info_file =', self.grid_info_file
@@ -955,7 +960,7 @@ class BMI_component:
         # Will use cfg_file from above.
         #-----------------------------------------------
         ## self.set_constants()
-        self.initialize_config_vars()  # calls check_directories().
+        self.initialize_config_vars()  # calls set_directories().
         self.read_grid_info()
         self.initialize_basin_vars()
         self.initialize_time_vars()
@@ -1464,47 +1469,49 @@ class BMI_component:
     def read_path_info(self):
 
         #------------------------------------------------------------
-        # Note:  Every CFG file has: in_directory, out_directory,
-        #        site_prefix and case_prefix at the top.  These
-        #        are typically the same for all CFG files, so to
+        # Note:  In earlier versions of TopoFlow, every CFG file
+        #        had: in_directory, out_directory, site_prefix and
+        #        case_prefix at the top.  However, these are
+        #        typically the same for all CFG files, so to
         #        prevent editing this block in every file, this
-        #        method attempts to read those 4 variables from
-        #        a single file called: [case_prefix]_file_info.cfg.
+        #        method reads those 4 variables from a single file
+        #        called: [case_prefix]_path_info.cfg.
         #        Since read_config_info() uses these 4 variables,
         #        this method must be called before that from the
         #        initialize_config_vars() method.
         #------------------------------------------------------------
-        # Note:  EMELI passes cfg_file to bmi.initialize(), but
-        #        does not pass cfg_prefix.  How to build filename?
-        #------------------------------------------------------------
         if not(self.SILENT):
             print('Reading path info config file.')
+        # print( 'In read_path_info(), cfg_file =')
+        # print( self.cfg_file )         
 
-#         print ('In read_file_info, cfg_directory = ' + self.cfg_directory)
-#         print ('In read_file_info, cfg_file   = ' + self.cfg_file)
-#         print ('In read_file_info, cfg_prefix = ' + self.cfg_prefix)
-
-        #---------------------------------------
-        # Construct name of path info CFG file
-        #---------------------------------------
+        #----------------------------------------------
+        # Construct name of path info CFG file.
+        # All we have to work with is cfg_file, which
+        # was passed to initialize.  cfg_prefix and
+        # cfg_directory have not been set yet.
+        # cfg_directory is set in set_directories().
+        # cfg_extension is the extension for the
+        #   current component's CFG file.
+        #-----------------------------------------------
         cfg_extension = self.get_attribute( 'cfg_extension' )
         cfg_prefix    = self.cfg_file.replace( cfg_extension, '' )
-        cfg_file      = (cfg_prefix + '_path_info.cfg')
-
+        path_info_cfg = (cfg_prefix + '_path_info.cfg')
+        
         #------------------------
         # Does CFG file exist ?
         #------------------------
         if (self.DEBUG):
-            print('cfg_file =', cfg_file)
-        if not(os.path.exists(cfg_file)):
+            print('path_info_cfg =', path_info_cfg)
+        if not(os.path.exists(path_info_cfg)):
             print('WARNING: path info CFG file not found:')
-            print('         ' + cfg_file)
+            print('         ' + path_info_cfg)
             return
 
         #---------------------------------------
         # Open file_info CFG file to read data
         #---------------------------------------
-        cfg_unit = open( cfg_file, 'r' )
+        cfg_unit = open( path_info_cfg, 'r' )
 
         #--------------------------------------------------
         # Recall that a "blank line", with just a (hidden)
@@ -1537,8 +1544,8 @@ class BMI_component:
         #-------------------------------------
         # Check the directories and prefixes
         #-------------------------------------
-        # print '#### CALLING check_directories()...'
-        self.check_directories()  # (Moved here: 2020-01-21)
+        # print '#### CALLING set_directories()...'
+        self.set_directories()  # (Moved here: 2020-01-21)
         
     #   read_path_info()
     #-------------------------------------------------------------------
@@ -1898,16 +1905,13 @@ class BMI_component:
     #-------------------------------------------------------------------
     def initialize_config_vars(self):
    
-        # print '## At start of initialize_config_vars(): cfg_prefix =', self.cfg_prefix
+        #--------------------------------------------------------------
+        # Note: EMELI calls bmi.initialize() with full cfg_file name.
+        #       bmi.initialize() saves cfg_file into self.
+        #       Until read_path_info() below, we don't know:
+        #          in_dir, out_dir, site_prefix or case_prefix.
+        #-------------------------------------------------------------
 
-        #-------------------------------------------------------------
-        # Note: EMELI calls bmi.initialize() with full cfg_file, so
-        #       at this point case_prefix is not known. So this part
-        #       appears to be obsolete. (2/12/17)
-        #-------------------------------------------------------------
-        if (self.cfg_prefix == None):
-                self.cfg_prefix = self.case_prefix  # (10/25/11)
-             
         #---------------------------------------
         # Read input variables from a CFG file
         #---------------------------------------
@@ -1936,8 +1940,8 @@ class BMI_component:
         # Defaults are set in __init__() and
         # some may have just been read in.
         #-------------------------------------
-        # print '#### CALLING check_directories()...'
-        self.check_directories()  # (Moved up: 10/25/11)
+        # print '#### CALLING set_directories()...'
+        self.set_directories()  # (Moved up: 10/25/11)
         
         #--------------------------------------------
         # Let driver set CWD to its in_directory ??
@@ -2051,6 +2055,10 @@ class BMI_component:
     def prepend_directory(self, file_list, INPUT=True):
 
         #-----------------------------------------------------------
+        # (2020-05-03) This was previously used by just a few
+        # components, such as channels_base.  But is not ideal
+        # because it uses both eval and exec.  So phase out?
+        #-----------------------------------------------------------        
         # (11/14/11) Call from a component's open_input_file() 
         # method something like this:
         #   self.prepend_directory( ['slope_file', 'width_file'] ) 
@@ -2070,27 +2078,59 @@ class BMI_component:
 
     #   prepend_directory
     #-------------------------------------------------------------------
-    def check_directories(self):
+    def set_directories(self, REPORT=False):
 
-        #----------------------------------------
-        # Note:  Defaults are set in __init_().
-        #----------------------------------------
-        if (self.in_directory == None):
-            self.in_directory = os.getcwd() + os.sep
-            ## self.in_directory = self.cfg_directory
-        #-----------------------------------------------
-        if (self.out_directory == None):
-            self.out_directory = os.getcwd() + os.sep
-        #-----------------------------------------------
-        if (self.site_prefix == None):
-            self.site_prefix = self.cfg_prefix
-        #-----------------------------------------------
-        if (self.case_prefix == None):
-            self.case_prefix = self.cfg_prefix
+        #--------------------------------------------
+        # Note:  This was cleaned up on 2020-05-03.
+        #--------------------------------------------       
+        
+        #--------------------------------------------------
+        # These should have been set by read_path_info().
+        #--------------------------------------------------        
+#         if (self.in_directory == None):
+#             self.in_directory = os.getcwd() + os.sep
+#         #-----------------------------------------------
+#         if (self.out_directory == None):
+#             self.out_directory = os.getcwd() + os.sep
+#         #-----------------------------------------------
+#         if (self.site_prefix == None):
+#             self.site_prefix = self.cfg_prefix
+#         #-----------------------------------------------
+#         if (self.case_prefix == None):
+#             self.case_prefix = self.cfg_prefix
+        
+        ## REPORT = True
+        if (REPORT):
+            print('Before calling set_directories()...')
+            print('cfg_file      =', self.cfg_file)
+            print('cur_directory =', os.getcwd() )
+            print('in_directory  =', self.in_directory)
+            print('out_directory =', self.out_directory)
+#             print('site_prefix   =', self.site_prefix)
+#             print('case_prefix   =', self.case_prefix)
+            print()
 
-##        print 'self.in_directory  =', self.in_directory
-##        print 'self.out_directory =', self.out_directory
+        #--------------------------------------    
+        # Set the cfg_directory from cfg_file
+        # It is usually not set before now.
+        #--------------------------------------
+        if not(hasattr(self, 'cfg_directory')):
+            if (self.cfg_file is not None):
+                cfg_dir = os.path.dirname(self.cfg_file) + os.sep
+                ## print 'cfg_directory =', cfg_directory
+        else:
+            cfg_dir = self.cfg_directory
 
+        #----------------------------------------------------
+        # First, expand user path abbreviations like "~"
+        #----------------------------------------------------
+        # Note that os.path.expanduser() does not expand
+        # relative paths like ".", "..", "./". (2/13/12)
+        # And it does NOT remove trailing path separator.
+        #--------------------------------------------------
+        in_dir  = os.path.expanduser( self.in_directory  )
+        out_dir = os.path.expanduser( self.out_directory )
+                       
         #------------------------------------------------------------
         # In CFG files, the input directory is often set to ".",
         # which indicates the directory that contains the CFG file.
@@ -2098,51 +2138,91 @@ class BMI_component:
         # something else.  Also, we want to avoid calling
         # "os.chdir()", because it creates problems for finding
         # package paths.  So to address these issues, we expand
-        # the "." to the full CFG_file directory. (9/21/14)
+        # relative paths like "." & ".." here. (Update: 2020-05-03)
         #------------------------------------------------------------
-        if (self.cfg_file is not None):
-            cfg_directory = os.path.dirname(self.cfg_file) + os.sep
-            ## print 'cfg_directory =', cfg_directory
-            self.cfg_directory = cfg_directory
-            if (self.in_directory[0] == '.'):
-                self.in_directory = self.cfg_directory
-                
-        #------------------------------------------------------
-        # Expand path abbreviations: "." and "..", but NOT
-        # "~" (11/5/13)
-        #------------------------------------------------------
-        # Note: os.path.expanduser() does not expand the
-        # relative paths ".", ".." or "./". (2/13/12)
-        #-----------------------------------------------------
-        # Note: This removes trailing path separator !!
-        #------------------------------------------------------
-##        self.in_directory  = os.path.realpath( self.in_directory  )
-##        self.out_directory = os.path.realpath( self.out_directory )
+        # Can use os.path.abspath() or os.path.realpath() to
+        # expand relative paths like ".", "..", "../..", etc.
+        # os.path.realpath() also expands symbolic links.
+        # These DO NOT expand "~".
+        # Note that trailing path separator may be removed.
+        # cfg_dir already ends in os.sep.
+        #------------------------------------------------------------
+        if (in_dir[0] == '.'):
+            in_dir  = os.path.abspath( cfg_dir + in_dir  )
+        if (out_dir[0] == '.'):
+            out_dir = os.path.abspath( cfg_dir + out_dir )
 
-        #-----------------------------------------------
-        # Expand path abbreviations like "~" (5/19/10)
-        #---------------------------------------------------
-        # Note that os.path.expanduser() does not
-        # expand the relative paths "." or "./". (2/13/12)
-        #------------------------------------------------------
-        # Note: This does NOT remove trailing path separator.
-        #------------------------------------------------------
-        self.in_directory  = os.path.expanduser( self.in_directory  )
-        self.out_directory = os.path.expanduser( self.out_directory )
-        
         #--------------------------------------------------
         # Add trailing separator to directory, if missing
         # Note: Must come AFTER os.path.realpath calls.
         #--------------------------------------------------
-        # (self.in_directory != ''):
-        if (self.in_directory[-1] != os.sep):
-            self.in_directory += os.sep
-        #----------------------------------------
-        # (self.out_directory != ''):
-        if (self.out_directory[-1] != os.sep):
-            self.out_directory += os.sep
-   
-    #   check_directories()
+        if (in_dir[-1] != os.sep):
+            in_dir += os.sep
+        #----------------------------
+        if (out_dir[-1] != os.sep):
+            out_dir += os.sep
+
+        #-----------------------------------------------------
+        # New idea of separate "static var" directories
+        # in input_directory, called "soil", "topo", "met".
+        # If present, these can be used to keep the input
+        # files better organized.
+        #-----------------------------------------------------
+        # Most components have "open_input_files()" methods
+        # where in input directory is used. A soil directory
+        # would mostly be used by infil components.
+        # A topo directory would mostly be used by the
+        # channels and meteorology components.
+        #-----------------------------------------------------
+        # Could add a "snow_dir", and maybe a directory for
+        # every process: chan, infil, evap, snow, etc.
+        #-----------------------------------------------------        
+        topo_dir = in_dir + '__topo' + os.sep
+        soil_dir = in_dir + '__soil' + os.sep
+        met_dir  = in_dir + '__met'  + os.sep
+        #-------------------------------------
+        if not(os.path.exists( topo_dir )):
+            topo_dir = in_dir
+        if not(os.path.exists( soil_dir )):
+            soil_dir = in_dir
+        if not(os.path.exists( met_dir )):
+            # Not static, so use cfg_dir not in_dir
+            met_dir = cfg_dir
+
+        #---------------------------------------------------- 
+        # These could also be set in the path_info CFG file    
+        #----------------------------------------------------        
+#         if not(hasattr(self, 'soil_directory')):
+#             soil_dir = in_dir
+#         if not(hasattr(self, 'topo_directory')):
+#             topo_dir = in_dir
+#         if not(hasattr(self, 'met_directory')):
+#             met_dir = cfg_dir
+        #-----------------------------------------------------
+
+        #------------------------------------------------
+        # Save fully expanded directory names into self
+        #------------------------------------------------
+        self.cfg_directory  = cfg_dir
+        self.in_directory   = in_dir
+        self.out_directory  = out_dir
+        self.topo_directory = topo_dir
+        self.soil_directory = soil_dir
+        self.met_directory  = met_dir
+                                         
+        if (REPORT):
+            print('After calling set_directories()...')
+            print('cfg_directory  =', cfg_dir)
+            print('in_directory   =', in_dir)
+            print('out_directory  =', out_dir)
+            print('topo_directory =', topo_dir)
+            print('soil_directory =', soil_dir)
+            print('met_directory  =', met_dir)
+#             print('site_prefix   =', self.site_prefix)
+#             print('case_prefix   =', self.case_prefix)
+            print()
+               
+    #   set_directories()
     #-------------------------------------------------------------------
     def initialize_scalar(self, value=0.0, dtype='float64'):
 
