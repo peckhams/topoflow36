@@ -1,32 +1,47 @@
+"""
+This file defines a set of functions for computing both shortwave
+and longwave radiation.  Most of the functions are from Appendix
+E of Dingman (2002).  The equation for optical air mass is from
+Kasten and Young (1989).
 
-#   Copyright (c) 2005-2013, Scott D. Peckham
-#   Created:    Jul-Aug 2005 (shortwave radiation only)
-#   Modified:   Feb-Mar 2007 (longwave radiation tools)
-#   January 2009 (converted from IDL)
-#   July 2010 (Cleaned up, removed old GUI routines)
-#             (Replaced T_air & RH as args to radiation routines
-#              with W_p.)
+Dingman, S.L. (2002) Physical Hydrology, Appendix E: Radiation
+  on Sloping Surfaces, book, 2nd edition.
+Kasten and Young (1989) Optical air mass equation.
+Whitman, A.M. (2003) A Simple Expression for the Equation of Time,
+  an online document at:
+  http://www.sunspot.noao.edu/sunspot/pr/answerbook/expl-5.html
+Marks and Dozier (1992) WRR paper
+Boehner (2009) Ch.8 in Geomorphometry book
+See also papers by:  
+   Glen Liston and David Tarboton's (w/ C. Luce)
+"""
+#-----------------------------------------------------------------------
+#
+#  Copyright (c) 2005-2020, Scott D. Peckham
+#
+#  May 2020.  Fixed small bug in Day_Angle().
+#             Updated Current_Year() to use datetime.
+#  Jul 2010.  Cleaned up, removed old GUI routines)
+#             Replaced T_air & RH as args to radiation routines w/ W_p.
+#  Jan 2009.  Converted from IDL.
+#  Mar 2007.  Updates.
+#  Feb 2007.  Added longwave radiation tools.
+#  Aug 2005.  Updates.
+#  Jul 2005.  Created; shortwave radiation only.
 #
 #------------------------------------------------------------------------
-#   References: Dingman, S.L. (2002) Physical Hydrology,
-#                    Appendix E.
-#               Kasten and Young (1989) Optical air mass eqn.
-#               Whitman, A.M. (2003) A Simple Expression for
-#                    the Equation of Time (online document)
-#               http://www.sunspot.noao.edu/sunspot/pr/
-#                     answerbook/expl-5.html
-#               Various websites (links were saved)
-#               Glen Liston's papers
-#               see also D. Tarboton's papers (w/ C. Luce)
-#               see also Marks and Dozier (1992) WRR paper
-#               see also Ch.8 in Geomorphometry book (Boehner)
 #
-#   Notes:      NB!  Not yet ready to create grids of lats & 
-#               lons for DEM with fixed-length pixels (e.g. UTM).
+#  Note:  Earth_Perihelion() uses a series approximation that is
+#         only good for the years 1992 to 2020.  For 2001 to 2100,
+#         as well as other centuries, see:
+#         http://astropixels.com/ephemeris/perap2001.html
 #
-#   Notes:      Functions that should be double-checked include:
-#                  Vernal_Equinox, Earth_Perihelion and
-#                  ET_Radiation_Flux_Slope
+#  Note:  NB!  Not yet ready to create grids of lats & 
+#         lons for DEM with fixed-length pixels (e.g. UTM).
+#
+#  Nots:  Functions that should be double-checked include:
+#           Vernal_Equinox, Earth_Perihelion and
+#            ET_Radiation_Flux_Slope
 #------------------------------------------------------------------------
 #
 #----------------
@@ -81,17 +96,20 @@
 #------------------------------------------------------------------------
 
 import numpy as np
-# from numpy import sin,cos,int16,float32,float64, \
-#                   array,pi,maximum,minimum,tan,arccos, \
-#                   log,exp,arctan,logical_or,where,sum, \
-#                   size,flipud,outer,ones,arange
-#
 import os
+from datetime import datetime
 
 #------------------------------------------------------------------------
 def Current_Year():
 
-    return np.int16(2010)
+    # currentSecond = datetime.now().second
+    # currentMinute = datetime.now().minute
+    # currentHour   = datetime.now().hour
+    # currentDay    = datetime.now().day
+    # currentMonth  = datetime.now().month
+    # currentYear   = datetime.now().year
+
+    return np.int16( datetime.now().year )
 
 #   Current_Year()    
 #------------------------------------------------------------------------
@@ -107,8 +125,11 @@ def Day_Angle( Julian_day, DEGREES=False ):
     # Notes:  The Julian day does not need to be an integer;
     #         decimal values can be used for more precision.
     #---------------------------------------------------------
-    angle = (2 * np.pi) * (Julian_day - np.float64(1)) / np.float64(365)
-    
+    ## angle = (2 * np.pi) * (Julian_day - np.float64(1)) / np.float64(365)
+
+    # APPARENT BUG FIX. 2020-05-10
+    angle = (2 * np.pi) * Julian_day / np.float64(365)
+        
     if (DEGREES):    
         angle = angle * (np.float64(180) / np.pi)
     
@@ -118,6 +139,10 @@ def Day_Angle( Julian_day, DEGREES=False ):
 #------------------------------------------------------------------------
 def Eccentricity_Correction( day_angle ):
 
+    #----------------------------------------
+    # Note: Range is about (0.966, 1.035).
+    # See Jupyter notebook for Meteorology.
+    #----------------------------------------
     E0 = np.float64(1.000110) + \
          (np.float64(0.034221) * np.cos(day_angle)) + \
          (np.float64(0.001280) * np.sin(day_angle)) + \
@@ -269,7 +294,7 @@ def ET_Radiation_Flux( lat_deg, Julian_day, th ):
     #         radiation flux on a horizontal plane at a time
     #         th hours before (-) or after (+) true solar noon.
     #------------------------------------------------------------
-    I_sc = Solar_Constant()             # [W / m^2]
+    I_sc  = Solar_Constant()            # [W / m^2]
     omega = Earth_Angular_Velocity()    # [radians / hour]
     #---------------------------------
     Gamma = Day_Angle(Julian_day)              # [radians]
@@ -280,13 +305,38 @@ def ET_Radiation_Flux( lat_deg, Julian_day, th ):
     term1 = np.cos(delta) * np.cos(lat_rad) * np.cos(omega * th)
     term2 = np.sin(delta) * np.sin(lat_rad)
     K_ET  = I_sc * E0 * (term1 + term2)
-    
-    #---------------------------
-    # This shouldn't be needed
-    #---------------------------
-    K_ET = np.maximum( K_ET, 0 )
-    
+ 
+    TEST = False
+    if (TEST):
+        print('Julian day =', Julian_day )
+        print('min(lat_deg), max(lat_deg) =', lat_deg.min(), lat_deg.max() )
+        print('I_sc =', I_sc)
+        print('min(omega), max(omega) =', omega.min(), omega.max() )
+        print('min(Gamma), max(Gamma) =', Gamma.min(), Gamma.max() )
+        print('min(delta), max(delta) =', delta.min(), delta.max() )
+        print('min(E0), max(E0)       =', E0.min(), E0.max() )
+        print('min(K_ET), max(K_ET)   =', K_ET.min(), K_ET.max() )
+        print()
+           
+    #-------------------------------------------------------------
+    # NB! During local nightime hours, K_ET < 0.
+    #     At equator (lat_deg=0), this occurs at th<-6 and th>6.
+    #     When negative, return zero as shown.
+    #-------------------------------------------------------------
+    np.maximum( K_ET, 0.0, K_ET )    # in-place
     return K_ET    # [Watts / m^2]
+
+        
+#     K_ET_min = K_ET.min()
+#     K_ET_max = K_ET.max()
+#     if (K_ET_min < 0):
+#         print('------------------------------------------')
+#         print('ERROR in ET_Radiation_Flux():')
+#         print('Incoming radiation flux should be > 0.')
+#         print('min, max =', K_ET_min, K_ET_max)
+#         print('------------------------------------------')
+#         print()
+#     return K_ET    # [Watts / m^2]
     
 #   ET_Radiation_Flux()
 #------------------------------------------------------------------------
@@ -683,15 +733,16 @@ def Clear_Sky_Radiation( lat_deg, Julian_day, W_p,
     #----------------
     # For debugging
     #----------------
-    #print 'min(alpha), max(alpha) =', alpha.min(), alpha.max()
-    #print 'min(beta),  max(beta)  =', beta.min(),  beta.max()
-    #--------------------------------------------------------------------
-    #print 'min(tau),   max(tau)   =', tau.min(),   tau.max()
-    #print 'min(K_ET),  max(K_ET)  =', K_ET.min(),  K_ET.max()
-    #print 'min(K_dif), max(K_dif) =', K_dif.min(), K_dif.max()
-    #print 'min(K_bs),  max(K_bs)  =', K_bs.min(),  K_bs.max()
-    #print 'min(K_cs),  max(K_cs)  =', K_cs.min(),  K_cs.max()
-    #print ' '
+    TEST = False
+    if (TEST):
+        print( 'min(alpha), max(alpha) =', alpha.min(), alpha.max() )
+        print( 'min(beta),  max(beta)  =', beta.min(),  beta.max() )
+        print( 'min(tau),   max(tau)   =', tau.min(),   tau.max() )
+        print( 'min(K_ET),  max(K_ET)  =', K_ET.min(),  K_ET.max() )
+        print( 'min(K_dif), max(K_dif) =', K_dif.min(), K_dif.max() )
+        print( 'min(K_bs),  max(K_bs)  =', K_bs.min(),  K_bs.max() )
+        print( 'min(K_cs),  max(K_cs)  =', K_cs.min(),  K_cs.max() )
+        print()
     
     #-----------------------------------------------
     # Set K_cs to zero between (local) dusk & dawn
@@ -724,22 +775,30 @@ def Clear_Sky_Radiation( lat_deg, Julian_day, W_p,
     
 #   Clear_Sky_Radiation()
 #------------------------------------------------------------------------
-def Julian_Day( month_num, day_num, hour_num=None ):
+def Julian_Day( month_num, day_num, hour_num=None, year=None ):
                 #### year=None )
 
     #-----------------------------------------------------------
     # NB!  month_num is an integer between 1 and 12 inclusive.
-    #      This function does not account for leap years.
+    #      This function can handle leap years, given year.
     #      Check that Julian_Day(1,1,0) = 0.0.
     #      Check that Julian_Day(2,1,0) = 31.0.
+    #        Online source, Parkin (2017), says:
+    #        JD(Jan. 1) = 1, JD(Feb. 1) = 32.
     #-----------------------------------------------------------
-    month_days = np.array([0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31])
-    
-    JD = np.sum(month_days[:month_num]) + np.maximum(day_num - 1, 0)
+    if (year is None) or ((year % 4) == 0):
+        month_days = np.array([0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31])        
+    else:
+        # Leap year     
+        month_days = np.array([0, 31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]) 
+
+    # After 2020-05-10
+    JD = np.sum(month_days[:month_num]) + np.maximum(day_num,1)
+    # JD = np.sum(month_days[:month_num]) + np.maximum(day_num - 1, 0)
     
     if (hour_num is not None):    
         JD = JD + (hour_num / np.float64(24))
-    
+
     return JD
     
 #   Julian_Day()

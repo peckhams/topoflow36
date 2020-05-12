@@ -1,3 +1,9 @@
+"""
+This file defines an "energy balance" snowmelt component and related
+functions.  It inherits from the snowmelt "base class" in
+"snow_base.py".
+"""
+#-----------------------------------------------------------------------
 #
 #  Copyright (c) 2001-2014, Scott D. Peckham
 #
@@ -14,10 +20,6 @@
 #  Jul 2009.  Updates.
 #  Jan 2009.  Converted from IDL.
 #
-#-----------------------------------------------------------------------
-#  NOTES:  This file defines an Energy-Balance snowmelt component
-#          and related functions.  It inherits from the snowmelt
-#          "base class" in "snow_base.py".
 #-----------------------------------------------------------------------
 #
 #  class snow_energy_balance
@@ -115,6 +117,7 @@ class snow_component( snow_base.snow_component ):
     _output_var_names = [
         'model__time_step',                            # dt   
         'snowpack__domain_time_integral_of_melt_volume_flux',   # vol_SM
+        'snowpack__domain_time_integral_of_liquid-equivalent_depth', # vol_swe
         'snowpack__energy-per-area_cold_content',      # Ecc
         'snowpack__depth',                             # h_snow
         'snowpack__initial_depth',                     # h0_snow
@@ -146,6 +149,7 @@ class snow_component( snow_base.snow_component ):
         #----------------------------------------------------------
         'model__time_step': 'dt',     
         'snowpack__domain_time_integral_of_melt_volume_flux': 'vol_SM',
+        'snowpack__domain_time_integral_of_liquid-equivalent_depth': 'vol_swe',        
         'snowpack__depth': 'h_snow',
         'snowpack__energy-per-area_cold_content': 'Ecc',
         'snowpack__initial_depth': 'h0_snow',
@@ -181,6 +185,7 @@ class snow_component( snow_base.snow_component ):
         #--------------------------------------------------------------
         'model__time_step': 's',
         'snowpack__domain_time_integral_of_melt_volume_flux': 'm3',
+        'snowpack__domain_time_integral_of_liquid-equivalent_depth': 'm3',        
         'snowpack__depth': 'm',
         'snowpack__energy-per-area_cold_content': 'J m-2',
         'snowpack__initial_depth': 'm',

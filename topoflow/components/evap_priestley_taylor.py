@@ -1,9 +1,24 @@
+"""
+This class defines a hydrologic evaporation component that implements
+the Priestley-Taylor method.  It uses the same notation as the paper
+Zhang et al. (2000).
+
+This class inherits from the infiltration "base class" in "evap_base.py".
+
+See: Zhang et al. (2000) Development and application of a spatially-
+-distributed Arctic hydrological and thermal process model (ARHYTHM),
+Hydrological Processes, 14, 1017-1044.
+"""
 #
-#  NB!  See note at "THIS MAY BE COSTLY"
-#-------------------------------------------
+#  NB!  If PRECIP_ONLY in met component, then Qn_SW and Qn_LW
+#       both equal 0 and evaporation rate is zero.
+#-----------------------------------------------------------------------
 #
-#  Copyright (c) 2001-2014, Scott D. Peckham
+#  Copyright (c) 2001-2020, Scott D. Peckham
 #
+#  May 2020.  Testing with Jupyter notebook.
+#             Get Q_net from met component directly?
+#             In-place assignments in update_ET_rate().
 #  Sep 2014.  New standard names and BMI updates and testing.
 #  Aug 2014.  Updates to standard names and BMI.
 #             Wrote latent_heat_of_evaporation(); not used yet.
@@ -42,7 +57,7 @@
 #      close_input_files()
 #
 #  Functions:
-#      Priestley_Taylor_ET_Rate
+#      Priestley_Taylor_ET_Rate   # Not used now.
 #
 #-----------------------------------------------------------------------
 
@@ -326,17 +341,23 @@ class evap_component( evap_base.evap_component ):
         #---------------------------------------------
         # Compute the conductive energy between the
         # surface and subsurface using Fourier's law
-        #---------------------------------------------
-        # soil_x is converted from [cm] to [m] when
-        # it is read from the GUI and then stored
+        #--------------------------------------------------------
+        # This is now computed by update_Qc() in evap_base.py,
+        # for both Priestley-Taylor and Energy Balance methods.
+        # update() method calls update_Qc() & update_ET_rate().
+        # Zhang et al. (2000) used -delta_T and (Q_net - Qc).
+        # See detailed notes there.        
+        #--------------------------------------------------------
+        Qc = self.Qc
+        # delta_T = (T_surf - self.T_soil_x)  
+        # Qc  = self.K_soil * delta_T / self.soil_x
+        # self.Qc[:] = Qc  # (in-place)
         #---------------------------------------------
         # In Qet formula, the constant 0.011 has
         # units of 1/[deg_C] to cancel T_air units.
-        #---------------------------------------------  
-        Qc  = self.K_soil * (self.T_soil_x - T_surf) / self.soil_x
-        Qet = self.alpha * (np.float64(0.406) + (np.float64(0.011) * T_air)) * (Q_net - Qc)
-        self.Qc = Qc  ## (2/3/13)
-        
+        #---------------------------------------------
+        Qet = self.alpha * (np.float64(0.406) + (np.float64(0.011) * T_air)) * (Q_net + Qc)
+    
         #-----------------------------------
         # Convert ET energy to a loss rate
         #------------------------------------------
@@ -349,15 +370,29 @@ class evap_component( evap_base.evap_component ):
         # So (rho_w * Lv) = -2.5e+9  [J/m^3]
         #-------------------------------------
         ET = (Qet / np.float64(2.5E+9))  #[m/s]  (A loss, but returned as positive.)
-        
-        self.ET = np.maximum(ET, np.float64(0))
 
-        ##########################################
-        #  THIS MAY BE COSTLY.  BETTER WAY OR
-        #  ALLOW ET TO BE A SCALAR ??
-        ##########################################
-        if (np.size(self.ET) == 1):
-            self.ET += np.zeros((self.ny, self.nx), dtype='Float64')
+        #------------------------------- 
+        # Save new ET values, in-place
+        #-------------------------------
+        np.maximum(ET, np.float64(0), self.ET)     # in-place     
+        ## self.ET = np.maximum(ET, np.float64(0))
+
+        TEST = False
+        if (TEST):
+            print('min(Qn_SW), max(Qn_SW) =', Qn_SW.min(), Qn_SW.max() )
+            print('min(Qn_LW), max(Qn_LW) =', Qn_LW.min(), Qn_LW.max() )
+            print('min(Qc),    max(Qc)    =', Qc.min(), Qc.max() )
+            print('min(ET),    max(ET)    =', ET.min(), ET.max() )
+            print('vol_ET =', self.vol_ET )
+            print()
+                       
+        #----------------------------------------------------------
+        # ET is 2D array in evap_base.initialize_computed_vars().
+        # Should we ever allow ET to be a scalar ?
+        # THIS WOULD BE COSTLY
+        #----------------------------------------------------------
+        # if (np.size(self.ET) == 1):
+        #     self.ET += np.zeros((self.ny, self.nx), dtype='float64')
             
     #   update_ET_rate()
     #-------------------------------------------------------------------  
@@ -367,10 +402,10 @@ class evap_component( evap_base.evap_component ):
         # Note: Priestley-Taylor method needs alpha but the
         #       energy balance method doesn't. (2/5/13)
         #----------------------------------------------------
-        self.alpha_file    = self.in_directory + self.alpha_file
-        self.K_soil_file   = self.in_directory + self.K_soil_file
-        self.soil_x_file   = self.in_directory + self.soil_x_file
-        self.T_soil_x_file = self.in_directory + self.T_soil_x_file
+        self.alpha_file    = self.soil_directory + self.alpha_file
+        self.K_soil_file   = self.soil_directory + self.K_soil_file
+        self.soil_x_file   = self.soil_directory + self.soil_x_file
+        self.T_soil_x_file = self.soil_directory + self.T_soil_x_file
 
         self.alpha_unit    = model_input.open_file(self.alpha_type,    self.alpha_file)
         self.K_soil_unit   = model_input.open_file(self.K_soil_type,   self.K_soil_file)
@@ -407,78 +442,73 @@ class evap_component( evap_base.evap_component ):
         if (self.soil_x_type   != 'Scalar'): self.soil_x_unit.close()
         if (self.T_soil_x_type != 'Scalar'): self.T_soil_x_unit.close()
         
-##        if (self.alpha_file    != ''): self.alpha_unit.close()        
-##        if (self.K_soil_file   != ''): self.K_soil_unit.close()
-##        if (self.soil_x_file   != ''): self.soil_x_unit.close()
-##        if (self.T_soil_x_file != ''): self.T_soil_x_unit.close()
-        
     #   close_input_files()
     #-------------------------------------------------------------------
 
 
 #-----------------------------------------------------------------------
 #-----------------------------------------------------------------------   
-def Priestley_Taylor_ET_Rate(alpha, Ks, T_soil_x, soil_x, \
-                             Qn_SW, Qn_LW, T_air, T_surf):
-
-    #--------------------------------------------------------------
-    # Notes: Qet   = energy used for ET of water from surface
-    #        Qn_SW = net shortwave radiation flux (solar)
-    #        Qn_LW = net longwave radiation flux (air, surface)
-    #        Qh    = sensible heat flux from turbulent convection
-    #                between snow surface and air
-    #        Qc    = energy transferred from surface to subsurface
-
-    #        All of the Q's have units of [W/m^2].
-
-    #        T_air    = air temperature [deg_C]
-    #        T_surf   = soil temp at the surface [deg_C]
-    #        T_soil_x = soil temp at depth of x meters [deg_C]
-
-    #        Ks   = thermal conductivity of soil [W m-1 K-1]
-    #        Ks = 0.45   ;[W m-1 K-1] (thawed soil; moisture content
-    #                     near field capacity)
-    #        Ks = 1.0    ;[W m-1 K-1] (frozen soil)
-
-    #        alpha = evaporation parameter
-    #        alpha = 0.95   ;(average found by Rouse)
-    #        alpha = 1.26   ;(Jackson et al. (1996), at saturation)
-
-    #        Modification of alpha:  alpha = (a1 * R) + a2
-    #        R  = 1.0d   ;(equals 1 for saturation; R in [0,1])
-    #        a1 = 1.0d   ;(accounts for moisture content of soil)
-    #        a2 = 0.2d   ;(accounts for vegetation effect)
-    #--------------------------------------------------------------
-    
-    #---------------------------------------------
-    # Compute the conductive energy between the
-    # surface and subsurface using Fourier's law
-    #---------------------------------------------
-    # soil_x is converted from [cm] to [m] when
-    # it is read from the GUI and then stored
-    #---------------------------------------------
-    # In Qet formula, the constant 0.011 has
-    # units of 1/[deg_C] to cancel T_air units.
-    #---------------------------------------------  
-    Qc   = Ks * (T_soil_x - T_surf) / (soil_x)
-    Qnet = Qn_SW + Qn_LW
-    Qet  = alpha * (np.float64(0.406) + (np.float32(0.011) * T_air)) * (Qnet - Qc)
-    
-    #-----------------------------------
-    # Convert ET energy to a loss rate
-    #------------------------------------------
-    # Lf = latent heat of fusion [J/kg]
-    # Lv = latent heat of vaporization [J/kg]
-    # ET = (Qet / (rho_w * Lv))
-    #------------------------------------------
-    # rho_w = 1000d       ;[kg/m^3]
-    # Lv    = -2500000d   ;[J/kg]
-    # So (rho_w * Lv) = -2.5e+9  [J/m^3]
-    #-------------------------------------
-    ET = (Qet / np.float32(2.5E+9))  #[m/s]  (A loss, but returned as positive.)
-    
-    return np.maximum(ET, np.float64(0))
-
-#   Priestley_Taylor_ET_Rate
+# def Priestley_Taylor_ET_Rate(alpha, Ks, T_soil_x, soil_x, \
+#                              Qn_SW, Qn_LW, T_air, T_surf):
+# 
+#     #--------------------------------------------------------------
+#     # Notes: Qet   = energy used for ET of water from surface
+#     #        Qn_SW = net shortwave radiation flux (solar)
+#     #        Qn_LW = net longwave radiation flux (air, surface)
+#     #        Qh    = sensible heat flux from turbulent convection
+#     #                between snow surface and air
+#     #        Qc    = energy transferred from surface to subsurface
+# 
+#     #        All of the Q's have units of [W/m^2].
+# 
+#     #        T_air    = air temperature [deg_C]
+#     #        T_surf   = soil temp at the surface [deg_C]
+#     #        T_soil_x = soil temp at depth of x meters [deg_C]
+# 
+#     #        Ks   = thermal conductivity of soil [W m-1 K-1]
+#     #        Ks = 0.45   ;[W m-1 K-1] (thawed soil; moisture content
+#     #                     near field capacity)
+#     #        Ks = 1.0    ;[W m-1 K-1] (frozen soil)
+# 
+#     #        alpha = evaporation parameter
+#     #        alpha = 0.95   ;(average found by Rouse)
+#     #        alpha = 1.26   ;(Jackson et al. (1996), at saturation)
+# 
+#     #        Modification of alpha:  alpha = (a1 * R) + a2
+#     #        R  = 1.0d   ;(equals 1 for saturation; R in [0,1])
+#     #        a1 = 1.0d   ;(accounts for moisture content of soil)
+#     #        a2 = 0.2d   ;(accounts for vegetation effect)
+#     #--------------------------------------------------------------
+#     
+#     #---------------------------------------------
+#     # Compute the conductive energy between the
+#     # surface and subsurface using Fourier's law
+#     #---------------------------------------------
+#     # soil_x is converted from [cm] to [m] when
+#     # it is read from the GUI and then stored
+#     #---------------------------------------------
+#     # In Qet formula, the constant 0.011 has
+#     # units of 1/[deg_C] to cancel T_air units.
+#     #---------------------------------------------  
+#     Qc   = Ks * (T_soil_x - T_surf) / (soil_x)
+#     Qnet = Qn_SW + Qn_LW
+#     Qet  = alpha * (np.float64(0.406) + (np.float32(0.011) * T_air)) * (Qnet - Qc)
+#     
+#     #-----------------------------------
+#     # Convert ET energy to a loss rate
+#     #------------------------------------------
+#     # Lf = latent heat of fusion [J/kg]
+#     # Lv = latent heat of vaporization [J/kg]
+#     # ET = (Qet / (rho_w * Lv))
+#     #------------------------------------------
+#     # rho_w = 1000d       ;[kg/m^3]
+#     # Lv    = -2500000d   ;[J/kg]
+#     # So (rho_w * Lv) = -2.5e+9  [J/m^3]
+#     #-------------------------------------
+#     ET = (Qet / np.float32(2.5E+9))  #[m/s]  (A loss, but returned as positive.)
+#     
+#     return np.maximum(ET, np.float64(0))
+# 
+# #   Priestley_Taylor_ET_Rate
 #-----------------------------------------------------------------------
 

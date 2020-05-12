@@ -1,3 +1,9 @@
+"""
+This file defines a "degree-day" snowmelt component and related
+functions.  It inherits from the snow "base class" in
+"snow_base.py".
+"""
+#-----------------------------------------------------------------------
 #
 #  Copyright (c) 2001-2014, Scott D. Peckham
 #
@@ -13,10 +19,6 @@
 #  May 2010.  Changes to unit_test() and read_cfg_file().
 #  Jan 2009.  Converted from IDL.
 #
-#-----------------------------------------------------------------------
-#  NOTES:  This file defines a Degree-Day snowmelt component
-#          and related functions.  It inherits from the snowmelt
-#          "base class" in "snow_base.py".
 #-----------------------------------------------------------------------
 #
 #  class snow_degree_day
@@ -108,6 +110,7 @@ class snow_component( snow_base.snow_component ):
         'snowpack__degree-day_coefficient',                   # c0   (read from CFG)
         'snowpack__degree-day_threshold_temperature',         # T0   (read from CFG)
         'snowpack__domain_time_integral_of_melt_volume_flux', # vol_SM
+        'snowpack__domain_time_integral_of_liquid-equivalent_depth', # vol_swe
         'snowpack__depth',                                    # h_snow
         'snowpack__initial_depth',                            # h0_snow
         'snowpack__initial_liquid-equivalent_depth',          # h0_swe
@@ -127,6 +130,7 @@ class snow_component( snow_base.snow_component ):
         #------------------------------------------------------------------
         'model__time_step':                                   'dt',
         'snowpack__domain_time_integral_of_melt_volume_flux': 'vol_SM',
+        'snowpack__domain_time_integral_of_liquid-equivalent_depth': 'vol_swe',
         'snowpack__degree-day_coefficient':                   'c0',
         'snowpack__degree-day_threshold_temperature':         'T0',
         'snowpack__depth':                                    'h_snow',
@@ -162,6 +166,7 @@ class snow_component( snow_base.snow_component ):
         #----------------------------------------------------------------
         'model__time_step':                                   's',
         'snowpack__domain_time_integral_of_melt_volume_flux': 'm3',
+        'snowpack__domain_time_integral_of_liquid-equivalent_depth': 'm3',
         'snowpack__degree-day_coefficient':                   'mm day-1 K-1 ',
         'snowpack__degree-day_threshold_temperature':         'deg_C',
         'snowpack__depth':                                    'm',

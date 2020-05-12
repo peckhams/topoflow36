@@ -1,6 +1,18 @@
+"""
+This class defines a hydrologic evaporation component that implements
+the "energy balance method", as described by Zhang et al. (2000).
+
+This class inherits from the infiltration "base class" in "evap_base.py".
+
+See: Zhang et al. (2000) Development and application of a spatially-
+-distributed Arctic hydrological and thermal process model (ARHYTHM),
+Hydrological Processes, 14, 1017-1044.
+"""
+#-----------------------------------------------------------------------
 #
-#  Copyright (c) 2001-2014, Scott D. Peckham
+#  Copyright (c) 2001-2020, Scott D. Peckham
 #
+#  May 2020.  Tested with a Jupyter notebook.
 #  Sep 2014.  New standard names and BMI updates and testing.
 #  Aug 2014.  Updates to standard names and BMI.
 #             Wrote latent_heat_of_evaporation(); not used yet.
@@ -17,14 +29,6 @@
 #  Jan 2009.  Converted from IDL to Python with I2PY.
 #
 #-----------------------------------------------------------------------
-#  NOTES:  This file defines an Energy-Balance ET component
-#          and related functions.  It inherits from the ET
-#          "base class" in "evap_base.py".
-#-----------------------------------------------------------------------
-#  NB!     Be sure to incorporate Bob Bolton's Nov 5, 2009
-#          revisions ASAP!
-#-----------------------------------------------------------------------
-#
 #  class evap_component
 #
 #      get_component_name()
@@ -80,11 +84,11 @@ class evap_component(evap_base.evap_component):
     #     uz, z, z0_air, rho_air, Cp_air, Qn_SW, Qn_LW 
     #-----------------------------------------------------------------
     _input_var_names = [
-        'atmosphere_bottom_air__temperature',            # (@meteorology)
-        'atmosphere_bottom_air_land_net-latent-heat__energy_flux',   # (@meteorology, Qe)
+        'atmosphere_bottom_air__temperature',            # (T_air@meteorology)
+        'atmosphere_bottom_air_land_net-latent-heat__energy_flux',   # (Qe@meteorology)
         'land_surface_net-total-energy__energy_flux',    # (@meteorology)
-        'land_surface__temperature',                     # (@meteorology)
-        'snowpack__depth' ]                              # (@snow)
+        'land_surface__temperature',                     # (T_surf@meteorology)
+        'snowpack__depth' ]                              # (h_snow@snow)
         #----------------------------------------------
         # These are no longer needed here. (9/25/14)
         #----------------------------------------------        
@@ -309,33 +313,42 @@ class evap_component(evap_base.evap_component):
         #        z0_air = roughness length scale [m]
         #        h_snow = snow depth [m]
         #--------------------------------------------------------------
-        # NB!  h_snow is needed by the Bulk_Exchange_Coeff function
-        #      to adjust reference height, z.
+        # NB!  h_snow is needed by the Bulk_Exchange_Coeff
+        #      function to adjust reference height, z.
         #--------------------------------------------------------------
-        Q_sum  = self.Q_sum   # (2/3/13, new framework)
-        Qe     = self.Qe      # (2/3/13, new framework)
-        T_surf = self.T_surf  # (2/3/13, new framework)
-
-        ################################################
-        #  START USING "update_Qc" in "evap_base.py" ??
-        ################################################
-        
+ 
         #---------------------------------------------
         # Compute the conductive energy between the
         # surface and subsurface using Fourier's law
-        #---------------------------------------------
-        delta_T = (self.T_soil_x - T_surf)
-        Qc      = self.K_soil * delta_T / self.soil_x
-        self.Qc = Qc  ## (2/3/13)
-        
+        #---------------------------------------------    
+        ## delta_T = (self.T_soil_x - self.T_surf)
+        ## Qc      = self.K_soil * delta_T / self.soil_x
+        ## self.Qc[:] = Qc
+
         #-------------------------------------------
         # Compute energy available for evaporation
-        #-------------------------------------------
-        # self.Qet = (Qn_SW + Qn_LW + Qh + Qc)
-        Qet = (Q_sum - Qe)
-        ################################################
-        #  DO WE NEED TO SUBTRACT Qe HERE ??
-        ################################################
+        #-----------------------------------------------------
+        # Meteorology component initializes Qc to zero, but
+        # does not compute it.  However, evap_base.py has an
+        # update_Qc() method, called before update_ET_rate().
+        # So need to add Qc here until it is in Q_sum.
+        # See notes in update_Qc() about sign convention.
+        #-----------------------------------------------------
+        # Zhang et al. (2000) paper, eqn (12), says that:
+        # Qet = Qnet + Qh + Qc, where Qnet = Qn_SW + Qn_LW.
+        # But eqn (13) for Qc seems to have a sign error.
+        # Since Q_sum from met component has:
+        #   Qn_tot = Qn_SW + Qn_LW
+        #   Q_sum  = Qn_SW + Qn_LW + Qh + Qe + Qa + Qc
+        # so we need to subtract Qe here.
+        # Currently, met_base sets Qh != 0, Qa = Qc = 0, 
+        #   and they are not passed to this component.
+        #-----------------------------------------------------             
+        Qet = (self.Q_sum - self.Qe)
+        Qet += self.Qc    ## See notes above.
+        #---------------------------------------
+#         if (hasattr(self, 'Qa')):
+#             Qet -= self.Qa
         
         #------------------------------------------
         # Lf = latent heat of fusion [J/kg]
@@ -349,7 +362,8 @@ class evap_component(evap_base.evap_component):
         # ET is a loss, but returned as positive.
         #------------------------------------------
         ET = (Qet / np.float64(2.5E+9))  # [m/s]
-        self.ET = np.maximum(ET, np.float64(0))
+        np.maximum(ET, np.float64(0), self.ET)  # in-place
+        ### self.ET = np.maximum(ET, np.float64(0))
     
     #   update_ET_rate()
     #-------------------------------------------------------------------  
@@ -359,10 +373,10 @@ class evap_component(evap_base.evap_component):
         # Note: Priestley-Taylor method needs alpha but the
         #       energy balance method doesn't. (2/5/13)
         #----------------------------------------------------
-        ## self.alpha_file    = self.in_directory + self.alpha_file
-        self.K_soil_file   = self.in_directory + self.K_soil_file
-        self.soil_x_file   = self.in_directory + self.soil_x_file
-        self.T_soil_x_file = self.in_directory + self.T_soil_x_file
+        ## self.alpha_file    = self.soil_directory + self.alpha_file
+        self.K_soil_file   = self.soil_directory + self.K_soil_file
+        self.soil_x_file   = self.soil_directory + self.soil_x_file
+        self.T_soil_x_file = self.soil_directory + self.T_soil_x_file
 
         ## self.alpha_unit    = model_input.open_file(self.alpha_type,    self.alpha_file)
         self.K_soil_unit   = model_input.open_file(self.K_soil_type,   self.K_soil_file)

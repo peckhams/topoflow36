@@ -1,15 +1,18 @@
-
-## NB! Several GC2D parameters that are not used yet have been
-##     "disabled" in set_gc2d_parameters() and in the GUI info 
-##     file, such as "lapse_rate".
-
-## Copyright (c) 2009-2013, Scott D. Peckham
-##
-## January 2013   (Revised handling of input/output names).
-## October 2012   (CSDMS Standard Names and BMI)
-## August, September 2009
-## May 2010 (changes to initialize() and read_cfg_file()
-
+#
+# NB! Several GC2D parameters that are not used yet have been
+#     "disabled" in set_gc2d_parameters() and in the GUI info 
+#     file, such as "lapse_rate".
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2009-2020, Scott D. Peckham
+#
+# May 2020.  Added disable_all_output().
+# Jan 2013.  Revised handling of input/output names.
+# Oct 2012.  CSDMS Standard Names and BMI.
+# May 2010   Changes to initialize() and read_cfg_file().
+# Sep 2009.  Updates
+# Aug 2009.  Initial conversion from Kessler Matlab version.
+#
 #-----------------------------------------------------------------------
 #
 #  class ice_component    (inherits from CSDMS_base)
@@ -431,6 +434,7 @@ class ice_component( BMI_base.BMI_component ):
         if (self.comp_status == 'Disabled'):
             if not(SILENT):
                 print('Ice component: Disabled in CFG file.')
+            self.disable_all_output()
             self.MR       = self.initialize_scalar(0, dtype='float64')
             self.vol_MR   = self.initialize_scalar(0, dtype='float64')
             self.meltrate = self.MR
@@ -456,7 +460,6 @@ class ice_component( BMI_base.BMI_component ):
         
     #   initialize()
     #-------------------------------------------------------------------
-    ## def update(self, dt=-1.0, time_seconds=None):
     def update(self, dt=-1.0):
         
         #-------------------------------------------------
@@ -464,6 +467,16 @@ class ice_component( BMI_base.BMI_component ):
         #-------------------------------------------------
         if (self.comp_status == 'Disabled'): return
         self.status = 'updating'  # (OpenMI)
+
+        #----------------------------------------
+        # Read next met vars from input files ?
+        #-----------------------------------------------------       
+        # Note: read_input_files() is called by initialize()
+        # and those values must be used for the "update"
+        # calls before reading new ones.
+        #-----------------------------------------------------
+#         if (self.time_index > 0):
+#             self.read_input_files()
         
         #-------------------------
         # Update computed values 
@@ -517,11 +530,6 @@ class ice_component( BMI_base.BMI_component ):
         #---------------------------------------------------
         self.dt = dt
         self.dt_min = np.minimum(dt, self.dt_min)   ###
-
-        #----------------------------------------
-        # Read next ice vars from input files ?
-        #----------------------------------------
-##        self.read_input_files()          
 
         #----------------------------------------------
         # Write user-specified data to output files ?
@@ -681,7 +689,19 @@ class ice_component( BMI_base.BMI_component ):
 ##        self.zi_ts_file = (self.case_prefix + '_0D-iceZ.txt')
 ##        self.mr_ts_file = (self.case_prefix + '_0D-iceMR.txt')
 
-    #   update_outfile_names()   
+    #   update_outfile_names()
+    #-------------------------------------------------------------------  
+    def disable_all_output(self):
+
+        self.SAVE_HI_GRIDS  = False
+        self.SAVE_ZI_GRIDS  = False
+        self.SAVE_MR_GRIDS  = False
+        #-----------------------------
+        self.SAVE_HI_PIXELS = False
+        self.SAVE_ZI_PIXELS = False
+        self.SAVE_MR_PIXELS = False
+                  
+    #   disable_all_output()    
     #-------------------------------------------------------------------  
     def open_output_files(self):
 

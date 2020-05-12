@@ -1,6 +1,20 @@
+"""
+This file defines a "base class" for snowmelt components as well
+as functions used by most or all snowmelt methods.  That is, all
+snowmelt components inherit methods from this class.  The methods
+of this class should be over-ridden as necessary (especially the
+"update_meltrate() method) for different methods of modeling
+snowmelt.  This class, in turn, inherits from the "BMI base class"
+in BMI_base.py.
+
+See snow_degree_day.py and snow_energy_balance.py.
+"""
+#-----------------------------------------------------------------------
 #
-#  Copyright (c) 2001-2014, Scott D. Peckham
+#  Copyright (c) 2001-2020, Scott D. Peckham
 #
+#  May 2020.  Added update_swe_integral() and vol_swe.
+#             Added disable_all_output().
 #  Sep 2014.  Bug fix: enforce_max_meltrate() was called after update_SM_integral().
 #             Moved open_input_files(), read_input_files() and close_input_files()
 #             as special versions into degree-day and energy-balance components.
@@ -38,6 +52,7 @@
 #      enforce_max_meltrate()
 #      update_SM_integral()
 #      update_swe()
+#      update_swe_integral()     # (2020-05-05)
 #      update_depth()
 #      -----------------------
 #      open_input_files()
@@ -141,18 +156,16 @@ class snow_component( BMI_base.BMI_component ):
         self.initialize_time_vars()
    
         if (self.comp_status == 'Disabled'):
-            #########################################
-            #  DOUBLE CHECK THIS; SEE NOTES ABOVE
-            #########################################
-               ####### and (ep.method != 2):  ??????
             if not(SILENT):
                 print('Snow component: Disabled in CFG file.')
-            self.h_snow = self.initialize_scalar(0, dtype='float64')
-            self.h_swe  = self.initialize_scalar(0, dtype='float64')
-            self.SM     = self.initialize_scalar(0, dtype='float64')
-            self.vol_SM = self.initialize_scalar(0, dtype='float64') # [m3]
-            self.DONE   = True
-            self.status = 'initialized'
+            self.disable_all_output()
+            self.h_snow  = self.initialize_scalar(0, dtype='float64')
+            self.h_swe   = self.initialize_scalar(0, dtype='float64')
+            self.SM      = self.initialize_scalar(0, dtype='float64')
+            self.vol_SM  = self.initialize_scalar(0, dtype='float64') # [m3]
+            self.vol_swe = self.initialize_scalar(0, dtype='float64') # [m3]
+            self.DONE    = True
+            self.status  = 'initialized'
             return
  
         #---------------------------------------------
@@ -172,7 +185,6 @@ class snow_component( BMI_base.BMI_component ):
         
     #   initialize()
     #-------------------------------------------------------------------
-    ## def update(self, dt=-1.0, time_seconds=None):
     def update(self, dt=-1.0):
 
         #----------------------------------------------------------
@@ -192,7 +204,17 @@ class snow_component( BMI_base.BMI_component ):
         #-------------------------------------------------
         if (self.comp_status == 'Disabled'): return
         self.status = 'updating'  # (OpenMI)
-        
+ 
+        #-----------------------------------------
+        # Read next snow vars from input files ?
+        #-----------------------------------------------------       
+        # Note: read_input_files() is called by initialize()
+        # and those values must be used for the "update"
+        # calls before reading new ones.
+        #-----------------------------------------------------
+        if (self.time_index > 0):
+            self.read_input_files()
+                   
         #-------------------------
         # Update computed values 
         #-------------------------
@@ -204,18 +226,8 @@ class snow_component( BMI_base.BMI_component ):
         # Call update_swe() before update_depth()
         #------------------------------------------
         self.update_swe()
+        self.update_swe_integral()  # (2020-05-05)
         self.update_depth()
-        
-        #-----------------------------------------
-        # Read next snow vars from input files ?
-        #-------------------------------------------
-        # Note that read_input_files() is called
-        # by initialize() and these values must be
-        # used for "update" calls before reading
-        # new ones.
-        #-------------------------------------------
-        if (self.time_index > 0):
-            self.read_input_files()
 
         #----------------------------------------------
         # Write user-specified data to output files ?
@@ -324,7 +336,9 @@ class snow_component( BMI_base.BMI_component ):
             self.h_snow = self.initialize_scalar( h_snow, dtype='float64')
             self.h_swe  = self.initialize_scalar( h_swe,  dtype='float64')
 
-        self.vol_SM = self.initialize_scalar( 0, dtype='float64') # (m3)
+        # vol_swe is to track volume of water in the snowpack.
+        self.vol_SM  = self.initialize_scalar( 0, dtype='float64') # (m3)
+        self.vol_swe = self.initialize_scalar( 0, dtype='float64') # (m3)
 
         #----------------------------------------------------
         # Compute density ratio for water to snow.
@@ -417,7 +431,7 @@ class snow_component( BMI_base.BMI_component ):
         # will be a time-interpolated value.
         #------------------------------------------------
         dh1_swe  = (self.P_snow * self.dt)
-        self.h_swe  += dh1_swe
+        self.h_swe += dh1_swe
                 
         #------------------------------------------------
         # Decrease snow water equivalent due to melting
@@ -427,7 +441,21 @@ class snow_component( BMI_base.BMI_component ):
         self.h_swe -= dh2_swe
         np.maximum(self.h_swe, np.float64(0), self.h_swe)  # (in place)
         
-    #   update_swe()   
+    #   update_swe()
+    #-------------------------------------------------------------------
+    def update_swe_integral(self):
+
+        #------------------------------------------------
+        # Update mass total for water in the snowpack,
+        # sum over all pixels. (2020-05-05)
+        #------------------------------------------------   
+        volume = np.float64(self.h_swe * self.da)  # [m^3]
+        if (np.size(volume) == 1):
+            self.vol_swe += (volume * self.rti.n_pixels)
+        else:
+            self.vol_swe += np.sum(volume)
+            
+    #   update_swe_integral()   
     #-------------------------------------------------------------------
     def update_depth(self):
 
@@ -542,7 +570,21 @@ class snow_component( BMI_base.BMI_component ):
 ##        self.sw_ts_file = (self.case_prefix + '_0D-hswe.txt')
 ##        self.cc_ts_file = (self.case_prefix + '_0D-Ecc.txt')
 
-    #   update_outfile_names()   
+    #   update_outfile_names()
+    #-------------------------------------------------------------------  
+    def disable_all_output(self):
+    
+        self.SAVE_MR_GRIDS  = False
+        self.SAVE_HS_GRIDS  = False
+        self.SAVE_SW_GRIDS  = False
+        self.SAVE_CC_GRIDS  = False
+        #-------------------------------
+        self.SAVE_MR_PIXELS = False
+        self.SAVE_HS_PIXELS  = False
+        self.SAVE_SW_PIXELS  = False
+        self.SAVE_CC_PIXELS  = False
+        
+    #   disable_all_output()  
     #-------------------------------------------------------------------  
     def open_output_files(self):
 

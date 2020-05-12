@@ -1,12 +1,27 @@
+"""
+This file defines a "base class" for infiltration components as well
+as functions used by most or all infiltration methods.  That is, all
+infiltration components inherit methods from this class.  The methods
+of this class should be over-ridden as necessary (especially the
+"update_infil_rate() method) for different methods of modeling
+infiltration.  This class, in turn, inherits from the "BMI base class"
+in BMI_base.py.
 
-## Copyright (c) 2001-2020, Scott D. Peckham
-
-## April 2020.  Added set_new_defaults(), disable_all_output().
-## January 2013  (Removed "get_port_data" calls, etc.)
-## January 2009  (converted from IDL)
-## May, August 2009
-## May 2010 (changes to initialize() and read_cfg_file()
-
+See infil_beven.py, infil_green_ampt.py, infil_smith_parlange.py and
+infil_richards_1D.py.
+"""
+#-----------------------------------------------------------------------
+#
+#  Copyright (c) 2001-2020, Scott D. Peckham
+#
+#  May 2020.  Added update_total_storage(), vol_soil.
+#  Apr 2020.  Added set_new_defaults(), disable_all_output().
+#  Jan 2013.  Removed CCA "get_port_data" calls, etc.
+#  May 2010.  Changes to initialize() and read_cfg_file()
+#  Aug 2009   Updates
+#  May 2009.  Updates
+#  Jan 2009.  Converted from IDL
+#
 #-----------------------------------------------------------------------
 #  Notes:  This file defines a "base class" for infiltration
 #          components as well as functions used by most or
@@ -41,9 +56,10 @@
 #      update_Rg_integral()
 #      update_I()
 #      update_q0()
+#      update_total_storage()
 #      check_infiltration()
 #      -------------------------
-#      open_input_files()      # (ALL BELOW THIS OBSOLETE SOON/NOW.)
+#      open_input_files()
 #      read_input_files()
 #      close_input_files()
 #      ------------------------
@@ -147,7 +163,7 @@ class infil_component( BMI_base.BMI_component):
         #------------------------------------------------------
         # This is much better than putting them in the
         # save_computed_input_vars() function.
-        #------------------------------------------------------        
+        #------------------------------------------------------
         self.CHECK_STABILITY = False
 
         #----------------------------------------------
@@ -172,14 +188,14 @@ class infil_component( BMI_base.BMI_component):
         self.p_cs_file = ''
         self.K_cs_file = ''
         self.v_cs_file = ''
-        self.save_cube_dt = np.float64( 60 )          
+        self.save_cube_dt = np.float64( 60 )
+        
+    #   set_new_defaults()         
     #-------------------------------------------------------------------
     def initialize(self, cfg_file=None, mode="nondriver",
                    SILENT=False):
 
-        ## self.DEBUG = True  ###########################
-        ##############################################
-        ##############################################
+        ## self.DEBUG = True
                 
         #---------------------------------------------------------
         # Notes:  Need to make sure than h_swe matches h_snow ?
@@ -224,12 +240,10 @@ class infil_component( BMI_base.BMI_component):
         self.set_new_defaults()
         # Note: initialize_config_vars() calls initialize_layer_vars()
         self.initialize_config_vars() 
+        ### self.set_missing_cfg_options() #### MAYBE LATER
         ### self.read_grid_info()  # NOW IN initialize_config_vars()
         self.initialize_basin_vars()  # (5/14/10)
         self.initialize_time_vars()
-        
-        ## if not(hasattr(self, 'CHECK_STABILITY')):
-        ##    self.CHECK_STABILITY = False
 
         #----------------------------------
         # Has component been turned off ?
@@ -240,13 +254,16 @@ class infil_component( BMI_base.BMI_component):
             self.disable_all_output()
             #-------------------------------------------------
             # IN = infiltration rate at land surface
+            # v0 = Darcy velocity at bottom of top cell
             # Rg = vertical flow rate just above water table
             #-------------------------------------------------
+            self.IN     = self.initialize_scalar( 0, dtype='float64' )
             self.v0     = self.initialize_scalar( 0, dtype='float64' )
             self.Rg     = self.initialize_scalar( 0, dtype='float64' )
+            self.vol_IN = self.initialize_scalar( 0, dtype='float64' )
             self.vol_v0 = self.initialize_scalar( 0, dtype='float64' )
             self.vol_Rg = self.initialize_scalar( 0, dtype='float64' )
-            
+            self.vol_soil = self.initialize_scalar( 0, dtype='float64' )
             self.DONE   = True
             self.status = 'initialized'  # (OpenMI 2.0 convention)
             return
@@ -275,6 +292,10 @@ class infil_component( BMI_base.BMI_component):
         print('INFIL calling initialize_computed_vars()...')
         self.initialize_computed_vars()
         
+        # Get and save initial total storage in soil
+        self.update_total_storage(REPORT=False)
+        self.storage_init = self.storage.copy()
+
         self.open_output_files()
         self.status = 'initialized'  # (OpenMI 2.0 convention)
         
@@ -287,11 +308,20 @@ class infil_component( BMI_base.BMI_component):
         #-------------------------------------------------
         if (self.comp_status == 'Disabled'): return
         self.status = 'updating'  # (OpenMI 2.0 convention)
-              
+
+        #----------------------------------------
+        # Read next met vars from input files ?
+        #-----------------------------------------------------       
+        # Note: read_input_files() is called by initialize()
+        # and those values must be used for the "update"
+        # calls before reading new ones.
+        #-----------------------------------------------------
+        if (self.time_index > 0):
+            self.read_input_files()
+                                      
         #-------------------------
         # Update computed values 
         #-------------------------
-        # self.update_nondrivers()      ####### (10/7/10)
         self.update_surface_influx()    # (P_total = P + SM)
         self.update_infil_rate()
         self.adjust_infil_rate()
@@ -305,12 +335,6 @@ class infil_component( BMI_base.BMI_component):
         # Check for NaNs in infiltration
         #---------------------------------    
         self.check_infiltration()
-
-        #------------------------------------------
-        # Read next infil vars from input files ?
-        #------------------------------------------
-        if (self.time_index > 0):
-            self.read_input_files()
 
         #----------------------------------------------
         # Write user-specified data to output files ?
@@ -331,6 +355,8 @@ class infil_component( BMI_base.BMI_component):
     #-------------------------------------------------------------------
     def finalize(self):
 
+        self.update_total_storage() # (2020-05-07)
+  
         self.status = 'finalizing'  # (OpenMI 2.0 convention)
         self.close_input_files()   ##  TopoFlow input "data streams"
         self.close_output_files()
@@ -459,11 +485,6 @@ class infil_component( BMI_base.BMI_component):
             for j in range(self.n_layers):
                 for k in range(i[j], i[j + 1]):
                     var[k,:,:] = var_list_for_layers[j]
-                
-                #-------------------------------------------------------------
-                # Next line doesn't work if var_list_for_layers[j] is a grid
-                #-------------------------------------------------------------
-                #  var[*, *, i[j]:i[j+1]-1 ] = var_list_for_layersr[j]
 
         return var
 
@@ -618,7 +639,7 @@ class infil_component( BMI_base.BMI_component):
 ##        #print 'min(IN), max(IN) = ', self.v0.min(), self.v0.max()
 ##        #print 'self.dt =', self.dt
 
-    #   update_infile_rate()
+    #   update_infil_rate()
     #-------------------------------------------------------------
     def adjust_infil_rate(self):
 
@@ -635,10 +656,10 @@ class infil_component( BMI_base.BMI_component):
 
         #####################################################
         # (10/8/10) The rest of this routine doesn't work
-        # if v0 is a scalar.  Need to look at this more.
+        # if IN is a scalar.  Need to look at this more.
         #####################################################
         ## if (self.SINGLE_PROFILE):
-        if (self.v0.size == 1):
+        if (self.IN.size == 1):
             return
         
         #-------------------------------------------
@@ -666,8 +687,9 @@ class infil_component( BMI_base.BMI_component):
         w  = np.where( h >= z )  # (changed on 8/19/09)
         ### w  = np.where( h == z )
         nw = np.size(w[0])
-        if (nw != 0):   
-            self.v0[w] = np.float64(0)
+        if (nw != 0):
+            self.IN[w] = np.float64(0)  
+            ## self.v0[w] = np.float64(0)
             
         ##########################################
         #  ADD SIMILAR THING FOR GC2D
@@ -682,15 +704,32 @@ class infil_component( BMI_base.BMI_component):
             print('Calling update_v0_integral()...')
             
         #------------------------------------------------
-        # Update mass total for IN, sum over all pixels
+        # Update mass total for v0, sum over all pixels
         #------------------------------------------------   
         volume = np.double(self.v0 * self.da * self.dt)  # [m^3]
         if (np.size( volume ) == 1):
             self.vol_v0 += (volume * self.rti.n_pixels)
         else:
             self.vol_v0 += np.sum(volume)
-            
-        self.vol_IN = self.vol_v0  ## A synonym.
+ 
+        #-----------------------------------------------------       
+        # NOTE!  v0 is downward darcy velocity at bottom of
+        #        topmost layer, with thickness dz.  So must
+        #        add the amount of water that was added to
+        #        that layer as well, in order to know how
+        #        much water infiltrated.   (2020-05-09)
+        #-----------------------------------------------------
+        vol2 = np.double(self.IN * self.da * self.dt)  # [m^3]
+        if (np.size( vol2 ) == 1):
+            self.vol_IN += (vol2 * self.rti.n_pixels)
+        else:
+            self.vol_IN += np.sum(vol2)
+        
+        # Obsolete.  v0 is not same as IN.    
+        #--------------------------------------------------         
+        # Create a synonym (2nd reference to same values)
+        #--------------------------------------------------  
+        ## self.vol_IN = self.vol_v0
     
     #   update_v0_integral()
     #-------------------------------------------------------------------
@@ -706,7 +745,7 @@ class infil_component( BMI_base.BMI_component):
         # Set groundwater recharge rate to IN ?
         # Save last value of r for next time.
         #----------------------------------------   
-        self.Rg = self.v0
+        self.Rg = self.IN.copy()
         P_rain  = self.P_rain   # (2/3/13, new framework)
         SM      = self.SM       # (2/3/13, new framework)
         #---------------------
@@ -742,8 +781,10 @@ class infil_component( BMI_base.BMI_component):
         # used for Richards 1D method.
         #
         # This becomes a grid if IN is a grid.
-        #---------------------------------------
-        self.I += (self.v0 * self.dt)  # [meters]
+        # v0 = Darcy velocity at bottom of top cell
+        # IN = Infiltration rate at top of top cell
+        #--------------------------------------------
+        self.I += (self.IN * self.dt)  # [meters]
 
         #--------------
         # For testing
@@ -773,6 +814,82 @@ class infil_component( BMI_base.BMI_component):
 
     #   update_q0()
     #-------------------------------------------------------------------
+    def update_total_storage(self, REPORT=True):
+
+        #------------------------------------------------------
+        # Note:  Update total volume of water stored in soil.
+        #        Call this from finalize() for mass balance.
+        #        Vw = volume of water, Vc = volume of cell
+        #        theta = (Vw/Vc) = q = soil water content
+        #------------------------------------------------------
+        # https://docs.scipy.org/doc/numpy/reference/
+        #       routines.linalg.html
+        #------------------------------------------------------
+        if (self.DEBUG):
+            print('Calling update_total_storage()...')
+            
+        if (self.SINGLE_PROFILE):
+            #-------------------------------
+            # theta = q is a 1D array in z
+            #-------------------------------
+            Vc = self.da * self.dz  # 0D or 1D array
+            Vw = self.q * Vc        # 1D array
+            Vw_profile = Vw.sum()
+            self.storage = (Vw_profile * self.rti.n_pixels)
+        else:
+           #--------------------------
+           # theta = q is a 3D array
+           #--------------------------
+           # da can be 0D or 2D; dz can be 0D or 1D
+           da_size = self.da.size   # (1 if 0D, >1 if 2D)
+           dz_size = self.dz.size   # (1 if 0D, >1 if 1D)
+                  
+           if (da_size == 1):
+               #-------------------------
+               # Vc is a 0D or 1D array
+               #-------------------------
+               Vc = self.da * self.dz
+           else:
+               #-------------------
+               # Vc is a 3D array
+               #-------------------
+               if (dz_size == 1):
+                   # Convert dz to a 1D array
+                   dz = self.dz * np.ones( self.nz )
+               # Yes, this really works.
+               Vc = self.da[None,:,:] * self.dz[:,None,None]
+               #----------------------------------------------
+               # This also works.  Need dz as first arg.
+               # Vc = np.outer(self.dz, self.da)
+               # Vc = Vc.reshape(self.nz, self.ny, self.nx)
+
+           if (Vc.ndim == 1):
+               Vw = self.q * Vc[:,None,None]
+           else:
+               Vw = self.q * Vc   # (3D * 1D, or 3D * 3D, elementwise)
+    
+           self.storage = Vw.sum()
+
+        #-------------------------------------------------
+        # Save water added to vol_soil, for final report
+        #-------------------------------------------------
+        if not(hasattr(self, 'storage_init')):
+            self.storage_init = np.float64(0)
+        vol_added = (self.storage - self.storage_init)
+        self.vol_soil.fill( vol_added )
+        
+        if (REPORT):
+            print()
+            print('Total volume of water in soil at start =')
+            print( self.storage_init, '[m3]')
+            print('Total volume of water in soil at end =')
+            print( self.storage, '[m3]')
+            print('Difference in volume =')
+            print( vol_added, '[m3]')
+            print()
+
+    #   update_total_storage()
+    #-------------------------------------------------------------------
     def check_infiltration(self):
 
         if (self.DEBUG):
@@ -784,14 +901,14 @@ class infil_component( BMI_base.BMI_component):
         # NB!  Don't set DONE = False, it may
         # already have been set to True
         #--------------------------------------
-        if (np.size( self.v0 ) == 1):
-            OK = np.isfinite( self.v0 )
+        if (np.size( self.IN ) == 1):
+            OK = np.isfinite( self.IN )
             nbad = 1
         else:
             # Should be faster than using WHERE
-            wbad = np.logical_not( np.isfinite( self.v0 ) )
+            wbad = np.logical_not( np.isfinite( self.IN ) )
             nbad = wbad.sum()
-#             wbad = np.where( np.logical_not(np.isfinite( self.v0 )) )
+#             wbad = np.where( np.logical_not(np.isfinite( self.IN )) )
 #             nbad = np.size( wbad[0] )
             OK = (nbad == 0)
         if (OK):
@@ -843,8 +960,9 @@ class infil_component( BMI_base.BMI_component):
             #----------------------------------
             # P_total and Ks are both scalars
             #----------------------------------
-            if (self.P_total < self.Ks[0]):    
-                self.v0 = self.P_total
+            if (self.P_total < self.Ks[0]):
+                self.IN = self.P_total    
+                ## self.v0 = self.P_total
         else:    
             #---------------------------------
             # Either P_total or Ks is a grid
@@ -854,10 +972,12 @@ class infil_component( BMI_base.BMI_component):
             nw = np.size( w[0] )
             
             if (nw != 0):    
-                if (nPt > 1):    
-                    self.v0[w] = self.P_total[w]
-                else:    
-                    self.v0[w] = self.P_total
+                if (nPt > 1):
+                    self.IN[w] = self.P_total[w]   
+                    ## self.v0[w] = self.P_total[w]
+                else:
+                    self.IN[w] = self.P_total   
+                    ## self.v0[w] = self.P_total
 
     #   check_low_rainrate
     #-------------------------------------------------------------------  
@@ -878,12 +998,12 @@ class infil_component( BMI_base.BMI_component):
         self.gam_unit = []
 
         for k in range(self.n_layers):
-            self.Ks_file[k] = self.in_directory + self.Ks_file[k]
-            self.Ki_file[k] = self.in_directory + self.Ki_file[k]
-            self.qs_file[k] = self.in_directory + self.qs_file[k]
-            self.qi_file[k] = self.in_directory + self.qi_file[k]
-            self.G_file[k]  = self.in_directory + self.G_file[k]
-            self.gam_file[k] = self.in_directory + self.gam_file[k]
+            self.Ks_file[k] = self.soil_directory + self.Ks_file[k]
+            self.Ki_file[k] = self.soil_directory + self.Ki_file[k]
+            self.qs_file[k] = self.soil_directory + self.qs_file[k]
+            self.qi_file[k] = self.soil_directory + self.qi_file[k]
+            self.G_file[k]  = self.soil_directory + self.G_file[k]
+            self.gam_file[k]= self.soil_directory + self.gam_file[k]
 
             self.Ks_unit.append(  model_input.open_file(self.Ks_type[k],  self.Ks_file[k]) )
             self.Ki_unit.append(  model_input.open_file(self.Ki_type[k],  self.Ki_file[k]) )
@@ -1046,10 +1166,13 @@ class infil_component( BMI_base.BMI_component):
         
         #--------------------------------------
         # Open new files to write grid stacks
-        #--------------------------------------
+        #----------------------------------------
+        # NOTE:  var_name = 'IN' vs. 'v0' here.
+        # Change all to 'IN' later.
+        #----------------------------------------
         if (self.SAVE_V0_GRIDS):
             model_output.open_new_gs_file( self, self.v0_gs_file, self.rti,
-                                           var_name='v0',
+                                           var_name='IN',
                                            long_name='infiltration_rate_at_surface',
                                            units_name='m/s')
 
@@ -1074,10 +1197,13 @@ class infil_component( BMI_base.BMI_component):
         #--------------------------------------
         # Open new files to write time series
         #--------------------------------------
+        # NOTE:  var_name = 'IN' vs. 'v0' here.
+        # Change all to 'IN' later.
+        #----------------------------------------
         IDs = self.outlet_IDs
         if (self.SAVE_V0_PIXELS):
             model_output.open_new_ts_file( self, self.v0_ts_file, IDs,
-                                           var_name='v0',
+                                           var_name='IN',
                                            long_name='infiltration_rate_at_surface',
                                            units_name='m/s')
 
@@ -1293,7 +1419,8 @@ class infil_component( BMI_base.BMI_component):
             print('Calling save_grids()...')
             
         if (self.SAVE_V0_GRIDS):
-            model_output.add_grid( self, self.v0, 'v0', self.time_min )
+            model_output.add_grid( self, self.IN, 'IN', self.time_min )
+            ## model_output.add_grid( self, self.v0, 'v0', self.time_min )
             
         if (self.SAVE_I_GRIDS):
             model_output.add_grid( self, self.I, 'I', self.time_min )
@@ -1318,7 +1445,8 @@ class infil_component( BMI_base.BMI_component):
         # Save a subsequence of IN var pixel values
         #--------------------------------------------  
         if (self.SAVE_V0_PIXELS):
-            model_output.add_values_at_IDs( self, time, self.v0, 'v0', IDs )
+            model_output.add_values_at_IDs( self, time, self.IN, 'IN', IDs )
+            ## model_output.add_values_at_IDs( self, time, self.v0, 'v0', IDs )
         if (self.SAVE_I_PIXELS):
             model_output.add_values_at_IDs( self, time, self.I, 'I', IDs )
                                  

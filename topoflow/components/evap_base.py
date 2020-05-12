@@ -1,6 +1,18 @@
+"""
+This file defines a "base class" for evaporation components as well
+as functions used by most or all evaporation methods.  That is, all
+evaporation components inherit methods from this class.  The methods
+of this class should be over-ridden as necessary (especially the
+update_ET_rate() method) for different methods of modeling evaporation.
+This class, in turn, inherits from the "BMI base class" in BMI_base.py.
+
+See evap_priestley_taylor.py, evap_energy_balance.py, evap_read_file.py
+"""
+#-----------------------------------------------------------------------
 #
-#  Copyright (c) 2001-2014, Scott D. Peckham
+#  Copyright (c) 2001-2020, Scott D. Peckham
 #
+#  May 2020.  Added disable_all_output()
 #  Sep 2014.  New standard names and BMI updates and testing.
 #  Aug 2014.  Updates to standard names and BMI.
 #             Wrote latent_heat_of_evaporation(); not used yet.
@@ -17,13 +29,6 @@
 #  Jan 2009.  Converted from IDL to Python with I2PY.
 #
 #-----------------------------------------------------------------------
-#  Notes:  This file defines a "base class" for evaporation
-#          components as well as functions used by most or
-#          all evaporation methods.  The methods of this class
-#          should be over-ridden as necessary for different
-#          methods of modeling evaporation.
-#-----------------------------------------------------------------------
-#
 #  class evap_component    (inherits from BMI_base)
 #
 #      (see non-base components for BMI functions)
@@ -50,6 +55,7 @@
 #      close_input_files()
 #      ------------------------
 #      update_outfile_names()
+#      disable_all_output()      # 2020-05-09
 #      open_output_files()
 #      write_output_files()     #####
 #      close_output_files()
@@ -126,7 +132,7 @@ class evap_component( BMI_base.BMI_component):
         #-----------------------------------------------
         self.set_constants()    # (12/3/09)
         self.initialize_config_vars()
-        self.read_grid_info()
+        # self.read_grid_info()    # NOW IN initialize_config_vars()
         self.initialize_basin_vars()  # (5/14/10)
         #-----------------------------------------
         # This must come before "Disabled" test.
@@ -140,6 +146,7 @@ class evap_component( BMI_base.BMI_component):
         if (self.comp_status == 'Disabled'):
             if not(SILENT):
                 print('Evaporation component: Disabled in CFG file.')
+            self.disable_all_output()
             self.ET     = self.initialize_scalar(0, dtype='float64')
             self.vol_ET = self.initialize_scalar(0, dtype='float64')
             self.DONE   = True
@@ -163,7 +170,6 @@ class evap_component( BMI_base.BMI_component):
         
     #   initialize()
     #-------------------------------------------------------------------
-    ## def update(self, dt=-1.0, time_seconds=None):
     def update(self, dt=-1.0):
         
         #-------------------------------------------------
@@ -171,12 +177,6 @@ class evap_component( BMI_base.BMI_component):
         #-------------------------------------------------
         if (self.comp_status == 'Disabled'): return
         self.status = 'updating'  # (OpenMI)
-        
-        #-------------------------
-        # Update computed values 
-        #-------------------------
-        self.update_ET_rate()
-        self.update_ET_integral()
 
         #---------------------------------------
         # Read next ET vars from input files ?
@@ -187,7 +187,21 @@ class evap_component( BMI_base.BMI_component):
         # new ones.
         #-------------------------------------------
         if (self.time_index > 0):
-            self.read_input_files()          
+            self.read_input_files() 
+
+        #---------------------------------------------
+        # Qc is used by both the Priestly-Taylor and
+        # Energy Balance methods, and both have the
+        # required parameters in their CFG files
+        # Started using this on 2020-05-10.
+        #---------------------------------------------
+        self.update_Qc()
+                            
+        #-------------------------
+        # Update computed values 
+        #-------------------------
+        self.update_ET_rate()
+        self.update_ET_integral()
 
         #----------------------------------------------
         # Write user-specified data to output files ?
@@ -251,11 +265,11 @@ class evap_component( BMI_base.BMI_component):
     #-------------------------------------------------------------------
     def initialize_computed_vars(self):
 
-        #******************************************************
-        #  Any faster to use np.empty vs. np.zeros ??
-        #******************************************************
-        self.ET = np.zeros([self.ny, self.nx], dtype='float64')
-        self.vol_ET = self.initialize_scalar(0, dtype='float64')
+        dtype = 'float64'
+        self.ET = self.initialize_grid(0, dtype=dtype)
+        self.Qc = self.initialize_grid(0, dtype=dtype)
+        #---------------------------------------------------------
+        self.vol_ET = self.initialize_scalar(0, dtype=dtype)
         
         #------------------------------------------
         # h_table = water table height
@@ -277,13 +291,28 @@ class evap_component( BMI_base.BMI_component):
         #---------------------------------------------
         # Compute the conductive energy between the
         # surface and subsurface using Fourier's law
-        #---------------------------------------------
+        #------------------------------------------------------------
+        # Heat flow can be in either direction;
+        # If (T_surf > T_soil), then Qc > 0, heat flow is downward.
+        # If (T_surf < T_soil), then Qc < 0, heat flow is upward.
+        # If Qc > 0, heat flows down into soil and adds to Q_net.
+        # Q_net and Qc use the same sign convention.
+        #------------------------------------------------------------
         # soil_x is converted from [cm] to [m] when
         # it is read from the GUI and then stored
         #---------------------------------------------
-        T_surf  = self.T_surf ## (2/3/13)
-        self.Qc = self.K_soil * (self.T_soil_x - T_surf) / self.soil_x
-        
+        delta_T = (self.T_surf - self.T_soil_x)
+        self.Qc[:] = self.K_soil * delta_T / self.soil_x
+
+        #-----------------------------------------------------------
+        # In Zhang et al. (2000), Qc was defined with the opposite
+        # sign, but then (Q_net - Qc) was used in the Qet equation.
+        # So it seems Qc was defined with a different sign
+        # convention that Qn_SW, Qn_LW, etc. (i.e. incoming > 0).
+        #-----------------------------------------------------------
+        ## delta_T = (self.T_soil_x - self.T_surf)  # Zhang sign.
+        ## self.Qc[:] = self.K_soil * delta_T / self.soil_x
+                       
     #   update_Qc()
     #-------------------------------------------------------------------
     def update_ET_rate(self):
@@ -518,10 +547,21 @@ class evap_component( BMI_base.BMI_component):
         #---------------------------------------------------------
         self.ET_ts_file = (self.out_directory + self.er_ts_file)
 
-    #   update_outfile_names()   
+    #   update_outfile_names()
+    #-------------------------------------------------------------------
+    def disable_all_output(self):
+
+        self.SAVE_ER_GRIDS  = False
+        self.SAVE_ER_PIXELS = False
+            
+    #   disable_all_output()   
     #-------------------------------------------------------------------  
     def open_output_files(self):
 
+        #---------------------------------------------------------
+        # Note:  Qc (conduction heat flux), from Priestly-Taylor
+        #        component, could also be saved.
+        #---------------------------------------------------------
         model_output.check_netcdf()
         self.update_outfile_names()
 

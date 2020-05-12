@@ -186,7 +186,7 @@ class satzone_component( infil_base.infil_component ):
             # The default data type for model_input.read_next() is
             # Float32, but the DEM may have another type.
             #-------------------------------------------------------
-            self.elev_file = self.in_directory + self.elev_file
+            self.elev_file = self.topo_directory + self.elev_file
             self.elev_unit = model_input.open_file(self.elev_type,
                                                    self.elev_file)
             DEM_dtype = rti_files.get_numpy_data_type( self.rti.data_type )
@@ -245,7 +245,17 @@ class satzone_component( infil_base.infil_component ):
         #-------------------------------------------------
         if (self.comp_status == 'Disabled'): return
         self.status = 'updating'  # (OpenMI)
-        
+
+        #---------------------------------------
+        # Read next GW vars from input files ?
+        #-----------------------------------------------------       
+        # Note: read_input_files() is called by initialize()
+        # and those values must be used for the "update"
+        # calls before reading new ones.
+        #-----------------------------------------------------
+        if (self.time_index > 0):
+            self.read_input_files()
+                    
         #-------------------------
         # Update computed values 
         #-------------------------
@@ -259,18 +269,6 @@ class satzone_component( infil_base.infil_component ):
         self.update_seep_rate()
         # print 'CALLING update_GW_integral()...'
         self.update_GW_integral()
-        
-        #---------------------------------------
-        # Read next GW vars from input files ?
-        #-------------------------------------------
-        # Note that read_input_files() is called
-        # by initialize() and these values must be
-        # used for "update" calls before reading
-        # new ones.
-        #-------------------------------------------
-        if (self.time_index > 0):
-            # print 'CALLING read_input_files()...'
-            self.read_input_files()          
 
         #----------------------------------------------
         # Write user-specified data to output files ?
@@ -527,11 +525,22 @@ class satzone_component( infil_base.infil_component ):
  
         #--------------------------------------------------         
         # D8 component builds its cfg filename from these  
-        #--------------------------------------------------      
-        self.d8.site_prefix  = self.site_prefix
-        self.d8.in_directory = self.in_directory
-        self.d8.initialize( cfg_file=None, SILENT=self.SILENT, \
+        #-------------------------------------------------------------
+        # Note:  This D8 component is serving a satzone component
+        #        that has already been instantiated and knows its
+        #        directory and prefix information.  So we can build
+        #        the correct D8 cfg_file name from that info.  It
+        #        will then read path_info CFG file to get other info.
+        #-------------------------------------------------------------
+        cfg_file = (self.case_prefix + '_d8_global.cfg')
+        cfg_file = (self.cfg_directory + cfg_file)
+        self.d8.initialize( cfg_file=cfg_file, SILENT=self.SILENT, \
                             REPORT=self.REPORT )
+        #---------------------------------------------------------     
+#         self.d8.site_prefix  = self.site_prefix
+#         self.d8.in_directory = self.in_directory
+#         self.d8.initialize( cfg_file=None, SILENT=self.SILENT, \
+#                             REPORT=self.REPORT )
 
         #---------------------------------------------------
         # The next 2 "update" calls are needed when we use
@@ -1325,16 +1334,28 @@ class satzone_component( infil_base.infil_component ):
     #-------------------------------------------------------------------  
     def open_input_files(self):
 
-        in_files = ['elev_file', 'h0_table_file', 'd_freeze_file',
-                    'd_thaw_file' ]
-        self.prepend_directory( in_files, INPUT=True )
+        #------------------------------------------------------
+        # This method uses prepend_directory() in BMI_base.py
+        # which uses both eval and exec.
+        #------------------------------------------------------
+#         in_files = ['elev_file', 'h0_table_file', 'd_freeze_file',
+#                     'd_thaw_file' ]
+#         self.prepend_directory( in_files, INPUT=True )
 
-        # self.elev_file     = self.in_directory + self.elev_file
-        # self.h0_table_file = self.in_directory + self.h0_table_file
-        #### self.d_bedrock_file = self.in_directory + self.d_bedrock_file
-        # self.d_freeze_file = self.in_directory + self.d_freeze_file
-        # self.d_thaw_file   = self.in_directory + self.d_thaw_file
+        #------------------------------------------------------
+        # This avoids eval/exec, but is brute-force
+        # 2020-05-03. Changed in_directory to topo_directory.
+        # See set_directories() in BMI_base.py.
+        #------------------------------------------------------
+        self.elev_file     = self.topo_directory + self.elev_file
+        self.h0_table_file = self.soil_directory + self.h0_table_file
+        ### self.d_bedrock_file = self.soil_directory + self.d_bedrock_file
+        self.d_freeze_file = self.soil_directory + self.d_freeze_file
+        self.d_thaw_file   = self.soil_directory + self.d_thaw_file
 
+        #----------------------------------------------        
+        # Open all input files and store file objects
+        #----------------------------------------------
         self.elev_unit      = model_input.open_file(self.elev_type,      self.elev_file)
         self.h0_table_unit  = model_input.open_file(self.h0_table_type,  self.h0_table_file)
 ##        self.d_bedrock_unit = model_input.open_file(self.d_bedrock_type, self.d_bedrock_file)
@@ -1346,9 +1367,9 @@ class satzone_component( infil_base.infil_component ):
         self.th_unit = []
         
         for j in range(self.n_layers):
-            self.Ks_file[j] = self.in_directory + self.Ks_file[j]
-            self.qs_file[j] = self.in_directory + self.qs_file[j]
-            self.th_file[j] = self.in_directory + self.th_file[j]
+            self.Ks_file[j] = self.soil_directory + self.Ks_file[j]
+            self.qs_file[j] = self.soil_directory + self.qs_file[j]
+            self.th_file[j] = self.soil_directory + self.th_file[j]
 
             self.Ks_unit.append( model_input.open_file(self.Ks_type[j], self.Ks_file[j]) )
             self.qs_unit.append( model_input.open_file(self.qs_type[j], self.qs_file[j]) )

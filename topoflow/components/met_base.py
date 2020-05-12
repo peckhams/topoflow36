@@ -1,8 +1,20 @@
-
-## Does "land_surface_air__latent_heat_flux" make sense? (2/5/13)
-
-# Copyright (c) 2001-2019, Scott D. Peckham
+"""
+This file defines a "base class" for meteorology components as
+well as any functions used by most or all meteorology methods.
+That is, all meteorology components inherit methods from this class.
+(This is currently the only one.)  The methods of this class should
+be over-ridden as necessary for different methods of modeling
+meteorology. This class, in turn, inherits from the "BMI base class"
+in BMI_base.py.
+"""
+#-----------------------------------------------------------------------
 #
+# Copyright (c) 2001-2020, Scott D. Peckham
+#
+#  May 2020.  Separate set_rain_to_zero() method (readability)
+#             Better PRECIP_ONLY support; set_computed_input_vars()
+#             Bug fix: problem with read_input_files() call.
+#             Separate: set_slope_angle(), set_aspect_angle().
 #  Sep 2014.  Fixed sign error in update_bulk_richardson_number().
 #             Ability to compute separate P_snow and P_rain.
 #  Aug 2014.  New CSDMS Standard Names and clean up.
@@ -18,12 +30,6 @@
 #  Jan 2009. Converted from IDL.
 #
 #-----------------------------------------------------------------------
-# NOTES: This file defines a "base class" for meteorology
-#        components as well as any functions used by most or
-#        all meteorology methods.  The methods of this class
-#        should be over-ridden as necessary for different
-#        methods of modeling meteorology.
-#-----------------------------------------------------------------------
 # Notes: Do we ever need to distinguish between a surface
 #        temperature and snow temperature (in the snow) ?
 #        Recall that a separate T_soil_x variable is used
@@ -32,7 +38,8 @@
 #        Cp_snow is from NCAR CSM Flux Coupler web page
 #
 #        rho_H2O is currently not adjustable with GUI. (still true?)
-#    
+
+#        Does "land_surface_air__latent_heat_flux" make sense? (2/5/13)   
 #-----------------------------------------------------------------------    
 #
 #  class met_component     (inherits from BMI_base.py)
@@ -49,7 +56,10 @@
 #      update()
 #      finalize()
 #      ----------------------------
+#      set_missing_cfg_options()
 #      set_computed_input_vars()
+#      set_slope_angle()
+#      set_aspect_angle()
 #      initialize_computed_vars()
 #      ----------------------------
 #      update_P_integral()
@@ -77,6 +87,7 @@
 #      ------------------------------------
 #      open_input_files()
 #      read_input_files()
+#      set_rain_to_zero()     # (2020-05-05)
 #      close_input_files()
 #      ------------------------------------
 #      update_outfile_names()
@@ -569,7 +580,7 @@ class met_component( BMI_base.BMI_component ):
 ##        self.method1_durations = None
 ##        self.method1_n_rates   = 0
         
-    #   set_constants()             
+    #   set_constants()           
     #-------------------------------------------------------------------
     def initialize(self, cfg_file=None, mode="nondriver",
                    SILENT=False):
@@ -586,8 +597,8 @@ class met_component( BMI_base.BMI_component ):
         # Load component parameters from a config file
         #-----------------------------------------------
         self.set_constants()
-        self.initialize_config_vars() 
-        ## self.T_air_file = ''  ############################# TEST 
+        self.initialize_config_vars()
+        self.set_missing_cfg_options()
         ## print('self.P_file = ' + self.P_file )
 
         ### self.read_grid_info() # NOW IN initialize_config_vars()
@@ -609,21 +620,34 @@ class met_component( BMI_base.BMI_component ):
         #       self.P.ndim to determine if scalar.  So
         #       scalar/grid needs to be set at start.
         #       Check other input variables for this issue.    #######
-        #---------------------------------------------------        
+        #-------------------------------------------------------
+        # Data read from float32 files is converted to float64.
+        #-------------------------------------------------------
+        self.RAIN_OVER = False
         P_type = self.P_type.lower()
+        ## dtype = 'float32'   ## TEST: 2020-05-04
+        dtype = 'float64'
         if (P_type == 'scalar') or (P_type == 'time_series'):
             #-------------------------------------------------
             # (5/19/12) This makes P "mutable", which allows
             # its updated values to be seen by any component
             # that has a reference to it.
             #-------------------------------------------------
-            self.P      = self.initialize_scalar(0, dtype='float64')
-            self.P_rain = self.initialize_scalar(0, dtype='float64')
-            self.P_snow = self.initialize_scalar(0, dtype='float64')
+            # If P_type is 'scalar', then P was initialized
+            # in initialize_config_vars().
+            #-------------------------------------------------
+            if (P_type != 'scalar'):
+                self.P = self.initialize_scalar(0, dtype=dtype)
+            else:
+                pass
+                # This is done in set_computed_input_vars()
+                ### self.P *= self.mmph_to_mps
+            self.P_rain = self.initialize_scalar(0, dtype=dtype)
+            self.P_snow = self.initialize_scalar(0, dtype=dtype)
         else:
-            self.P      = self.initialize_grid(0, dtype='float64')
-            self.P_rain = self.initialize_grid(0, dtype='float64')
-            self.P_snow = self.initialize_grid(0, dtype='float64')
+            self.P      = self.initialize_grid(0, dtype=dtype)
+            self.P_rain = self.initialize_grid(0, dtype=dtype)
+            self.P_snow = self.initialize_grid(0, dtype=dtype)
                                
         #------------------------------------------------------
         # NB! "Sample steps" must be defined before we return
@@ -632,15 +656,14 @@ class met_component( BMI_base.BMI_component ):
         if (self.comp_status == 'Disabled'):
             if not(SILENT):
                 print('Meteorology component: Disabled in CFG file.')
-            ## self.P        = np.float64(0)
-            self.e_air    = self.initialize_scalar(0, dtype='float64')
-            self.e_surf   = self.initialize_scalar(0, dtype='float64')
-            self.em_air   = self.initialize_scalar(0, dtype='float64')
-            self.Qn_SW    = self.initialize_scalar(0, dtype='float64')
-            self.Qn_LW    = self.initialize_scalar(0, dtype='float64')
-            self.Q_sum    = self.initialize_scalar(0, dtype='float64')
-            self.Qc       = self.initialize_scalar(0, dtype='float64')
-            self.Qa       = self.initialize_scalar(0, dtype='float64')
+            self.e_air    = self.initialize_scalar(0, dtype=dtype)
+            self.e_surf   = self.initialize_scalar(0, dtype=dtype)
+            self.em_air   = self.initialize_scalar(0, dtype=dtype)
+            self.Qn_SW    = self.initialize_scalar(0, dtype=dtype)
+            self.Qn_LW    = self.initialize_scalar(0, dtype=dtype)
+            self.Q_sum    = self.initialize_scalar(0, dtype=dtype)
+            self.Qc       = self.initialize_scalar(0, dtype=dtype)
+            self.Qa       = self.initialize_scalar(0, dtype=dtype)
             self.DONE     = True
             self.status   = 'initialized'
             return
@@ -658,7 +681,7 @@ class met_component( BMI_base.BMI_component ):
         #--------------------------------------------------
         # NOTE:  Must be called AFTER read_input_files().
         #--------------------------------------------------
-        print('#### CALLING set_computed_input_vars() in met_base.py...')
+        ## print('#### CALLING set_computed_input_vars() in met_base.py...')
         self.set_computed_input_vars()
                 
         #-----------------------
@@ -673,7 +696,6 @@ class met_component( BMI_base.BMI_component ):
         
     #   initialize()
     #-------------------------------------------------------------------
-    ## def update(self, dt=-1.0, time_seconds=None):
     def update(self, dt=-1.0):
 
         #----------------------------------------------------------
@@ -689,6 +711,16 @@ class met_component( BMI_base.BMI_component ):
         #----------------------------------------------------------
         if (self.comp_status == 'Disabled'): return
         self.status = 'updating'  # (OpenMI 2.0 convention)
+
+        #----------------------------------------
+        # Read next met vars from input files ?
+        #-----------------------------------------------------       
+        # Note: read_input_files() is called by initialize()
+        # and those values must be used for the "update"
+        # calls before reading new ones.
+        #-----------------------------------------------------
+        if (self.time_index > 0):
+            self.read_input_files()
 
         #-------------------------------------------
         # Update computed values related to precip
@@ -721,15 +753,11 @@ class met_component( BMI_base.BMI_component ):
             self.update_net_energy_flux()  # (at the end)
             
         #----------------------------------------
-        # Read next met vars from input files ?
-        #-------------------------------------------
-        # Note that read_input_files() is called
-        # by initialize() and these values must be
-        # used for "update" calls before reading
-        # new ones.
-        #-------------------------------------------
-        if (self.time_index > 0):
-            self.read_input_files()
+        # If placed here near bottom, then the
+        # first values (e.g. P) are used twice.
+        #----------------------------------------        
+        ##  if (self.time_index > 0):
+        ##      self.read_input_files()
       
         #----------------------------------------------
         # Write user-specified data to output files ?
@@ -762,6 +790,40 @@ class met_component( BMI_base.BMI_component ):
      
     #   finalize()
     #-------------------------------------------------------------------
+    def set_missing_cfg_options(self):
+
+        #-------------------------------------------------------  
+        # Note: This is called in initialize() AFTER calling
+        #       initialize_config_vars().  It is used to set
+        #       newer toggles, etc. that may not have been
+        #       set in the CFG file.
+        #-------------------------------------------------------
+        if not(hasattr(self, 'PRECIP_ONLY')):
+            # See: set_computed_input_vars()
+            self.PRECIP_ONLY = 'No'
+
+        #----------------------------------------------------
+        # Toggle to use SATTERLUND or BRUTSAERT methods
+        # for computing e_air and em_air. (Not in GUI yet.)
+        #----------------------------------------------------
+        if not(hasattr(self, 'SATTERLUND')):
+            self.SATTERLUND = False
+
+        #-------------------------------------------------
+        # Options to save shortwave & longwave radiation
+        #-------------------------------------------------
+        if not(hasattr(self, 'SAVE_QSW_GRIDS')):
+            self.SAVE_QSW_GRIDS = False
+        if not(hasattr(self, 'SAVE_QLW_GRIDS')):
+            self.SAVE_QLW_GRIDS = False
+        #-------------------------------------------
+        if not(hasattr(self, 'SAVE_QSW_PIXELS')):
+            self.SAVE_QSW_PIXELS = False
+        if not(hasattr(self, 'SAVE_QLW_PIXELS')):
+            self.SAVE_QLW_PIXELS = False
+                                        
+    #   set_missing_cfg_options()
+    #-------------------------------------------------------------------
     def set_computed_input_vars(self):
 
         #-----------------------------------------------
@@ -769,45 +831,32 @@ class met_component( BMI_base.BMI_component ):
         #-----------------------------------------------
         # NB! read_input_files() does this for files.
         #-----------------------------------------------
-        if (self.P_type == 'Scalar'):
-##            print '######## self.P_type  =', self.P_type
-##            print '######## type(self.P) =', type(self.P)
-##            print '######## self.P       =', self.P
-##            print '######## Converting scalar P from MMPH to MPS.'
-            #-----------------------------------------------------
-            # (2/7/13) Must use "*=" here to preserve reference.
-            #-----------------------------------------------------
-            self.P *= self.mmph_to_mps
-            ## self.P = self.P * self.mmph_to_mps
+        if (self.P_type.lower() == 'scalar'):
+            #------------------------------------------------
+            # (2/7/13) Use "*=" here to preserve reference.
+            #------------------------------------------------
             print('Scalar rainrate set to:', self.P, ' [mmph]')
-            
-        #---------------------------------
-        # Process the PRECIP_ONLY toggle
-        #---------------------------------
-        if not(hasattr(self, 'PRECIP_ONLY')):
-            self.PRECIP_ONLY = False
-        elif (self.PRECIP_ONLY.lower() == 'yes'):
-            self.PRECIP_ONLY = True
-        else:
-            self.PRECIP_ONLY = False
+            self.P *= self.mmph_to_mps  # (after print stmt)
 
+        #----------------------------------------------
+        # Convert PRECIP_ONLY string to True or False
+        #----------------------------------------------
+        on_list = ['yes', 'true', 'on', '1']
+        setting = self.PRECIP_ONLY.lower()
+        self.PRECIP_ONLY = (setting in on_list)
+            
         #---------------------------------------
         # Print info message about PRECIP_ONLY
+        # See set_missing_cfg_options().
         #---------------------------------------
         if (self.PRECIP_ONLY):
-            print('-----------------------------------------')
+            print('------------------------------------------')
             print(' NOTE: Since PRECIP_ONLY = True, output')
-            print('       variables will not be computed')
-            print('       or saved to files.')
-            print('-----------------------------------------')
+            print('       variables for met component will')
+            print('       not be computed or saved to files.')
+            print('       And evap component may not work.')
+            print('------------------------------------------')
             print(' ')
-            
-        #----------------------------------------------------
-        # Toggle to use SATTERLUND or BRUTSAERT methods
-        # for computing e_air and em_air. (Not in GUI yet.)
-        #----------------------------------------------------
-        if not(hasattr(self, 'SATTERLUND')):
-            self.SATTERLUND = False
 
         #---------------------------------------------
         # Convert GMT_offset from string to int
@@ -823,19 +872,28 @@ class met_component( BMI_base.BMI_component ):
                       'May', 'June', 'July', 'August', 'September',
                       'October', 'November', 'December']
         self.start_month = month_list.index( self.start_month ) + 1
-                 
+
+        # See set_missing_cfg_options()
+        #----------------------------------------------------
+        # Toggle to use SATTERLUND or BRUTSAERT methods
+        # for computing e_air and em_air. (Not in GUI yet.)
+        #----------------------------------------------------
+#         if not(hasattr(self, 'SATTERLUND')):
+#             self.SATTERLUND = False
+              
+        # See set_missing_cfg_options()   
         #-------------------------------
         # Initialize some more toggles
         #-------------------------------                   
-        if not(hasattr(self, 'SAVE_QSW_GRIDS')):
-            self.SAVE_QSW_GRIDS = False
-        if not(hasattr(self, 'SAVE_QLW_GRIDS')):
-            self.SAVE_QLW_GRIDS = False
-        #-------------------------------------------
-        if not(hasattr(self, 'SAVE_QSW_PIXELS')):
-            self.SAVE_QSW_PIXELS = False
-        if not(hasattr(self, 'SAVE_QLW_PIXELS')):
-            self.SAVE_QLW_PIXELS = False
+#         if not(hasattr(self, 'SAVE_QSW_GRIDS')):
+#             self.SAVE_QSW_GRIDS = False
+#         if not(hasattr(self, 'SAVE_QLW_GRIDS')):
+#             self.SAVE_QLW_GRIDS = False
+#         #-------------------------------------------
+#         if not(hasattr(self, 'SAVE_QSW_PIXELS')):
+#             self.SAVE_QSW_PIXELS = False
+#         if not(hasattr(self, 'SAVE_QLW_PIXELS')):
+#             self.SAVE_QLW_PIXELS = False
    
         #---------------------------------------------------------
         # Make sure that all "save_dts" are larger or equal to
@@ -848,22 +906,8 @@ class met_component( BMI_base.BMI_component ):
         
     #   set_computed_input_vars()
     #-------------------------------------------------------------------
-    def initialize_computed_vars(self):
-
-        #------------------------------------------------------
-        # Note: Some of these require "self.rti", which is
-        #       only stored by read_grid_info() after the
-        #       set_computed_input_vars() function is called.
-        #       So these parts can't go there.
-        #------------------------------------------------------
-        
-        #---------------------------------------
-        # Add self.in_directory to:
-        #   slope_grid_file & aspect_grid_file
-        #---------------------------------------
-        self.slope_grid_file  = (self.in_directory + self.slope_grid_file) 
-        self.aspect_grid_file = (self.in_directory + self.aspect_grid_file)
-        
+    def set_slope_angle(self):
+    
         #-------------------------------------------------
         # Read slope grid & convert to slope angle, beta
         # NB!  RT slope grids have NaNs on edges.
@@ -881,13 +925,16 @@ class met_component( BMI_base.BMI_component ):
         w_bad = np.where( np.logical_or( (beta < 0), (beta > np.pi / 2) ) )
         n_bad = np.size(w_bad[0])
         if (n_bad != 0):    
-            msg = ['ERROR:  Some slope angles are out of range.', ' ']
-            for line in msg:
-                print(line)
-            ## result = GUI_Message(msg, INFO=True, TITLE='ERROR MESSAGE')
+            print('ERROR: In met_base.py, some slope angles are out')
+            print('       of range.  Returning without setting beta.')
+            print()
             return
-        self.beta = beta  ######
-        
+
+        self.beta = beta
+            
+    #   set_slope_angle()
+    #-------------------------------------------------------------------
+    def set_aspect_angle(self):
         #------------------------------------------------------
         # Read aspect grid.  Alpha must be CW from north.
         # NB!  RT aspect grids have NaNs on edges.
@@ -906,8 +953,31 @@ class met_component( BMI_base.BMI_component ):
         n_nan = np.size( w_nan[0] )
         if (n_nan != 0):    
             alpha[ w_nan ] = np.float64(0)
-        self.alpha = alpha  ######
+            
+        self.alpha = alpha
+            
+    #   set_aspect_angle()
+    #-------------------------------------------------------------------
+    def initialize_computed_vars(self):
 
+        #------------------------------------------------------
+        # Note: Some of these require "self.rti", which is
+        #       only stored by read_grid_info() after the
+        #       set_computed_input_vars() function is called.
+        #       So these parts can't go there.
+        #------------------------------------------------------
+        
+        #---------------------------------------
+        # Add self.topo_directory to:
+        #   slope_grid_file & aspect_grid_file
+        #------------------------------------------------
+        # Note: Maybe put these into read_input_files()
+        #------------------------------------------------
+        self.slope_grid_file  = (self.topo_directory + self.slope_grid_file) 
+        self.aspect_grid_file = (self.topo_directory + self.aspect_grid_file)  
+        self.set_slope_angle()
+        self.set_aspect_angle()
+    
         #---------------------------        
         # Create lon and lat grids
         #---------------------------
@@ -947,10 +1017,11 @@ class met_component( BMI_base.BMI_component ):
         #------------------------------------------------
         # vol_P is used for mass balance check.
         #------------------------------------------------
+        dtype = 'float64'
         P_max = self.P.max()       # (after read_input_files)
         ## self.P_max = self.P.max()
-        self.P_max = self.initialize_scalar( P_max, dtype='float64')
-        self.vol_P = self.initialize_scalar( 0, dtype='float64')
+        self.P_max = self.initialize_scalar( P_max, dtype=dtype)
+        self.vol_P = self.initialize_scalar( 0, dtype=dtype)
 
 
         #----------------------------------------------------------
@@ -963,15 +1034,10 @@ class met_component( BMI_base.BMI_component ):
         #---------------------------------------------------------- 
         # These depend on grids alpha and beta, so will be grids.
         #----------------------------------------------------------                
-        self.Qn_SW  = np.zeros([self.ny, self.nx], dtype='float64')
-        self.Qn_LW  = np.zeros([self.ny, self.nx], dtype='float64')
-        self.Qn_tot = np.zeros([self.ny, self.nx], dtype='float64')
-        self.Q_sum  = np.zeros([self.ny, self.nx], dtype='float64')
-        #----------------------------------------------------------  
-#         self.Qn_SW  = self.initialize_scalar( 0, dtype='float64')
-#         self.Qn_LW  = self.initialize_scalar( 0, dtype='float64')
-#         self.Qn_tot = self.initialize_scalar( 0, dtype='float64')
-#         self.Q_sum  = self.initialize_scalar( 0, dtype='float64')
+        self.Qn_SW  = self.initialize_grid( 0, dtype=dtype)
+        self.Qn_LW  = self.initialize_grid( 0, dtype=dtype)
+        self.Qn_tot = self.initialize_grid( 0, dtype=dtype)
+        self.Q_sum  = self.initialize_grid( 0, dtype=dtype)
         #---------------------------------------------------------- 
         # These may be scalars or grids.
         #---------------------------------         
@@ -996,17 +1062,21 @@ class met_component( BMI_base.BMI_component ):
 
         #---------------------------------------------------
         # Notes: This can be used for mass balance checks,
-        #        such as now done by update_mass_totals()
-        #        in topoflow.py.  The "dt" here should be
-        #        TopoFlow's "main dt" vs. the process dt.
-        
+        #        such as now done by print_final_report()
+        #        in topoflow.py.
         #        dV[i] = P[i] * da[i] * dt, dV = sum(dV[i])
         #---------------------------------------------------
+        # Outdated comment, before EMELI:
+        # The "dt" here should be TopoFlow's "main dt" vs.
+        # the process dt.
+        #---------------------------------------------------        
         if (self.DEBUG):
             print('Calling update_P_integral()...')
-            
+     
         #------------------------------------------------
         # Update mass total for P, sum over all pixels
+        # P_rain and P_snow both included here.
+        # P and da are both either scalar or grid.
         #------------------------------------------------   
         volume = np.double(self.P * self.da * self.dt)  # [m^3]
         if (np.size(volume) == 1):
@@ -1014,6 +1084,12 @@ class met_component( BMI_base.BMI_component ):
         else:
             self.vol_P += np.sum(volume)
    
+        # For testing
+#         print('In update_P_integral:')
+#         print('vol_P =', self.vol_P)
+#         print('time  =', self.time)
+#         print()
+        
     #   update_P_integral()
     #-------------------------------------------------------------------
     def update_P_max(self):
@@ -1552,7 +1628,7 @@ class met_component( BMI_base.BMI_component ):
                                            self.beta,
                                            self.albedo,
                                            self.dust_atten )
-
+        
         if (np.ndim( self.Qn_SW ) == 0):
             self.Qn_SW.fill( Qn_SW )   #### (mutable scalar)
         else:
@@ -1599,7 +1675,7 @@ class met_component( BMI_base.BMI_component ):
             C       = self.cloud_factor
             term1   = (1.0 - F) * 1.72 * (e_air_kPa / T_air_K) ** self.one_seventh
             term2   = (1.0 + (0.22 * C ** 2.0))
-            self.em_air  = (term1 * term2) + F
+            em_air = (term1 * term2) + F
         else:
             #--------------------------------------------------------
             # Satterlund (1979) method for computing the emissivity
@@ -1610,12 +1686,16 @@ class met_component( BMI_base.BMI_component ):
             #--------------------------------------------------------
             e_air_mbar = self.e_air
             eterm  = np.exp(-1 * (e_air_mbar)**(T_air_K / 2016) )
-            self.em_air = 1.08 * (1.0 - eterm)
- 
-        #--------------------------------------------------------------  
-        # Can't do this yet.  em_air is always initialized scalar now
-        # but may change to grid on assignment. (9/23/14)
-        #--------------------------------------------------------------
+            em_air = 1.08 * (1.0 - eterm)
+
+        #-------------------------- 
+        # Update em_air, in-place
+        #---------------------------------------------------------
+        # NB! Currently, em_air is always initialized as scalar,
+        #     but could change to grid after assignment.  Must
+        #     determine if scalar or grid in initialize().
+        #---------------------------------------------------------
+        self.em_air = em_air
 #         if (np.ndim( self.em_air ) == 0):
 #             self.em_air.fill( em_air )   #### (mutable scalar)
 #         else:
@@ -1658,7 +1738,7 @@ class met_component( BMI_base.BMI_component ):
         LW_out   = self.em_surf * self.sigma * (T_surf_K)** 4.0
         LW_out   = LW_out + ((1.0 - self.em_surf) * LW_in)
                
-        self.Qn_LW = (LW_in - LW_out)   # [W m-2]
+        self.Qn_LW[:] = (LW_in - LW_out)   # [W m-2]
 
         #--------------------------------------------------------------  
         # Can't do this yet.  Qn_LW is always initialized grid now
@@ -1762,23 +1842,32 @@ class met_component( BMI_base.BMI_component ):
     #-------------------------------------------------------------------  
     def open_input_files(self):
 
+        #------------------------------------------------------------
+        # Note: 2020-05-03. Changed in_directory to met_directory,
+        #       which now defaults to cfg_directory.
+        #       See set_directories() in BMI_base.py.
+        #------------------------------------------------------------
         if (self.DEBUG):
             print('Calling open_input_files()...')
-       
-        self.P_file      = self.in_directory + self.P_file
-        self.T_air_file  = self.in_directory + self.T_air_file
-        self.T_surf_file = self.in_directory + self.T_surf_file
-        self.RH_file     = self.in_directory + self.RH_file
-        self.p0_file     = self.in_directory + self.p0_file
-        self.uz_file     = self.in_directory + self.uz_file
-        self.z_file      = self.in_directory + self.z_file
-        self.z0_air_file = self.in_directory + self.z0_air_file
+ 
+        #-------------------------------------------------------      
+        # Note: slope and aspect files were read already from
+        #       topo_directory, in initialize_computed_vars().
+        #-------------------------------------------------------
+        self.P_file      = self.met_directory + self.P_file
+        self.T_air_file  = self.met_directory + self.T_air_file
+        self.T_surf_file = self.met_directory + self.T_surf_file
+        self.RH_file     = self.met_directory + self.RH_file
+        self.p0_file     = self.met_directory + self.p0_file
+        self.uz_file     = self.met_directory + self.uz_file
+        self.z_file      = self.met_directory + self.z_file
+        self.z0_air_file = self.met_directory + self.z0_air_file
 
-        self.albedo_file        = self.in_directory + self.albedo_file
-        self.em_surf_file       = self.in_directory + self.em_surf_file
-        self.dust_atten_file    = self.in_directory + self.dust_atten_file
-        self.cloud_factor_file  = self.in_directory + self.cloud_factor_file
-        self.canopy_factor_file = self.in_directory + self.canopy_factor_file
+        self.albedo_file        = self.met_directory + self.albedo_file
+        self.em_surf_file       = self.met_directory + self.em_surf_file
+        self.dust_atten_file    = self.met_directory + self.dust_atten_file
+        self.cloud_factor_file  = self.met_directory + self.cloud_factor_file
+        self.canopy_factor_file = self.met_directory + self.canopy_factor_file
 
         self.P_unit      = model_input.open_file(self.P_type,      self.P_file)
         self.T_air_unit  = model_input.open_file(self.T_air_type,  self.T_air_file)
@@ -1819,23 +1908,23 @@ class met_component( BMI_base.BMI_component ):
         rti = self.rti
 
         #--------------------------------------------------------
-        # All grids are assumed to have a data type of Float32.
+        # All grids are assumed to have a data type of float32.
         #--------------------------------------------------------
         # NB! read_next() returns None if TYPE arg is "Scalar".
         #--------------------------------------------------------
         P = model_input.read_next(self.P_unit, self.P_type, rti,
                                   factor=self.mmph_to_mps)
-
-        if (P is not None):
-            ## print 'MET: (time,P) =', self.time, P
-            
-            self.update_var( 'P', P )  ################# TEST: 11/15/16
-
-            ## if (self.P_type.lower() != 'scalar'):
-#             if (np.ndim( self.P ) == 0):
-#                 self.P.fill( P )  #### (2/7/13, mutable scalar)
-#             else:
-#                 self.P = P
+                                   
+        # print('MET: (time,P) =', self.time, P)
+        # print('shape(P) =', P.shape)
+                    
+        if (P is None):
+            ## print('read_next() returned P is None.')
+            self.set_rain_to_zero()  # (2020-05-05)
+        else:
+            ## print('read_next() returned P is NOT None.')
+            ## print('P.min, P.max =', P.min(), P.max() )   
+            self.update_var( 'P', P )  ## (In BMI_base.py, 11/15/16)
 
             if (self.DEBUG or (self.time_index == 0)):
                 print('In met_base read_input_files():')
@@ -1845,34 +1934,6 @@ class met_component( BMI_base.BMI_component ):
                 print('   min(P) = ' + Pmin_str + ' [mmph]')
                 print('   max(P) = ' + Pmax_str + ' [mmph]')
                 print(' ')
-        else:
-            #-----------------------------------------------
-            # Either self.P_type is "Scalar" or we've read
-            # all of the data in the rain_rates file.
-            #-----------------------------------------------
-            if (self.P_type.lower() != 'scalar'):
-                #------------------------------------
-                # Precip is unique in this respect.
-                #--------------------------------------------------
-                # 2/7/13. Note that we don't change P from grid
-                # to scalar since that could cause trouble for
-                # other comps that use P, so we just zero it out.
-                #--------------------------------------------------
-                self.P.fill( 0 )
-                if (self.DEBUG):
-                    print('Reached end of file: ' + self.P_file)
-                    print('  P set to 0 by read_input_files().')
-            elif (self.time_sec >= self.dt):
-                self.P.fill( 0 )
-                if (self.DEBUG):
-                    print('Reached end of scalar rainfall duration.')
-                    print('  P set to 0 by read_input_files().')
-                    ## print 'time_sec =', self.time_sec
-                    ## print 'met dt   =', self.dt
-                    
-##        print '######### In met_base.read_input_files() #######'
-##        print 'self.P_type =', self.P_type
-##        print 'self.P      =', self.P
 
         #------------------------------------------------------------
         # Read variables from files into scalars or grids while
@@ -1965,6 +2026,63 @@ class met_component( BMI_base.BMI_component ):
 ##        if (Qn_LW is not None): self.Qn_LW = Qn_LW
          
     #   read_input_files()
+    #-------------------------------------------------------------------  
+    def set_rain_to_zero(self):
+
+        #-------------------------------------------------------     
+        # Note: As a variable, rain rate, P, is special.
+        #       When there are no more data values left in an
+        #       input file, we can assume that P=0 after that.
+        #       Other variables may persist the last value
+        #       that was read, but not P.
+        #-------------------------------------------------------
+        #       Uniform rain for a given duration can be
+        #       specified by setting dt to duration in the
+        #       meteorology CFG file, and then setting the
+        #       P value to a single scalar or grid.
+        #-------------------------------------------------------
+        #       Using fill() method writes values in-place and
+        #       does not "break the reference".  Note that
+        #       scalar P is saved as a 0D numpy array.
+        #-------------------------------------------------------
+        #       2/7/13. Note that we don't change P from grid
+        #       to scalar since that could cause trouble for
+        #       other comps that use P, so we just zero it out.
+        #--------------------------------------------------
+        if (self.RAIN_OVER):
+            return  # (do nothing, already set to zero)
+
+        # Note: read_next() returns None for scalar type.
+        SCALAR_P = (self.P_type.lower() == 'scalar')
+        # if (SCALAR_P and (self.time == 0)):  ## EQUIVALENT HERE
+        if (SCALAR_P and (self.time_sec < self.dt)):
+            return 
+
+        self.RAIN_OVER = True
+        self.P.fill( 0 )  # (works for scalar or grid)
+        
+        #-----------------------------------------------
+        # Either self.P_type is "Scalar" or we've read
+        # all of the data in the rain_rates file.
+        #-----------------------------------------------
+        REPORT = True
+        if not(REPORT):
+            return
+      
+        if (SCALAR_P):
+            print('Reached end of scalar rainfall duration.')
+            print('  P set to 0 by read_input_files().')
+        else:
+            print('Reached end of precip file:')
+            ## print( self.P_file )
+            print('  P set to 0 by met_base.read_input_files().')
+            print('  time =', self.time_min, 'minutes.')
+            
+        # print '######### In met_base.read_input_files() #######'
+        # print 'self.P_type =', self.P_type
+        # print 'self.P      =', self.P
+
+    #   set_rain_to_zero()
     #-------------------------------------------------------------------  
     def close_input_files(self):
 

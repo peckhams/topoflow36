@@ -263,8 +263,8 @@ class d8_component( BMI_base.BMI_component ):
         if not(SILENT):
             print('D8 component: Initializing...')
 
-        self.status     = 'initializing'  # (OpenMI 2.0 convention)
-        self.mode       = mode
+        self.status = 'initializing'  # (OpenMI 2.0 convention)
+        self.mode   = mode
 
         if (cfg_file == None):
             #-----------------------------------------------------------------
@@ -275,13 +275,9 @@ class d8_component( BMI_base.BMI_component ):
             cfg_extension = self.get_attribute( 'cfg_extension' )  #########
             # print 'cfg_extension =', cfg_extension
             # print 'case_prefix = ', self.case_prefix
-
-            
             filename      = self.case_prefix + cfg_extension
-            #filename      = self.site_prefix + cfg_extension
             cfg_file      = self.in_directory + filename
-            ## self.cfg_file   = os.path.join( os.getcwd(), filename )
-            ## self.cfg_prefix = self.site_prefix
+
         self.cfg_file = cfg_file
         
         ## print 'In d8_base.initialize(), cfg_file =', cfg_file  #########
@@ -462,7 +458,7 @@ class d8_component( BMI_base.BMI_component ):
         # NB! start_new_d8_codes() has a DEM argument
         # that is used by erode_d8_global.py, etc.
         #----------------------------------------------
-        self.DEM_file = (self.in_directory + self.DEM_file)  ######## (11/11/16, QUICK FIX)
+        self.DEM_file = (self.topo_directory + self.DEM_file)  ######## (11/11/16, QUICK FIX)
         if not( os.path.exists(self.DEM_file) ):
             print('ERROR: Could not find DEM file:')
             print(self.DEM_file)

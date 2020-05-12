@@ -1,3 +1,9 @@
+"""
+This file defines a "dynamic wave" channel flow component and
+related functions.  It inherits from the channels "base class" in
+"channels_base.py".
+"""
+#-----------------------------------------------------------------------
 #
 #  Copyright (c) 2001-2014, Scott D. Peckham
 #
@@ -10,10 +16,6 @@
 #  May 2009.  Updates.
 #  Jan 2009.  Converted from IDL to Python with I2PY.
 #
-#-----------------------------------------------------------------------
-#  NOTES:  This file defines a "dynamic wave" channel flow component
-#          and related functions.  It inherits from the channels
-#          "base class" in "channels_base.py".
 #-----------------------------------------------------------------------
 #
 #  class channels_component
