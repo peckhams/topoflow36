@@ -1779,7 +1779,7 @@ class framework():
         # erode_test(), or try to run topoflow_test() twice, it will
         # fail with a path problem.  To avoid these problems, we now
         # (9/21/14):
-        # (1) Set CFG directory from CFG file in check_directories()
+        # (1) Set CFG directory from CFG file in set_directories()
         #     in BMI_base.py.
         # (2) Change an "in_directory" read from a CFG file as "." to
         #     the CFG directory from (1).

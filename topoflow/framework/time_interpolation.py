@@ -2,7 +2,7 @@
 #-------------------------------------------------------------------     
 # Copyright (c) 2013-2016, Scott D. Peckham
 #
-# Apr 2013. New time interpolator class from/for framework3.py.
+# Apr 2013. New time interpolator class from/for emeli.py.
 #
 #-------------------------------------------------------------------
 #
