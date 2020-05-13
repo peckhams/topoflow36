@@ -1,5 +1,5 @@
 """
-# This class defines a hydrologic infiltration component that numerically
+This class defines a hydrologic infiltration component that numerically
 solves the 1D version of the Richards Equation.  That is, while each grid
 cell can have its own profile, the horizontal/lateral components of the
 Darcy velocity field are assumed to be negligible.
@@ -546,11 +546,8 @@ class infil_component(infil_base.infil_component):
         
         #----------------------------------------
         # Use the same profile for all pixels ?
-        #---------------------------------------------
-        # NB! This var only used by Richards' method
-        # so it shouldn't appear in "infil_base.py".
-        #---------------------------------------------
-        self.SINGLE_PROFILE = self.ALL_SCALARS  # (3/19/07)
+        #----------------------------------------
+        self.SINGLE_PROFILE = self.ALL_SCALARS
         
     #   check_input_types()
     #-------------------------------------------------------------------

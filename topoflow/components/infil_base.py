@@ -164,6 +164,7 @@ class infil_component( BMI_base.BMI_component):
         # This is much better than putting them in the
         # save_computed_input_vars() function.
         #------------------------------------------------------
+        self.SINGLE_PROFILE  = True  # (must be set)
         self.CHECK_STABILITY = False
 
         #----------------------------------------------
@@ -355,7 +356,8 @@ class infil_component( BMI_base.BMI_component):
     #-------------------------------------------------------------------
     def finalize(self):
 
-        self.update_total_storage() # (2020-05-07)
+        if (self.comp_status.lower() == 'enabled'):
+            self.update_total_storage() # (2020-05-07)
   
         self.status = 'finalizing'  # (OpenMI 2.0 convention)
         self.close_input_files()   ##  TopoFlow input "data streams"

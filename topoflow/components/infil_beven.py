@@ -312,7 +312,12 @@ class infil_component( infil_base.infil_component ):
                          self.is_scalar('C[0]')  ])
 
         self.ALL_SCALARS = np.all(are_scalars)
-        
+
+        #----------------------------------------
+        # Use the same profile for all pixels ?
+        #----------------------------------------
+        self.SINGLE_PROFILE = self.ALL_SCALARS
+       
     #   check_input_types()
     #-------------------------------------------------------------------
     def initialize_computed_vars(self):
