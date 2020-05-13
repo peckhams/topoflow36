@@ -622,11 +622,12 @@ class time_interpolator():
             #------------------------------------
             bmi_time = bmi.get_current_time()
             if (time > bmi_time):
-                print('#########################################')
-                print(' ERROR: time > bmi_time in get_values().')
-                print('        time, bmi_time =', time, bmi_time)
-                print('        comp_name =', comp_name)
-                print('#########################################')
+                print('--------------------------------------------')
+                print(' WARNING: (in time_interpolation.py)')
+                print('     time > bmi_time in bmi.get_values().')
+                print('     time, bmi_time =', time, bmi_time)
+                print('     comp_name =', comp_name)
+                print('--------------------------------------------')
                 print(' ')
                 
             return bmi.get_values( long_var_name )
