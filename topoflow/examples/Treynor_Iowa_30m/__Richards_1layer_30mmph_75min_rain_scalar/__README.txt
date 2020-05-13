@@ -24,8 +24,6 @@ Key TopoFlow Driver Settings:
 Key Channel Flow Settings:
     dt             = 6.0 sec
     d0_type        = Scalar
-    qs_list[0]     = 0.485    (saturated water content)
-    qi_list[0]     = 0.4      (initial water content, relatively high)
     d0             = 0.0
     FLOOD_OPTION   = 0
     save_grid_dt   = 60.0 sec
@@ -42,6 +40,8 @@ Key Meteorology Settings:
 Key Infiltration Settings:
     dt = 0.5 sec
     n_layers = 1  (parameters are for a "silt loam" soil type)
+    qs_list[0]     = 0.485    (saturated water content)
+    qi_list[0]     = 0.4      (initial water content, relatively wet)
     save_grid_dt   = 60.0 sec
     save_pixesl_dt = 60.0 sec
     SAVE_Q_PROFILES  = Yes  (save soil moisture z profiles for monitored pixels)
