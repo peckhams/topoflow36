@@ -221,8 +221,9 @@ def read_grid(file_unit, rti, dtype='float32'):
 
     grid = np.reshape(grid, (rti.nrows, rti.ncols))
     if (rti.SWAP_ENDIAN):
-        grid.byteswap(True)        
-        return grid
+        grid.byteswap(True)
+    #-------------------------        
+    return grid
     
     #----------------------------------------------
     # Original method, after conversion from IDL
