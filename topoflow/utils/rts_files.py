@@ -19,9 +19,11 @@ from . import rti_files
 #   class rts_file():
 #
 #       open_file()
+#       get_bounds()    # (2020-05-26)
 #       open_new_file()
 #       add_grid()
 #       get_grid()
+#       read_grid()  # alias to get_grid()
 #       close_file()
 #       close()
 #       --------------------
@@ -153,7 +155,25 @@ class rts_file():
         self.SWAP_ENDIAN = self.byte_swap_needed()
         self.file_name   = file_name
         self.time_index  = 0
-        
+
+        #------------------------------------------
+        # Compute map bounds in different "styles"
+        #------------------------------------------
+        minlon = info.x_west_edge
+        maxlon = info.x_east_edge
+        minlat = info.y_south_edge
+        maxlat = info.y_north_edge
+        #----------------------------------
+        # For matplotlib.pyplot.imshow():
+        self.bounds = [minlon, maxlon, minlat, maxlat]                
+        #-----------------------------------------------------
+        # For "ipyleaflet":
+        # self.bounds = [[minlat, maxlat], [minlon, maxlon]]
+        #-----------------------------------------------------
+        # For "sw_and_ne_corner":    
+        # self.bounds = [minlon, minlat, maxlon, maxlat]
+        #-------------------------------------------------
+                
         #-----------------------------------
         # Open file to read only or update
         #-----------------------------------        
@@ -171,6 +191,16 @@ class rts_file():
             return False
     
     #   open_file()
+    #----------------------------------------------------------
+    def get_bounds(self):
+
+        # Note:  Saved into self by open_file().
+        if (hasattr(self, 'bounds')):
+            return self.bounds
+        else:
+            return None
+            
+    #   get_bounds()    
     #----------------------------------------------------------
     def check_and_store_info(self, file_name, info=None,
                              var_name='UNKNOWN',
@@ -417,6 +447,14 @@ class rts_file():
         return grid
     
     #   get_grid()
+    #-------------------------------------------------------------------
+    def read_grid(self, time_index, dtype='float32'):
+    
+        # Note:  This is an alias to get_grid().
+        grid = self.get_grid( time_index, dtype=dtype )
+        return grid
+        
+    #   read_grid()
     #-------------------------------------------------------------------
     def close_file(self):
 

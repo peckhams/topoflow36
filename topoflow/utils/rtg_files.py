@@ -15,7 +15,7 @@
 #        that are used for RTS and NCGS files (grid stacks).
 #-------------------------------------------------------------------
 
-import numpy
+import numpy as np
 from . import bov_files
 from . import rti_files
 
@@ -26,12 +26,13 @@ from . import rti_files
 #   class rtg_file():
 #
 #       open_file()
+#       get_bounds()    # (2020-05-26)
 #       check_and_store_info()
 #       open_new_file()
 #       write_grid()
 #           add_grid()  # (alias for write_grid())
 #       read_grid()
-#           get_grid()  # (alias for read_grids())
+#           get_grid()  # (alias for read_grid())
 #       close_file()
 #       close()
 #       --------------------
@@ -76,7 +77,7 @@ def unit_test(nx=4, ny=5, VERBOSE=False,
         print('ERROR during open_new_file().')
         return
     
-    grid = numpy.arange(nx * ny, dtype='Float32')
+    grid = np.arange(nx * ny, dtype='Float32')
     grid = grid.reshape( (ny, nx) )
     ### print 'AT START: (nx, ny) =', nx, ny
     
@@ -140,7 +141,25 @@ class rtg_file():
         self.dx   = info.xres
         self.dy   = info.yres
         self.file_name = file_name
-        
+
+        #------------------------------------------
+        # Compute map bounds in different "styles"
+        #------------------------------------------
+        minlon = info.x_west_edge
+        maxlon = info.x_east_edge
+        minlat = info.y_south_edge
+        maxlat = info.y_north_edge
+        #----------------------------------
+        # For matplotlib.pyplot.imshow():
+        self.bounds = [minlon, maxlon, minlat, maxlat]                
+        #-----------------------------------------------------
+        # For "ipyleaflet":
+        # self.bounds = [[minlat, maxlat], [minlon, maxlon]]
+        #-----------------------------------------------------
+        # For "sw_and_ne_corner":    
+        # self.bounds = [minlon, minlat, maxlon, maxlat]
+        #-------------------------------------------------
+                
         #-----------------------------------
         # Open file to read only or update
         #-----------------------------------        
@@ -158,6 +177,16 @@ class rtg_file():
             return False
     
     #   open_file()
+    #----------------------------------------------------------
+    def get_bounds(self):
+
+        # Note:  Saved into self by open_file().
+        if (hasattr(self, 'bounds')):
+            return self.bounds
+        else:
+            return None
+            
+    #   get_bounds()
     #----------------------------------------------------------
     def check_and_store_info(self, file_name, info=None,
                              var_name='UNKNOWN',
@@ -366,7 +395,7 @@ class rtg_file():
         # Read grid as binary from file
         #--------------------------------
         n_values = self.nx * self.ny
-        grid = numpy.fromfile( self.rtg_unit, count=n_values,
+        grid = np.fromfile( self.rtg_unit, count=n_values,
                                dtype=dtype )
         grid = grid.reshape( self.ny, self.nx )
 
@@ -440,7 +469,7 @@ def read_grid( RTG_file, rti, RTG_type='FLOAT',
     file_unit = open( RTG_file, 'rb' )
     RTG_type = rti.data_type   ######### (07/12/18) ########
     dtype = rti_files.get_numpy_data_type( RTG_type )
-    grid  = numpy.fromfile( file_unit, count=rti.n_pixels,
+    grid  = np.fromfile( file_unit, count=rti.n_pixels,
                             dtype=dtype )
    
 #     print 'n_pixels = ', rti.n_pixels                         
@@ -480,17 +509,17 @@ def write_grid( grid, RTG_file, rti, RTG_type='FLOAT',
     # Convert to specified data type
     #---------------------------------
     if   (RTG_type == 'BYTE'):    
-        grid = numpy.uint8(numpy.int16(grid))
+        grid = np.uint8(np.int16(grid))
     elif (RTG_type == 'INTEGER'):    
-        grid = numpy.int16(grid)
+        grid = np.int16(grid)
     elif (RTG_type == 'LONG'):    
-        grid = numpy.int32(grid)
+        grid = np.int32(grid)
     elif (RTG_type == 'LONG64'):    
-        grid = numpy.int64(grid)
+        grid = np.int64(grid)
     elif (RTG_type == 'FLOAT'):    
-        grid = numpy.float32(grid)
+        grid = np.float32(grid)
     elif (RTG_type == 'DOUBLE'):    
-        grid = numpy.float64(grid)
+        grid = np.float64(grid)
     else:
         raise RuntimeError('No match found for expression')
     
@@ -532,9 +561,9 @@ def read_xyz_as_grid(XYZ_file, RTG_file):
     #--------------------------------
     # Read XYZ data into a 2D array
     #--------------------------------
-    data = numpy.zeros([n_lines, 3], dtype='Float32')
-    xyz  = numpy.zeros([3], dtype='Float32')
-    k    = numpy.int32(0)
+    data = np.zeros([n_lines, 3], dtype='Float32')
+    xyz  = np.zeros([3], dtype='Float32')
+    k    = np.int32(0)
     file_unit = open( XYZ_file, 'r' )
     while not(idl_func.eof(file_unit)):
         xyz = idl_func.readf(file_unit, xyz)
@@ -549,9 +578,9 @@ def read_xyz_as_grid(XYZ_file, RTG_file):
     # xres,xmin,xmax will have DOUBLE
     # type, and so will yres,ymin,ymax
     #-----------------------------------
-    x = numpy.float64(data[:,0])
-    y = numpy.float64(data[:,1])
-    z = numpy.float32(data[:,2])
+    x = np.float64(data[:,0])
+    y = np.float64(data[:,1])
+    z = np.float32(data[:,2])
     
     #-----------------------------
     # Compute the mins and maxes
@@ -568,24 +597,24 @@ def read_xyz_as_grid(XYZ_file, RTG_file):
     # Assume row major ordering.
     # Compute number of rows.
     #-----------------------------
-    w = numpy.where(y == y[0])
-    ncols = numpy.size(w[0])
-    n     = numpy.size(x)
+    w = np.where(y == y[0])
+    ncols = np.size(w[0])
+    n     = np.size(x)
     nrows = (n / ncols)
     
     #-------------------------
     # Find xres, yres & zres
     #-------------------------
-    yres = numpy.absolute(y[ncols] - y[0])
-    xres = numpy.absolute(x[1] - x[0])
-    zres = numpy.float32(1.0)
+    yres = np.absolute(y[ncols] - y[0])
+    xres = np.absolute(x[1] - x[0])
+    zres = np.float32(1.0)
     
     #--------------------
     # This isn't needed
     #--------------------
-    #x = numpy.reform(x, ncols, nrows)
-    #y = numpy.reform(y, ncols, nrows)
-    #z = numpy.reform(z, ncols, nrows)
+    #x = np.reform(x, ncols, nrows)
+    #y = np.reform(y, ncols, nrows)
+    #z = np.reform(z, ncols, nrows)
 
     #----------------------------------
     # Get byte order of user's computer
@@ -602,7 +631,7 @@ def read_xyz_as_grid(XYZ_file, RTG_file):
     file_unit = open( RTG_file, 'wb' )
     SWAP_ENDIAN = tf_utils.Not_Same_Byte_Order(byte_order)
     if (SWAP_ENDIAN):
-        numpy.array(z, copy=0).byteswap(True)
+        np.array(z, copy=0).byteswap(True)
     z.tofile(file_unit)
     file_unit.close()
     

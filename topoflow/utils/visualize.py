@@ -13,10 +13,13 @@
 #
 #  Define some stretch functions for 2D color images:
 #  histogram_equalize()
+#  power_stretch0()
 #  power_stretch1()
 #  power_stretch2()
 #  power_stretch3()
 #  log_stretch()
+#  linear_stretch()
+#  stretch_grid()
 #
 #  Define functions to show grids as color images:
 #  read_grid_from_nc_file()
@@ -49,6 +52,9 @@ from topoflow.utils import ncgs_files
 from topoflow.utils import ncts_files
 from topoflow.utils import ncps_files
 
+from topoflow.utils import rtg_files
+from topoflow.utils import rts_files
+
 #--------------------------------------------------------------------
 def histogram_equalize( grid, PLOT_NCS=False):
 
@@ -70,6 +76,16 @@ def histogram_equalize( grid, PLOT_NCS=False):
     return grid2
 
 #   histogram_equalize()
+#--------------------------------------------------------------------
+def power_stretch0( grid, p ):
+
+    gmin = grid.min()
+    gmax = grid.max()
+    norm = (grid - gmin) / (gmax - gmin)
+    
+    return norm**p
+    
+#   power_stretch0()
 #--------------------------------------------------------------------
 def power_stretch1( grid, p ):
     return grid**p
@@ -98,6 +114,43 @@ def log_stretch( grid, a=1 ):
     return np.log( (a * grid) + 1 )
     
 #   log_stretch()
+#--------------------------------------------------------------------
+def linear_stretch( grid ):
+
+    gmin = grid.min()
+    gmax = grid.max()
+    norm = (grid - gmin) / (gmax - gmin)
+    return norm
+   
+#   linear_stretch()
+#--------------------------------------------------------------------
+def stretch_grid( grid, stretch, a=1, b=2, p=0.5 ):
+
+    name = stretch
+    if   (name == 'hist_equal'):
+        grid2 = histogram_equalize( grid, PLOT_NCS=False)    
+    elif (name == 'linear'):
+        grid2 = linear_stretch(grid)
+    elif (name == 'log'):
+        grid2 = log_stretch( grid, a=a )
+    elif (name == 'power'):
+        grid2 = power_stretch0( grid, p=p )
+    elif (name == 'power1'): 
+        # Try:  p = 0.3   
+        grid2 = power_stretch1( grid, p)
+    elif (name == 'power2'):
+        # Try:  a=1000, b=0.5.
+        grid2 = power_stretch2( grid, a=a, b=b )
+    elif (name == 'power3'):        
+        # Try:  a=1, b=2.
+        grid2 = power_stretch3( grid, a=a, b=b)
+    else:
+        print('### SORRY, Unknown stretch =', name)
+        return grid
+
+    return grid2
+ 
+#   stretch_grid()
 #--------------------------------------------------------------------
 #--------------------------------------------------------------------
 def read_grid_from_nc_file( nc_file, time_index=1, REPORT=True ):
@@ -157,8 +210,9 @@ def read_grid_from_nc_file( nc_file, time_index=1, REPORT=True ):
 #--------------------------------------------------------------------
 def show_grid_as_image( grid, long_name, extent=None,
                         cmap='rainbow',
+                        stretch='power3',
+                        a=1, b=2, p=0.5,
                         NO_SHOW=False, im_file=None,
-                        stretch='power_stretch3',
                         xsize=8, ysize=8, dpi=None): 
 
     # Note:  extent = [minlon, maxlon, minlat, maxlat]
@@ -173,21 +227,22 @@ def show_grid_as_image( grid, long_name, extent=None,
     #--------------------------
     # Other stretch functions
     #--------------------------
-    if (stretch == 'power_stretch3'):
-        grid2 = power_stretch3( grid, a=0.5 )
-    elif (stretch == 'power_stretch1a'):   
-        grid2 = power_stretch1( grid, 0.5)
-    elif (stretch == 'power_stretch1b'):
-        grid2 = power_stretch1( grid, 0.2)
-    elif (stretch == 'power_stretch2'):
-        grid2 = power_stretch2( grid )
-    elif (strech == 'log_stretch'):
-        grid2 = log_stretch( grid )
-    elif (stretch == 'hist_equal'):
-        grid2 = histogram_equalize( grid, PLOT_NCS=True)
-    else:
-        print('SORRY, Unknown stretch =', stretch)
-        return
+    grid2 = stretch_grid( grid, stretch, a=a, b=b, p=p )
+#     if (stretch == 'power_stretch3'):
+#         grid2 = power_stretch3( grid, a=0.5 )
+#     elif (stretch == 'power_stretch1a'):   
+#         grid2 = power_stretch1( grid, 0.5)
+#     elif (stretch == 'power_stretch1b'):
+#         grid2 = power_stretch1( grid, 0.2)
+#     elif (stretch == 'power_stretch2'):
+#         grid2 = power_stretch2( grid )
+#     elif (stretch == 'log_stretch'):
+#         grid2 = log_stretch( grid )
+#     elif (stretch == 'hist_equal'):
+#         grid2 = histogram_equalize( grid, PLOT_NCS=True)
+#     else:
+#         print('SORRY, Unknown stretch =', stretch)
+#         return 
 
     #----------------------------
     # Set up and show the image
