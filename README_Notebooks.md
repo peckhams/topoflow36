@@ -11,6 +11,8 @@ This is not a problem with the Jupyter notebook itself.  You can confirm this by
 
 ``` bash
 % conda update -n base conda
-% conda create --name myenv
-% conda activate env
+% conda create --name test
+% conda activate test
+% conda install nb_conda
+% conda list
 ```
