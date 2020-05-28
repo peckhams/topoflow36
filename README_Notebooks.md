@@ -1,5 +1,6 @@
 
-<b>Note:</b>  Occasionally, when you try to view a Jupyter notebook on GitHub, which uses <b>nbviewer</b>, you may encounter the error message: &nbsp;  <b>Sorry, something went wrong.  Reload?</b>.  <br>
+<b>Note:</b>  Occasionally, when you try to view a Jupyter notebook on GitHub, which uses <b>nbviewer</b>, you may encounter the error message: &nbsp;  <b>Sorry, something went wrong.  Reload?</b>.
+
 This is a known problem that occurs sporadically, as discussed in
 [<b>this article</b>](https://github.com/jupyter/notebook/issues/3555) and
 [<b>this article</b>](https://medium.com/@pg170898/problem-facing-at-github-ipynb-is-not-loading-f986a04649f3).
