@@ -9,7 +9,7 @@ This is not a problem with the Jupyter notebook itself.  You can confirm this by
 
 There, it should render correctly and quickly.  In fact, both internal and external links will also work!
 
-<b>Note:</b>  If a Juptyer notebook contains a cell of type "Raw NBConvert" (vs. Code or Markdown), then nbviewer on GitHub will not render any of the cells beyond that cell.  The notebook will appear to be truncated.  Instead of using a "Raw NBConvert" cell to show code "verbatim", it is better to use the triple backquote markdown trick, like this:
+<b>Note:</b>  If a Juptyer notebook contains a cell of type "Raw NBConvert" (vs. Code or Markdown), then nbviewer on GitHub will not render any of the cells below that cell.  The notebook will appear to be truncated at that point.  Instead of using a "Raw NBConvert" cell to show code "verbatim", it is better to use the <b>triple backquote markdown trick</b>, like this:
 
 ``` bash
 % conda update -n base conda
