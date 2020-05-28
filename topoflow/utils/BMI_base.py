@@ -2116,8 +2116,15 @@ class BMI_component:
         #--------------------------------------
         if not(hasattr(self, 'cfg_directory')):
             if (self.cfg_file is not None):
-                cfg_dir = os.path.dirname(self.cfg_file) + os.sep
-                ## print 'cfg_directory =', cfg_directory
+                cfg_dir = os.path.dirname(self.cfg_file)
+                #---------------------------------------
+                # Need this when cfg_file is local, as
+                # in a Jupyter notebook (2020-05-28)
+                #---------------------------------------
+                if (cfg_dir == ''):
+                    cfg_dir = os.getcwd()
+                cfg_dir = (cfg_dir + os.sep)
+                ## print 'cfg_dir =', cfg_dir
         else:
             cfg_dir = self.cfg_directory
 

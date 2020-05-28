@@ -60,6 +60,10 @@ def read_outlet_file( self ):
     #------------------------------------------------------
     # Make sure outlet_file is a full path name (9/21/14)
     #------------------------------------------------------
+    # print('### self.case_prefix   =', self.case_prefix )
+    # print('### self.cfg_directory =', self.cfg_directory )
+    # print('### self.in_directory  =', self.in_directory )
+    
     if (hasattr(self, 'pixel_file')):
         outlet_file = self.pixel_file    # (10/25/11)
     else:
@@ -81,8 +85,7 @@ def read_outlet_file( self ):
         print(hash_line) 
         print(' ')
         raise IOError('Could not find outlet_file.')
-        # return
-        ## sys.exit()   ### This closes Python session -- too extreme.
+
         #------------------------------------------------------
         # This led to more problems than it fixed. (11/11/16)
         #------------------------------------------------------
