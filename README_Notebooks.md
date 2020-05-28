@@ -9,8 +9,7 @@ This is not a problem with the Jupyter notebook itself.  You can confirm this by
 
 There, it should render correctly and quickly.  In fact, both internal and external links will also work!
 
-<b>Note:</b>  If a Juptyer notebook contains a cell of type "Raw NBConvert" (vs. Code or Markdown), then nbviewer on GitHub will not render any of the cells below that cell.  The notebook will appear to be truncated at that point.  Instead of using a "Raw NBConvert" cell to show code "verbatim", it is better to use the <b>triple backquote markdown trick</b>, as follows. (The backquote is also known as a backtick.)
-
+<b>Note:</b>  If a Juptyer notebook contains a cell of type "Raw NBConvert" (vs. Code or Markdown), then nbviewer on GitHub will not render any of the cells below that cell.  The notebook will appear to be truncated at that point.  Instead of using a "Raw NBConvert" cell to show code "verbatim", it is better to use the <b>triple backquote markdown trick</b>, like this:
 ``` bash
 % conda update -n base conda
 % conda create --name test
@@ -18,3 +17,4 @@ There, it should render correctly and quickly.  In fact, both internal and exter
 % conda install nb_conda
 % conda list
 ```
+In the markdown, this block of code is enclosed by 3 backquotes, placed before and after the text to display.  You can also specify a language name (e.g. bash, python, etc.) after the first set of backquotes to color code the text accordingly.
