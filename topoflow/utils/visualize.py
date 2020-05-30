@@ -12,6 +12,7 @@
 #--------------------------------------------------------------------
 #
 #  Define some stretch functions for 2D color images:
+#  normalize_grid()
 #  histogram_equalize()
 #  power_stretch0()
 #  power_stretch1()
@@ -25,6 +26,7 @@
 #  read_grid_from_nc_file()
 #  show_grid_as_image()
 #  save_grid_stack_as_images()
+#  save_rts_as_images()
 #
 #  Define some plotting functions:
 #  plot_time_series()
@@ -56,6 +58,20 @@ from topoflow.utils import rtg_files
 from topoflow.utils import rts_files
 
 #--------------------------------------------------------------------
+def normalize_grid( grid ): 
+
+    gmin = grid.min()
+    gmax = grid.max()
+
+    if (gmin != gmax):
+        norm = (grid - gmin) / (gmax - gmin)
+    else:
+        # Avoid divide by zero
+        norm = np.zeros( grid.shape, dtype=grid.dtype )
+    return norm
+
+#   normalize_grid()
+#--------------------------------------------------------------------
 def histogram_equalize( grid, PLOT_NCS=False):
 
     #  https://docs.scipy.org/doc/numpy/reference/generated/numpy.histogram.html
@@ -79,9 +95,7 @@ def histogram_equalize( grid, PLOT_NCS=False):
 #--------------------------------------------------------------------
 def power_stretch0( grid, p ):
 
-    gmin = grid.min()
-    gmax = grid.max()
-    norm = (grid - gmin) / (gmax - gmin)
+    norm = normalize_grid( grid )
     
     return norm**p
     
@@ -93,19 +107,17 @@ def power_stretch1( grid, p ):
 #   power_stretch1()
 #--------------------------------------------------------------------
 def power_stretch2( grid, a=1000, b=0.5):
+
     # Note: Try a=1000 and b=0.5
-    gmin = grid.min()
-    gmax = grid.max()
-    norm = (grid - gmin) / (gmax - gmin)
+    norm = normalize_grid( grid )
     return (1 - (1 + a * norm)**(-b))
     
 #   power_stretch2()
 #--------------------------------------------------------------------
 def power_stretch3( grid, a=1, b=2):
+
     # Note:  Try a=1, b=2 (shape of a quarter circle)
-    gmin = grid.min()
-    gmax = grid.max()
-    norm = (grid - gmin) / (gmax - gmin)
+    norm = normalize_grid( grid )
     return (1 - (1 - norm**a)**b)**(1/b)
     
 #   power_stretch3()
@@ -117,9 +129,7 @@ def log_stretch( grid, a=1 ):
 #--------------------------------------------------------------------
 def linear_stretch( grid ):
 
-    gmin = grid.min()
-    gmax = grid.max()
-    norm = (grid - gmin) / (gmax - gmin)
+    norm = normalize_grid( grid )
     return norm
    
 #   linear_stretch()
@@ -289,8 +299,9 @@ def show_grid_as_image( grid, long_name, extent=None,
 #   show_grid_as_image()
 #--------------------------------------------------------------------
 def save_grid_stack_as_images( nc_file, png_dir, extent=None,
-                               xsize=6, ysize=6, dpi=192,
-                               REPORT=True):
+                       stretch='power3', a=1, b=2, p=0.5,
+                       cmap='rainbow', REPORT=True,
+                       xsize=6, ysize=6, dpi=192 ):
 
     # Example nc_files:
     # nc_file = case_prefix + '_2D-Q.nc'
@@ -340,17 +351,94 @@ def save_grid_stack_as_images( nc_file, png_dir, extent=None,
         im_file = im_file_prefix + time_str + '.png' 
         im_file = (png_dir + '/' + im_file)
                 
-        show_grid_as_image( grid, long_name, cmap='rainbow',
-                            stretch='power_stretch3',
+        show_grid_as_image( grid, long_name, cmap=cmap,
+                            stretch=stretch, a=a, b=b, p=p, 
                             extent=extent,
                             NO_SHOW=True, im_file=im_file,
                             xsize=xsize, ysize=ysize, dpi=dpi )
-
+                            
     ncgs.close_file()
     tstr = str(time_index)
     print('Finished saving ' + tstr + ' images to PNG files.')
 
 #   save_grid_stack_as_images()
+#--------------------------------------------------------------------
+def save_rts_as_images( rts_file, png_dir, extent=None,
+                        long_name='River Discharge',
+                        stretch='power3', a=1, b=2, p=0.5,
+                        cmap='rainbow', REPORT=True,
+                        xsize=6, ysize=6, dpi=192):
+
+    # Example rts_files:
+    # rts_file = case_prefix + '_2D-Q.rts'
+    # rts_file = case_prefix + '_2D-d-flood.rts'
+
+    if ('.rts' not in rts_file):
+        print('ERROR: This function is only for RTS files.') 
+        return
+
+    rts = rts_files.rts_file()
+    OK  = rts.open_file( rts_file )
+    if not(OK):
+        print('Could not open RTS file.')
+        return
+    n_grids = rts.number_of_grids()
+    print('Byte swap needed =', rts.byte_swap_needed())
+
+    if (extent is None):
+        extent = rts.get_bounds()
+
+    im_title = long_name.replace('_', ' ').title()
+    im_file_prefix = 'TF_RTS_Movie_Frame_'
+    time_pad_map = {1:'0000', 2:'000', 3:'00', 4:'0', 5:''}
+
+    if (REPORT):
+        print('Creating images from grid stack in rts_file:')
+        print('  ' + rts_file )
+        print('  ' + 'long name =', long_name)
+        print('  ' + 'n_grids   =', n_grids)
+        print('  ' + 'extent    =', extent)
+        print('This may take a few minutes.')
+        print('Working...')
+        
+    time_index = 0
+    rts_min = 1e12
+    rts_max = 1e-12
+
+    while (True):
+        # print('time index =', time_index )
+        try:
+            grid = rts.read_grid( time_index )   # alias to get_grid()
+            gmin = grid.min()
+            gmax = grid.max()
+            rts_min = min( rts_min, gmin )
+            rts_max = max( rts_max, gmax )
+        except:
+            break
+        time_index += 1
+
+        #----------------------------------------    
+        # Build a filename for this image/frame
+        #----------------------------------------
+        tstr = str(time_index)
+        pad = time_pad_map[ len(tstr) ]
+        time_str = (pad + tstr)
+        im_file = im_file_prefix + time_str + '.png' 
+        im_file = (png_dir + '/' + im_file)
+                
+        show_grid_as_image( grid, long_name, cmap=cmap,
+                            stretch=stretch, a=a, b=b, p=p,
+                            extent=extent,
+                            NO_SHOW=True, im_file=im_file,
+                            xsize=xsize, ysize=ysize, dpi=dpi )
+
+    rts.close_file()
+    print('min(rts), max(rts) =', rts_min, rts_max)
+    tstr = str(time_index)
+    print('Finished saving ' + tstr + ' images to PNG files.')  
+    print()
+
+#   save_rts_as_images()
 #--------------------------------------------------------------------
 def plot_time_series(nc_file, output_dir=None, marker=',',
                      REPORT=True, xsize=11, ysize=6):
