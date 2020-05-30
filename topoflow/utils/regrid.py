@@ -25,7 +25,7 @@
 #  fix_gpm_raster_bounds()
 #  fix_gpm_file_as_geotiff
 #  gdal_regrid_to_dem_grid()
-#  create_rts_from_nc_files()
+#  create_rts_from_nc_files()  ### Create a rainfall grid stack
 
 #-----------------
 #  Commented out
@@ -874,22 +874,44 @@ def gdal_regrid_to_dem_grid( ds_in, tmp_file,
 
 #   gdal_regrid_to_dem_grid()       
 #-------------------------------------------------------------------    
-def create_rts_from_nc_files( rts_file='TEST.rts',
-                              IN_MEMORY=False, VERBOSE=False,
-                              NC4=False):
+def create_rts_from_nc_files( rts_file='TEST.rts', NC4=False,
+           BARO_60=False, GPM=True, IN_MEMORY=False, VERBOSE=False,
+           DEM_bounds=None, DEM_xres=None, DEM_yres=None,
+           DEM_ncols=None, DEM_nrows=None):
 
     #------------------------------------------------------
     # For info on GDAL constants, see:
     # https://gdal.org/python/osgeo.gdalconst-module.html
-    #------------------------------------------------------  
-    if (rts_file == 'TEST.rts'):
-        #-----------------------------------------------------------
-        DEM_bounds = [24.079583333333,  6.565416666666, 27.379583333333, 10.132083333333 ]
-        DEM_xres   = 1./120   # (30 arcsecs = 30/3600 degrees)
-        DEM_yres   = 1./120   # (30 arcsecs = 30/3600 degrees)
-        DEM_ncols  = 396
-        DEM_nrows  = 428
+    #------------------------------------------------------
+    if (BARO_60):
+        DEM_bounds = [ 34.221249999999, 7.362083333332, 36.450416666666, 9.503749999999]
+        ### DEM_bounds = [ 7.362083333332, 34.221249999999, 9.503749999999, 36.450416666666]
+        DEM_xres   = 1./60  # (60 arcsecs = 60/3600 degrees)
+        DEM_yres   = 1./60
+        DEM_ncols  = 134
+        DEM_nrows  = 129
+        
+    #--------------------------------------------------------    
+    # See: Pongo_30sec DEM: MINT_2019/__Regions/South_Sudan
+    #      Adjusted this later as the Lol-Kuru.
+    #--------------------------------------------------------     
+#     if (PONGO_30):
+#         DEM_bounds = [24.079583333333,  6.565416666666, 27.379583333333, 10.132083333333]
+#         ## DEM_bounds = [6.565416666666, 24.079583333333,  10.132083333333, 27.379583333333]
+#         DEM_xres   = 1./120   # (30 arcsecs = 30/3600 degrees)
+#         DEM_yres   = 1./120   # (30 arcsecs = 30/3600 degrees)
+#         DEM_ncols  = 396
+#         DEM_nrows  = 428
 
+    #----------------------------------------
+    # Set the name of the variable (precip)
+    #----------------------------------------
+    if (GPM):
+        var_name = "HQprecipitation"  # HQ = high quality;  1/2 hourly, mmph
+    else:
+        # GLDAS
+        var_name = "Rainf_tavg"
+ 
     #-----------------------------------------    
     # Use a temp file in memory or on disk ?
     #-----------------------------------------
@@ -910,7 +932,7 @@ def create_rts_from_nc_files( rts_file='TEST.rts',
         nc_file_list = glob.glob( '*.nc4' )
     else:
         nc_file_list = glob.glob( '*.nc' )
-    var_name = "HQprecipitation"    # HQ = high quality;  1/2 hourly, mmph
+
     count = 0
     bad_count = 0
     BAD_FILE = False
@@ -920,24 +942,26 @@ def create_rts_from_nc_files( rts_file='TEST.rts',
     tif_file = 'TEMP1.tif'
              
     for nc_file in nc_file_list:
-        #-------------------------------
-        # Open the original netCDF file
-        #--------------------------------
-        ## (ds_in, grid1, nodata) = gdal_open_nc_file( nc_file, var_name, VERBOSE=True)
-  
-        #------------------------------------------
-        # Option to fix problem with bounding box
-        #------------------------------------------
-        ### fix_gpm_raster_bounds( ds_in )
+        if (GPM):
+            #------------------------------------------
+            # Option to fix problem with bounding box
+            #------------------------------------------
+            ### fix_gpm_raster_bounds( ds_in )
 
-        #------------------------------------------
-        # Fix GPM netCDF file, resave as GeoTIFF, 
-        # then open the new GeoTIFF file
-        #------------------------------------------
-        fix_gpm_file_as_geotiff( nc_file, var_name, tif_file,
-                                 out_nodata=rts_nodata )
-        ds_in = gdal.Open( tif_file )
-        grid1 = ds_in.ReadAsArray()
+            #------------------------------------------
+            # Fix GPM netCDF file, resave as GeoTIFF, 
+            # then open the new GeoTIFF file
+            #------------------------------------------
+            fix_gpm_file_as_geotiff( nc_file, var_name, tif_file,
+                                     out_nodata=rts_nodata )
+            ds_in = gdal.Open( tif_file )
+            grid1 = ds_in.ReadAsArray()
+        else:
+            #-------------------------------
+            # Open the original netCDF file
+            #--------------------------------
+            (ds_in, grid1, nodata) = gdal_open_nc_file( nc_file, var_name, VERBOSE=VERBOSE)
+  
         gmax  = grid1.max()
         Pmax  = max( Pmax, gmax )
         band   = ds_in.GetRasterBand(1)
@@ -1014,6 +1038,8 @@ def create_rts_from_nc_files( rts_file='TEST.rts',
         # Write grid to RTS file
         #-------------------------
         grid2 = np.float32( grid2 )
+        if not(GPM):
+            grid2 *= 3600.0    # (convert [kg m-2 s-1] to mmph)
         grid2.tofile( rts_unit )
         count += 1
                     
@@ -1053,8 +1079,9 @@ def create_rts_from_nc_files( rts_file='TEST.rts',
     #---------------------
     rts_unit.close()
 
+    if not(GPM):  Pmax = (Pmax * 3600.0)
     print( ' ')
-    print( 'Max precip rate =', Pmax )
+    print( 'Max precip rate =', Pmax, '[mmph]' )
     print( 'bad_count =', bad_count )
     print( 'n_grids   =', count )
     print( 'Finished saving data to rts file.')
