@@ -662,9 +662,9 @@ def transform_isric_soil_grid_files( site_prefix,
         #-------------------------------------------
         if not(BAD_BOX):
             grid2 = rg.gdal_regrid_to_dem_grid( ds_in, tmp_file,
-                        out_nodata, 
                         out_bounds, out_xres_deg, out_yres_deg,
                         ### DEM_bounds, DEM_xres, DEM_yres,
+                        nodata=out_nodata,
                         RESAMPLE_ALGO=RESAMPLE_ALGO)
             if (REPORT):
                 print( 'grid2.min()  =', grid2.min() )

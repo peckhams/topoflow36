@@ -39,6 +39,8 @@ import gdal, osr  ## ogr
 import glob
 import os.path
 
+from . import rti_files
+
 ## from . import rts_files   # (avoid this extra dependency)
 
 #-------------------------------------------------------------------
@@ -498,8 +500,8 @@ def save_grid_to_geotiff( new_tif_file, grid,
 #   save_grid_to_geotiff()
 #-------------------------------------------------------------------
 def regrid_rts_file( rts_file_in, rts_file_out,
-        xres_in, yres_in, nx_in, ny_in,
-        xres_out, yres_out,
+        xres_in_sec,  yres_in_sec, nx_in, ny_in,
+        xres_out_sec, yres_out_sec, resample_algo='bilinear',
         BARO=True, LOL_KURU=False):
 
     #---------------------------------------
@@ -551,6 +553,7 @@ def regrid_rts_file( rts_file_in, rts_file_out,
     #-----------------------------------------
     # Prepare to read grids from RTS file in
     #-----------------------------------------
+    nodata    = None
     dtype     = 'float32'    
     grid_in   = np.zeros( (nx_in, ny_in), dtype=dtype )
     n_values  = nx_in * ny_in
@@ -573,21 +576,20 @@ def regrid_rts_file( rts_file_in, rts_file_out,
         # Save grid (an ndarray) to GeoTIFF tmp_file
         #---------------------------------------------
         save_grid_to_geotiff( tmp_file, grid,
-                              ulx, uly, xres_in, yres_in)
+                              ulx, uly, xres_in_sec, yres_in_sec)
 
         #------------------------------------------
         # Resample tmp_file to xres_out, yres_out
         # and save to tmp_file2
         #------------------------------------------
-#         out_xres_sec = (xres_out * 3600.0)
-#         out_yres_sec = (yres_out * 3600.0)
+#         out_xres_sec = (out_xres_deg * 3600.0)
+#         out_yres_sec = (out_yres_deg * 3600.0)
 #         regrid_geotiff(in_file=tmp_file, out_file=tmp_file2, 
 #                    out_bounds=None,
 #                    out_xres_sec=out_xres_sec, out_yres_sec=out_yres_sec,
 #                    #### in_nodata, out_nodata, 
 #                    RESAMPLE_ALGO='bilinear', REPORT=True):
-
-#####                   
+                  
         #---------------------------------------------
         # Read ndarray from GeoTIFF into GDAL object
         #---------------------------------------------
@@ -595,10 +597,13 @@ def regrid_rts_file( rts_file_in, rts_file_out,
         
         #----------------------------------------- 
         # Resample to grid to xres_out, yres_out
-        #-----------------------------------------        
+        #-----------------------------------------
+        xres_out_deg = (xres_out_sec / 3600.0)
+        yres_out_deg = (yres_out_sec / 3600.0)       
         grid2 = gdal_regrid_to_dem_grid( ds_in, tmp_file2,
-                 nodata, bounds_in, xres_out, yres_out,
-                 RESAMPLE_ALGO='bilinear', VERBOSE=False)
+                    bounds_out, xres_out_deg, yres_out_deg,
+                    nodata=nodata, VERBOSE=False,
+                    RESAMPLE_ALGO=resample_algo)
         #------------------------
         # Close the tmp tif_file
         #------------------------
@@ -744,7 +749,7 @@ def fix_gpm_raster_bounds( ds, VERBOSE=False):
 #   fix_gpm_raster_bounds()
 #------------------------------------------------------------------- 
 def fix_gpm_file_as_geotiff( nc_file, var_name, out_file, 
-                             out_nodata=0.0, VERBOSE=False):
+                             out_nodata=None, VERBOSE=False):
 
     ### raster = gdal.Open("NETCDF:{0}:{1}".format(nc_file, var_name), gdal.GA_ReadOnly )
     raster  = gdal.Open("NETCDF:{0}:{1}".format(nc_file, var_name) )
@@ -790,10 +795,12 @@ def fix_gpm_file_as_geotiff( nc_file, var_name, out_file,
     ncols2 = nrows
     nrows2 = ncols
 
-    #-------------------------       
-    # Change the nodata value
-    #-------------------------
-    array2[ array2 <= nodata ] = out_nodata
+    #-----------------------------       
+    # Change the nodata value ?
+    # This may lead to problems.
+    #-----------------------------
+    if (out_nodata is not None):
+        array2[ array2 <= nodata ] = out_nodata
     
     #-----------------------------------------    
     # Build new geotransform & projectionRef
@@ -834,8 +841,8 @@ def fix_gpm_file_as_geotiff( nc_file, var_name, out_file,
 #   fix_gpm_file_as_geotiff()
 #-------------------------------------------------------------------
 def gdal_regrid_to_dem_grid( ds_in, tmp_file, 
-         nodata, DEM_bounds, DEM_xres_deg, DEM_yres_deg,
-         RESAMPLE_ALGO='bilinear', VERBOSE=False):
+         DEM_bounds, DEM_xres_deg, DEM_yres_deg,
+         nodata=None, RESAMPLE_ALGO='bilinear', VERBOSE=False):
 
     #-----------------------------------   
     # Specify the resampling algorithm
@@ -876,9 +883,11 @@ def gdal_regrid_to_dem_grid( ds_in, tmp_file,
 #-------------------------------------------------------------------    
 def create_rts_from_nc_files( rts_file='TEST.rts', NC4=False,
            BARO_60=False, GPM=True, IN_MEMORY=False, VERBOSE=False,
-           DEM_bounds=None, DEM_xres=None, DEM_yres=None,
-           DEM_ncols=None, DEM_nrows=None):
+           DEM_bounds=None, DEM_xres_sec=None, DEM_yres_sec=None,
+           DEM_ncols=None, DEM_nrows=None, resample_algo='bilinear'):
 
+    #------------------------------------------------------
+    # Note: See function above for resampling algorithms.
     #------------------------------------------------------
     # For info on GDAL constants, see:
     # https://gdal.org/python/osgeo.gdalconst-module.html
@@ -886,8 +895,8 @@ def create_rts_from_nc_files( rts_file='TEST.rts', NC4=False,
     if (BARO_60):
         DEM_bounds = [ 34.221249999999, 7.362083333332, 36.450416666666, 9.503749999999]
         ### DEM_bounds = [ 7.362083333332, 34.221249999999, 9.503749999999, 36.450416666666]
-        DEM_xres   = 1./60  # (60 arcsecs = 60/3600 degrees)
-        DEM_yres   = 1./60
+        DEM_xres_sec = 60.0   # (60 arcsecs = 60/3600 degrees)
+        DEM_yres_sec = 60.0
         DEM_ncols  = 134
         DEM_nrows  = 129
         
@@ -903,6 +912,17 @@ def create_rts_from_nc_files( rts_file='TEST.rts', NC4=False,
 #         DEM_ncols  = 396
 #         DEM_nrows  = 428
 
+    if (DEM_bounds is None) or (DEM_xres_sec is None) or \
+       (DEM_yres_sec is None) or (DEM_ncols is None) or (DEM_nrows is None):
+        print('ERROR:  All DEM bounding box information is required.')
+        return
+
+    #---------------------------------------------
+    # Convert DEM_xres_sec to DEM_xres_deg, etc.
+    #---------------------------------------------
+    DEM_xres_deg = (DEM_xres_sec / 3600.0)
+    DEM_yres_deg = (DEM_yres_sec / 3600.0)
+           
     #----------------------------------------
     # Set the name of the variable (precip)
     #----------------------------------------
@@ -933,14 +953,27 @@ def create_rts_from_nc_files( rts_file='TEST.rts', NC4=False,
     else:
         nc_file_list = glob.glob( '*.nc' )
 
+    #-------------------------------------------------
+    # It may not be wise to change the nodata values
+    # because GDAL may not recognize them as nodata
+    # during spatial interpolation, etc.
+    # This could be the cause of "choppiness".
+    #-------------------------------------------------
+    # A nodata value of zero may be okay for rainfall
+    # rates, but is not good in general.
+    #-------------------------------------------------    
+    #### rts_nodata = -9999.0    ######
+    # rts_nodata = 0.0
+    rts_nodata = None   # (do not change nodata values)
+   
     count = 0
+    Pmax  = -1e6
+    Pmin  = 1e6
     bad_count = 0
-    BAD_FILE = False
-    #### rts_nodata = -9999.0    #################
-    rts_nodata = 0.0    # (good for rainfall rates; not general)
-    Pmax   = -1
-    tif_file = 'TEMP1.tif'
-             
+    BAD_FILE  = False
+    tif_file  = 'TEMP1.tif'
+    
+    print('Working...')         
     for nc_file in nc_file_list:
         if (GPM):
             #------------------------------------------
@@ -963,8 +996,10 @@ def create_rts_from_nc_files( rts_file='TEST.rts', NC4=False,
             (ds_in, grid1, nodata) = gdal_open_nc_file( nc_file, var_name, VERBOSE=VERBOSE)
   
         gmax  = grid1.max()
+        gmin  = grid1.min()
         Pmax  = max( Pmax, gmax )
-        band   = ds_in.GetRasterBand(1)
+        Pmin  = min( Pmin, gmin )
+        band  = ds_in.GetRasterBand(1)
         nc_nodata = band.GetNoDataValue()
 
         if (VERBOSE):
@@ -974,8 +1009,9 @@ def create_rts_from_nc_files( rts_file='TEST.rts', NC4=False,
             print( 'grid1: min   =', grid1.min(), 'max =', grid1.max() )
             print( 'grid1.shape  =', grid1.shape )
             print( 'grid1.dtype  =', grid1.dtype )
-            print( 'grid1 nodata =', nc_nodata )
-            w  = np.where(grid1 > nc_nodata)
+            print( 'grid1 nodata =', nc_nodata, '(in original nc_file)' )
+            ### w  = np.where(grid1 > nc_nodata)
+            w  = np.where(grid1 != nc_nodata)
             nw = w[0].size
             print( 'grid1 # data =', nw)
             print( ' ' )
@@ -1004,35 +1040,30 @@ def create_rts_from_nc_files( rts_file='TEST.rts', NC4=False,
             BAD_FILE = True
 
         #-------------------------------------------
-        # Replace nodata value and save as GeoTIFF
-        #-------------------------------------------
-#         new_file = 'TEMP2.tif'
-#         resave_grid_to_geotiff( ds_in, new_file, grid1, nodata )
-#         ds_in = None  # Close the nc_file
-#         ds_in = gdal.Open( new_file )   # Open the GeoTIFF file; new nodata
-
-        #-------------------------------------------
         # Clip and resample data to the DEM's grid
         # then save to a temporary GeoTIFF file.
         #-------------------------------------------
         if not(BAD_FILE):
             grid2 = gdal_regrid_to_dem_grid( ds_in, tmp_file,
-                        rts_nodata, DEM_bounds, DEM_xres, DEM_yres,
-                        RESAMPLE_ALGO='bilinear' )
+                         DEM_bounds, DEM_xres_deg, DEM_yres_deg,
+                         nodata=rts_nodata, RESAMPLE_ALGO=resample_algo )
             if (VERBOSE):
                 print( 'grid2: min  =', grid2.min(), 'max =', grid2.max() )
                 print( 'grid2.shape =', grid2.shape )
                 print( 'grid2.dtype =', grid2.dtype )
-                w  = np.where(grid2 > rts_nodata)
-                nw = w[0].size
-                print( 'grid2 # data =', nw)
-                print( ' ')
+                if (rts_nodata is not None):
+                    ## w  = np.where(grid2 > rts_nodata)
+                    w  = np.where(grid2 != rts_nodata)
+                    nw = w[0].size
+                    print( 'grid2 # data =', nw)
+                    print( ' ')
             ds_in = None   # Close the tmp_file
             if (IN_MEMORY):
                 gdal.Unlink( tmp_file )
         else:
             grid2 = np.zeros( (DEM_nrows, DEM_ncols), dtype='float32' )
-            grid2 += rts_nodata
+            if (rts_nodata is not None):
+                grid2 += rts_nodata
  
         #-------------------------  
         # Write grid to RTS file
@@ -1046,7 +1077,7 @@ def create_rts_from_nc_files( rts_file='TEST.rts', NC4=False,
         #--------------------------------------------
         # Read resampled data from tmp GeoTIFF file
         #--------------------------------------------
-        # This step shouldn't be necessary. #######
+        # This step shouldn't be necessary now.   #######
         #--------------------------------------------
 #         ds_tmp = gdal.Open( tmp_file )
 #         ## ds_tmp = gdal.Open( tmp_file, gdal.GA_ReadOnly  )
@@ -1056,7 +1087,7 @@ def create_rts_from_nc_files( rts_file='TEST.rts', NC4=False,
 #             print( 'grid3: min, max =', grid3.min(), grid3.max() )
 #             print( 'grid3.shape =', grid3.shape)
 #             print( 'grid3.dtype =', grid3.dtype)
-#             w  = np.where(grid3 > nodata)
+#             w  = np.where(grid3 != nodata)
 #             nw = w[0].size
 #             print( 'grid3 # data =', nw)
 #         ds_tmp = None   # Close tmp file
@@ -1079,9 +1110,35 @@ def create_rts_from_nc_files( rts_file='TEST.rts', NC4=False,
     #---------------------
     rts_unit.close()
 
-    if not(GPM):  Pmax = (Pmax * 3600.0)
+    #---------------------------------------
+    # Create an RTI file for this RTS file
+    #---------------------------------------
+    rti = rti_files.make_info(grid_file=rts_file,
+              ncols=DEM_ncols, nrows=DEM_nrows,
+              xres=DEM_xres_sec, yres=DEM_yres_sec,
+              #--------------------------------------
+              data_source='TopoFlow 3.6 Regrid',
+              data_type='FLOAT',
+              byte_order=rti_files.get_rti_byte_order(),
+              pixel_geom=0,
+              zres=0.001, z_units='unknown',
+              y_south_edge=DEM_bounds[1],
+              y_north_edge=DEM_bounds[3],
+              x_west_edge=DEM_bounds[0],
+              x_east_edge=DEM_bounds[2],
+              box_units='DEGREES')
+    rti_files.write_info( rts_file, rti )
+
+    #-----------------------
+    # Print final messages
+    #-----------------------
+    if not(GPM):
+        Pmax = (Pmax * 3600.0)
+        if (Pmin != -9999.0):
+            Pmin = (Pmin * 3600.0)
     print( ' ')
     print( 'Max precip rate =', Pmax, '[mmph]' )
+    print( 'Min precip rate =', Pmin, '[mmph]', '(possible nodata)' )
     print( 'bad_count =', bad_count )
     print( 'n_grids   =', count )
     print( 'Finished saving data to rts file.')
@@ -1149,10 +1206,11 @@ def create_rts_from_nc_files( rts_file='TEST.rts', NC4=False,
 #      
 # #    regrid_geotiff_to_dem()
 #-------------------------------------------------------------------  
-# def resave_grid_to_geotiff( ds_in, new_file, grid1, nodata ):
+# def resave_grid_to_geotiff( ds_in, new_file, grid1, nodata=nodata ):
 # 
-#     new_nodata = -9999.0
-#     grid1[ grid1 <= nodata ] = new_nodata
+#     if (nodata is not None):
+#         new_nodata = -9999.0
+#         grid1[ grid1 != nodata ] = new_nodata
 #     
 #     ##### raster = gdal.Open( nc_file )
 #     raster = ds_in
