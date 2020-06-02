@@ -315,7 +315,7 @@ class framework():
         ########
     
         if not(self.SILENT):
-            print('Reading info from comp_repo_file:')
+            print('EMELI: Reading info from comp_repo_file:')
             print('    ' + comp_repo_file)
             print()
         
@@ -448,7 +448,7 @@ class framework():
         #-----------------------------------------------------
 
         if not(self.SILENT):
-            print('Reading info from provider_file:')
+            print('EMELI: Reading info from provider_file:')
             print('    ' + self.provider_file)
 
         self.provider_list = []
@@ -660,7 +660,7 @@ class framework():
         # Final message
         #----------------
         if not(self.SILENT):
-            print('Instantiated component: ' + comp_name)
+            print('EMELI: Instantiated component: ' + comp_name)
             ## print('        of comp_type: ' + comp_type)
 
     #   instantiate()
@@ -983,12 +983,16 @@ class framework():
                 
     #   set_values_at_indices()
     #-------------------------------------------------------------------
-    def initialize( self, comp_name, cfg_file=None,
-                    mode='nondriver'):
+    def initialize( self, comp_name, cfg_file=None):
 
         #--------------------------------------------------
         # Note: This is called by:  initialize_comp_set()
         #       SILENT keyword applies to all components.
+        #--------------------------------------------------
+        #       In every component, mode='nondriver' in
+        #       initialize.  EMELI sets mode='driver'
+        #       for the driver after instantiation.
+        #       So don't do anything with mode here.
         #--------------------------------------------------
         
         #------------------------------
@@ -996,14 +1000,43 @@ class framework():
         #------------------------------
 ##        if not(self.comp_name_valid( comp_name )):
 ##            return
-           
+
         bmi = self.comp_set[ comp_name ]
         if (cfg_file == None):
             cfg_file = self.get_cfg_filename( bmi )
-        bmi.initialize( cfg_file=cfg_file, mode=mode,
-                        SILENT=self.SILENT )
+        #-------------------------------------------
+        # driver_comp is identified in run_model()
+        # and message is printed there.
+        #-------------------------------------------
+        mode = 'nondriver'        
+        if (comp_name == self.driver_comp_name):
+            mode = 'driver'      
+        bmi.initialize( cfg_file=cfg_file, SILENT=self.SILENT,
+                        mode=mode )
             
     #   initialize()
+    #-------------------------------------------------------------------
+#     def initialize_LAST( self, comp_name, cfg_file=None,
+#                     mode='nondriver'):
+# 
+#         #--------------------------------------------------
+#         # Note: This is called by:  initialize_comp_set()
+#         #       SILENT keyword applies to all components.
+#         #--------------------------------------------------
+#         
+#         #------------------------------
+#         # Is comp_name in comp_list ?
+#         #------------------------------
+# ##        if not(self.comp_name_valid( comp_name )):
+# ##            return
+#            
+#         bmi = self.comp_set[ comp_name ]
+#         if (cfg_file == None):
+#             cfg_file = self.get_cfg_filename( bmi )
+#         bmi.initialize( cfg_file=cfg_file, mode=mode,
+#                         SILENT=self.SILENT )
+#             
+#     #   initialize()
     #-------------------------------------------------------------------
     def update( self, comp_name ):
 
@@ -1192,7 +1225,6 @@ class framework():
     #   finalize_all()
     #-------------------------------------------------------------------
     def run_model( self, driver_comp_name='topoflow_driver',
-                   ## driver_comp_name='hydro_model',
                    cfg_directory=None, cfg_prefix=None,
                    SILENT=False,
                    time_interp_method='Linear'):
@@ -1219,6 +1251,7 @@ class framework():
         # cfg_directory = cfg_directory + os.sep     #########
         self.cfg_prefix    = cfg_prefix
         self.cfg_directory = cfg_directory
+        self.driver_comp_name = driver_comp_name
 
         #-----------------------------------------------------
         # Set self.comp_set_list and self.provider_list
@@ -1271,6 +1304,21 @@ class framework():
 ##        if not(OK):
 ##            return
 
+        #--------------------------------
+        # Identify the driver component
+        #--------------------------------       
+        driver = self.comp_set[ driver_comp_name ]
+        if not(self.SILENT):
+            print('Driver component name = ' + driver_comp_name)
+
+        #---------------------------------------------
+        # NOTE: If we set driver.mode here, it will
+        # get unset when initialize_comp_set() calls
+        # each component's initialize with defaults.
+        # See initialize().
+        #--------------------------------------------- 
+        # driver.mode = 'driver'
+        
         #------------------------------------------------------------
         # (2/18/13) Previous version of framework class initialized
         # and then connected the components in the comp_set using
@@ -1283,16 +1331,6 @@ class framework():
         OK = self.initialize_comp_set( REPORT=False )
         if not(OK):
             return
-        
-        #---------------------------------------
-        # Set mode of the driver component.
-        # Note: Must happen before next block.
-        #---------------------------------------
-        driver = self.comp_set[ driver_comp_name ]
-        driver.mode = 'driver'
-        if not(self.SILENT):
-            print('Driver component name = ' + driver_comp_name)
-            print()
         
         #-----------------------------------
         # Initialize all time-related vars
@@ -1508,7 +1546,8 @@ class framework():
         dt_units = np.zeros( n_comps, dtype='<U30')   # (2019-10-03)
         k = 0
         if not(self.SILENT):
-            print('Original component time step sizes =')
+            print()
+            print('EMELI: Component time step sizes =')
         for comp_name in self.provider_list:    
             bmi      = self.comp_set[ comp_name ]
             dt       = bmi.get_time_step()
@@ -1778,9 +1817,10 @@ class framework():
         # Loop over providers in order of provider_list.
         # Note that the dictionary, self.comp_set, is
         # not ordered.  Order of initialize() matters.
-        #------------------------------------------------         
+        #------------------------------------------------      
         for provider_name in self.provider_list:
             bmi = self.comp_set[ provider_name ]
+
             #-------------------------------------------
             # Initialize the provider component to set
             # all of its variables, etc.
@@ -1788,9 +1828,7 @@ class framework():
             cfg_file = self.get_cfg_filename( bmi )
             self.initialize( provider_name, cfg_file )
             if not(self.SILENT):
-                print('Initialized component: ' + provider_name + '.')
-            ## print 'Initialized component of type: ' + provider_name + '.'
-            ## print 'Initialized: ' + comp_name + '.'
+                print('EMELI: Initialized component: ' + provider_name + '.')
 
             ####################################################
             # (2/18/13) This connection step which creates the
