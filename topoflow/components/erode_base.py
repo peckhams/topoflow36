@@ -179,8 +179,9 @@ class erosion_component( BMI_base.BMI_component ):
         #--------------------------------------------------------
         # Note: CSDMS_base.run_model() changes to cfg_directory.
         #       And now get_neighbors_test() does this also.
-        #--------------------------------------------------------       
-        if not(SILENT):
+        #-------------------------------------------------------- 
+        self.SILENT = SILENT      
+        if not(self.SILENT):
             print('Erosion component: Initializing...')
 
         self.status = 'initializing'  # (OpenMI 2.0 convention)
@@ -242,7 +243,7 @@ class erosion_component( BMI_base.BMI_component ):
         # Has component been turned off ?
         #----------------------------------
         if (self.comp_status == 'Disabled'):
-            if not(SILENT):
+            if not(self.SILENT):
                 print('Erosion component: Disabled in CFG file.')
             self.SAVE_Z_GRIDS  = False    # (It is True by default.)
             self.SAVE_Z_PIXELS = False    # (It is True by default.)
@@ -286,8 +287,9 @@ class erosion_component( BMI_base.BMI_component ):
         # Make sure rtg_files.write_grid() function
         # does not change data type fo 'float32'.
         #--------------------------------------------
-        print('Data type of initial DEM is:', str(self.DEM.dtype))
-        print(' ')
+        if not(self.SILENT):
+            print('Data type of initial DEM is:', str(self.DEM.dtype))
+            print(' ')
 
         #--------------------------------------------------
         # Make sure self.Q_ts_file is not NULL (12/22/05) 
@@ -421,18 +423,18 @@ class erosion_component( BMI_base.BMI_component ):
         #----------------------
         # Print final message
         #----------------------
-        print(' ')
-        print('min(dt), max(dt) =', self.dt_grid.min(), self.dt_grid.max())
-        print(' ')
-        print('min(z), max(z)   =', self.DEM.min(), self.DEM.max())
-        print(' ')
-        print('dz_max_vec[0]    =', self.dz_max_vec[0])
-        print('dz_max_vec[nt-1] =', self.dz_max_vec[-1])
-        print('dz_max_vec.min() =', self.dz_max_vec.min())
-        print('dz_max_vec.max() =', self.dz_max_vec.max())
-        print(' ')
-        self.print_final_report( comp_name='Erode 3.1 (11/15/11)' )
-
+        if not(self.SILENT):
+            print()
+            print('min(dt), max(dt) =', self.dt_grid.min(), self.dt_grid.max())
+            print()
+            print('min(z), max(z)   =', self.DEM.min(), self.DEM.max())
+            print()
+            print('dz_max_vec[0]    =', self.dz_max_vec[0])
+            print('dz_max_vec[nt-1] =', self.dz_max_vec[-1])
+            print('dz_max_vec.min() =', self.dz_max_vec.min())
+            print('dz_max_vec.max() =', self.dz_max_vec.max())
+            print()
+            self.print_final_report( comp_name='Erode 3.1 (11/15/11)' )
 
         self.status = 'finalized'  # (OpenMI)
         
@@ -2117,7 +2119,8 @@ class erosion_component( BMI_base.BMI_component ):
     #-------------------------------------------------------------------  
     def open_output_files(self):
 
-        model_output.check_netcdf()    # (test import and info message)
+        # (test import and info message)
+        model_output.check_netcdf( SILENT=self.SILENT )
         self.update_outfile_names()
         
         #--------------------------------------

@@ -62,7 +62,8 @@ class diversions_component( BMI_base.BMI_component ):
     def initialize(self, cfg_file=None, mode="nondriver",
                    SILENT=False):
 
-        if not(SILENT):
+        self.SILENT = SILENT
+        if not(self.SILENT):
             print(' ')
             print('Diversions component: Initializing...')
         
@@ -103,7 +104,7 @@ class diversions_component( BMI_base.BMI_component ):
         # Return if no method selected
         #-------------------------------
         if (self.comp_status == 'Disabled'):
-            if not(SILENT):
+            if not(self.SILENT):
                 print('Diversions component: Disabled in CFG file.')
             self.n_canals          = self.initialize_scalar( 0, dtype='int32')  # int
             self.n_sinks           = self.initialize_scalar( 0, dtype='int32')
@@ -173,8 +174,8 @@ class diversions_component( BMI_base.BMI_component ):
 ##            self.close_output_files()
         self.status = 'finalized'  # (OpenMI)
 
-        self.print_final_report(comp_name='Diversions component')
-        ## print 'Diversions component: Finished.'
+        if not(self.SILENT):
+            self.print_final_report(comp_name='Diversions component')
         
     #   finalize()
     #-------------------------------------------------------------------

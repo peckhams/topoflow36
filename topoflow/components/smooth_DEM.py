@@ -262,8 +262,9 @@ class DEM_smoother( BMI_base.BMI_component ):
     def initialize(self, cfg_file=None, mode="nondriver",
                    SILENT=False):
 
+        self.SILENT = SILENT
         self.comp_name  = 'DEM Smoother component'
-        if not(SILENT):
+        if not(self.SILENT):
             print(' ')
             print(self.comp_name + ': Initializing...')
         
@@ -295,8 +296,9 @@ class DEM_smoother( BMI_base.BMI_component ):
         # Or maybe read them as input parameters ??
         #----------------------------------------------
         if (self.FIT_C_AND_P):
-            print('Finding best-fit c and p from:')
-            print('    ' + self.profile_file)
+            if not(self.SILENT):
+                print('Finding best-fit c and p from:')
+                print('    ' + self.profile_file)
             self.read_profile_data()
             self.find_best_fit_c_and_p()
         
@@ -304,7 +306,7 @@ class DEM_smoother( BMI_base.BMI_component ):
         # Has component been turned off ?
         #----------------------------------
         if (self.comp_status == 'Disabled'):
-            if not(SILENT):
+            if not(self.SILENT):
                 print(self.comp_name + ': Disabled in CFG file.')
             self.DONE = True
             self.status = 'initialized'  # (OpenMI 2.0 convention) 
@@ -390,10 +392,10 @@ class DEM_smoother( BMI_base.BMI_component ):
         self.close_output_files()
         self.status = 'finalized'  # (OpenMI)
 
-        print('(c, p) = ' + str(self.c) + ', ' + str(self.p))
-        print(' ')
-        
-        self.print_final_report(comp_name=self.comp_name)
+        if not(self.SILENT):
+            print('(c, p) = ' + str(self.c) + ', ' + str(self.p))
+            print(' ')
+            self.print_final_report(comp_name=self.comp_name)
         
     #   finalize()
     #-------------------------------------------------------------------
@@ -1474,7 +1476,8 @@ class DEM_smoother( BMI_base.BMI_component ):
     #-------------------------------------------------------------------  
     def open_output_files(self):
 
-        model_output.check_netcdf()    # (test import and info message)
+        # (test import and info message)
+        model_output.check_netcdf( SILENT=self.SILENT )
         self.update_outfile_names()
 
         #--------------------------------------

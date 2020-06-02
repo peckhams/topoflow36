@@ -197,7 +197,8 @@ class infil_component( BMI_base.BMI_component):
                    SILENT=False):
 
         ## self.DEBUG = True
-                
+        self.SILENT = SILENT
+           
         #---------------------------------------------------------
         # Notes:  Need to make sure than h_swe matches h_snow ?
         #         User may have entered incompatible valueself.
@@ -207,7 +208,7 @@ class infil_component( BMI_base.BMI_component):
         # there is no snowmelt method because the snow depth
         # affects the ET rate.  Otherwise, return to caller.
         #---------------------------------------------------------
-        if not(SILENT):
+        if not(self.SILENT):
             print(' ')
             print('Infiltration component: Initializing...')
             
@@ -250,7 +251,7 @@ class infil_component( BMI_base.BMI_component):
         # Has component been turned off ?
         #----------------------------------
         if (self.comp_status == 'Disabled'):
-            if not(SILENT):
+            if not(self.SILENT):
                 print('Infiltration component: Disabled in CFG file.')
             self.disable_all_output()
             #-------------------------------------------------
@@ -273,7 +274,8 @@ class infil_component( BMI_base.BMI_component):
         # Open input files needed to initialize vars 
         #---------------------------------------------
         self.open_input_files()
-        print('INFIL calling read_input_files()...')
+        if not(self.SILENT):
+            print('INFIL calling read_input_files()...')
         self.read_input_files()
 
         #----------------------------------------------
@@ -287,10 +289,12 @@ class infil_component( BMI_base.BMI_component):
         #--------------------------------------------------
         # NOTE:  Must be called AFTER read_input_files().
         #--------------------------------------------------
-        print('INFIL calling set_computed_input_vars()...')
+        if not(self.SILENT):
+            print('INFIL calling set_computed_input_vars()...')
         self.set_computed_input_vars()
-        
-        print('INFIL calling initialize_computed_vars()...')
+
+        if not(self.SILENT):        
+            print('INFIL calling initialize_computed_vars()...')
         self.initialize_computed_vars()
         
         # Get and save initial total storage in soil
@@ -364,7 +368,8 @@ class infil_component( BMI_base.BMI_component):
         self.close_output_files()
         self.status = 'finalized'  # (OpenMI 2.0 convention)
 
-        self.print_final_report(comp_name='Infiltration component')
+        if not(self.SILENT):
+            self.print_final_report(comp_name='Infiltration component')
     
     #   finalize()
     #-------------------------------------------------------------------
@@ -1084,21 +1089,23 @@ class infil_component( BMI_base.BMI_component):
         #-------------------------------------------------
         # Notes:  Append out_directory to outfile names.
         #-------------------------------------------------
+        # self.IN_gs_file = (self.out_directory + self.IN_gs_file)
         self.v0_gs_file = (self.out_directory + self.v0_gs_file)
         self.I_gs_file  = (self.out_directory + self.I_gs_file)
         self.q0_gs_file = (self.out_directory + self.q0_gs_file)
         self.Zw_gs_file = (self.out_directory + self.Zw_gs_file)
-        #-------------------------------------------------------------
+        #-----------------------------------------------------------
+        # self.IN_ts_file = (self.out_directory + self.IN_ts_file)
         self.v0_ts_file = (self.out_directory + self.v0_ts_file)
         self.I_ts_file  = (self.out_directory + self.I_ts_file)
         self.q0_ts_file = (self.out_directory + self.q0_ts_file)
         self.Zw_ts_file = (self.out_directory + self.Zw_ts_file)
-        #-----------------------------------------------------------------
+        #-----------------------------------------------------------
         self.q_ps_file  = (self.out_directory + self.q_ps_file)
         self.p_ps_file  = (self.out_directory + self.p_ps_file)
         self.K_ps_file  = (self.out_directory + self.K_ps_file)
         self.v_ps_file  = (self.out_directory + self.v_ps_file)
-        #-------------------------------------------------------------
+        #-----------------------------------------------------------
         self.q_cs_file  = (self.out_directory + self.q_cs_file)
         self.p_cs_file  = (self.out_directory + self.p_cs_file)
         self.K_cs_file  = (self.out_directory + self.K_cs_file)
@@ -1128,12 +1135,14 @@ class infil_component( BMI_base.BMI_component):
     #   update_outfile_names()
     #-------------------------------------------------------------------
     def disable_all_output(self):
-    
+
+        self.SAVE_IN_GRIDS = False    ###  
         self.SAVE_V0_GRIDS = False
         self.SAVE_Q0_GRIDS = False
         self.SAVE_I_GRIDS  = False
         self.SAVE_ZW_GRIDS = False
         #-----------------------------
+        self.SAVE_IN_PIXELS = False   ###
         self.SAVE_V0_PIXELS = False
         self.SAVE_Q0_PIXELS = False
         self.SAVE_I_PIXELS  = False
@@ -1163,14 +1172,15 @@ class infil_component( BMI_base.BMI_component):
         #          K = hydraulic conductivity
         #          v = vertical flow rate (see v0)
         #-------------------------------------------------
-        model_output.check_netcdf()
+        model_output.check_netcdf( SILENT=self.SILENT )
         self.update_outfile_names()
         
         #--------------------------------------
         # Open new files to write grid stacks
         #----------------------------------------
         # NOTE:  var_name = 'IN' vs. 'v0' here.
-        # Change all to 'IN' later.
+        # Change all to 'IN' later.  But then
+        # also need to change in the CFG files.
         #----------------------------------------
         if (self.SAVE_V0_GRIDS):
             model_output.open_new_gs_file( self, self.v0_gs_file, self.rti,

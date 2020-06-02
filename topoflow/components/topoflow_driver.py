@@ -58,7 +58,7 @@ import time
 from topoflow.utils import BMI_base
 from topoflow.utils import cfg_files as cfg
 
-from topoflow.utils.tf_utils import TF_Print, TF_String, TF_Version
+from topoflow.utils.tf_utils import TF_String, TF_Version
 
 #-----------------------------------------------------------------------
 class topoflow_driver( BMI_base.BMI_component ):
@@ -341,7 +341,8 @@ class topoflow_driver( BMI_base.BMI_component ):
         #        "initialize()" method in the component's CCA
         #        Impl file.
         #------------------------------------------------------
-        if not(SILENT):
+        self.SILENT = SILENT
+        if not(self.SILENT):
             print('TopoFlow component: Initializing...')
         
         self.status     = 'initializing'  # (OpenMI 2.0 convention)
@@ -360,7 +361,7 @@ class topoflow_driver( BMI_base.BMI_component ):
         # Has component been turned off ?
         #----------------------------------
         if (self.comp_status == 'Disabled'):
-            if not(SILENT):
+            if not(self.SILENT):
                 print('TopoFlow Main component: Disabled in CFG file.')
             self.DONE = True
             self.status = 'initialized.'  # (OpenMI 2.0 convention)
@@ -390,17 +391,19 @@ class topoflow_driver( BMI_base.BMI_component ):
         if (self.WRITE_LOG):
             if (self.log_file == None):
                 self.log_file = (self.case_prefix + '_LOG.txt')
-            print('Opening log file:')
-            print('    log_file = ' + self.log_file)
             self.log_unit = open(self.log_file, 'w')
-
+            
+            if not(self.SILENT):
+                print('Opening log file:')
+                print('    log_file = ' + self.log_file)
         #----------------------
         # Print start message
         #----------------------
-        TF_Print(' ')
-        TF_Print('Starting TopoFlow model run...')
-        hline = ''.ljust(60, '-')
-        TF_Print(hline)
+        if not(self.SILENT):
+            print(' ')
+            print('Starting TopoFlow model run...')
+            hline = ''.ljust(60, '-')
+            print(hline)
         self.status = 'initialized'
         
     #   initialize()        
@@ -433,7 +436,7 @@ class topoflow_driver( BMI_base.BMI_component ):
         self.status = 'updating'
         OK = True
         ## if (self.VERBOSE):
-        if (self.mode == 'driver'):
+        if (self.mode == 'driver') and not(self.SILENT):
             self.print_time_and_value(self.Q_outlet, 'Q_out', '[m^3/s]',
                                       interval=0.5)  # [seconds]
             
@@ -465,15 +468,17 @@ class topoflow_driver( BMI_base.BMI_component ):
         # if (self.mode == 'driver'):
         #     self.print_time_and_value(self.Q_outlet, 'Q_out', '[m^3/s]')
  
-        print('=======================')
-        print('Simulation complete.')
-        print('=======================')
-        print(' ')
+        if not(self.SILENT):
+            print('=======================')
+            print('Simulation complete.')
+            print('=======================')
+            print()
         
         #----------------
         # Print reports
         #----------------
-        self.print_final_report()
+        if not(self.SILENT):
+            self.print_final_report()
 ##        self.print_mins_and_maxes( FINAL=True )   # (Moved into final report.)
 ##        self.print_uniform_precip_data()  # (not ready yet)
 ##        self.print_mass_balance_report()  # (not ready yet)
@@ -488,8 +493,9 @@ class topoflow_driver( BMI_base.BMI_component ):
         #----------------------
         # Print final message
         #----------------------
-        TF_Print('Finished.' + '  (' + self.case_prefix + ')')
-        TF_Print(' ')
+        if not(self.SILENT):
+            print('Finished.' + '  (' + self.case_prefix + ')')
+            print()
         self.status = 'finalized'
    
     #   finalize()
@@ -528,7 +534,7 @@ class topoflow_driver( BMI_base.BMI_component ):
                 self.DONE = (self.Q_outlet <= Q_stop) and \
                             (self.Q_outlet > 0)
 
-            if (self.DONE):
+            if (self.DONE and not(self.SILENT)):
                 stop_str = str(self.Qp_fraction) + '.\n'
                 print('Stopping: Reached Q_peak fraction = ' + stop_str)
                 
@@ -554,7 +560,7 @@ class topoflow_driver( BMI_base.BMI_component ):
             # Run until specified "stopping time", in minutes
             #--------------------------------------------------
             self.DONE = (self.time_min >= self.T_stop)  # [minutes]
-            if (self.DONE):
+            if (self.DONE and not(self.SILENT)):
                 stop_str = str(self.T_stop) + '.\n'
                 print('Stopping: Reached stop time = ' + stop_str)
         elif (self.stop_method == 'Until_n_steps'):
@@ -562,7 +568,7 @@ class topoflow_driver( BMI_base.BMI_component ):
             # Run for a specified number of steps
             #--------------------------------------
             self.DONE = (self.time_index >= self.n_steps)
-            if (self.DONE):
+            if (self.DONE and not(self.SILENT)):
                 stop_str = str(self.n_steps) + '.\n'
                 print('Stopping: Reached number of steps = ' + stop_str)
         else:
@@ -637,10 +643,10 @@ class topoflow_driver( BMI_base.BMI_component ):
             ## if not(DONE):    
             ##     n_same = int32(0)
             ##
-            #TF_Print,'****************************************************'
-            #TF_Print,'Aborting model run: '
-            #TF_Print,'Discharge, Q, has reached steady-state.'
-            #TF_Print,'****************************************************'
+            #print('****************************************************')
+            #print('Aborting model run: ')
+            #print('Discharge, Q, has reached steady-state.')
+            #print('****************************************************')
             #msg = [ $
             #'WARNING:  Route_Flow aborted.', ' ',$
             #'Discharge, Q, has reached steady-state. ', ' ']
@@ -661,11 +667,11 @@ class topoflow_driver( BMI_base.BMI_component ):
         #    'ERROR: ', ' ', $
         #    'Discharge at outlet is zero for all times. ', ' ',$
         #    'Is there a runoff-producing process ? ', ' ']
-        #    TF_Print,'*************************************************'
-        #    TF_Print, msg[1]
-        #    TF_Print, msg[3]
-        #    TF_Print,'*************************************************'
-        #    TF_Print,' '
+        #    print('*************************************************')
+        #    print( msg[1] )
+        #    print( msg[3] )
+        #    print('*************************************************')
+        #    print()
         #    GUI_Error_Message, msg
         #    DONE = 1b
         #endif
@@ -700,10 +706,11 @@ class topoflow_driver( BMI_base.BMI_component ):
             
             if not(OK):
                 self.finalize()
-                TF_Print(' ')
-                TF_Print('----------------------------------')
-                TF_Print(' Simulation terminated by user.')
-                TF_Print('----------------------------------')
+                ## if not(self.SILENT)):
+                print()
+                print('----------------------------------')
+                print(' Simulation terminated by user.')
+                print('----------------------------------')
                 return
 
             self.last_check_time = time.time()
@@ -742,7 +749,8 @@ class topoflow_driver( BMI_base.BMI_component ):
     #-------------------------------------------------------------
     def initialize_stop_vars(self):
 
-        TF_Print('Setting stop method to: ' + self.stop_method)
+        if not(self.SILENT):
+            print('Setting stop method to: ' + self.stop_method)
 
         #---------------------------------------------------------
         # Define some constants for "check_steady_state() method
@@ -1007,26 +1015,6 @@ class topoflow_driver( BMI_base.BMI_component ):
         report.append('Number of rows:      ' + str(self.ny) )
         report.append(' ')
 
-        #------------------------------------------------------------
-        # (2/6/13) With the new framework and use of CSDMS Standard
-        # Names there is no simple way for the TopoFlow driver to
-        # get the time steps from the other components.  That is,
-        # it can request "model__time_step" from the framework, but
-        # cannot specify which component(s) that it wants it from.
-        # The framework has no trouble getting and printing this
-        # info however, and this is now done instead.  But current
-        # approach does not write time steps to the log_file.
-        #------------------------------------------------------------
-##        TF_Print('Channel timestep:    ' + str(cp_dt) + ' [s]')
-##        TF_Print('Precip/met timestep: ' + str(mp_dt) + ' [s]')
-##        TF_Print('Snowmelt timestep:   ' + str(sp_dt) + ' [s]')
-##        TF_Print('ET timestep:         ' + str(ep_dt) + ' [s]')
-##        TF_Print('Infiltr. timestep:   ' + str(ip_dt) + ' [s]')
-##        TF_Print('Sat. zone timestep:  ' + str(gp_dt) + ' [s]')
-##        TF_Print('Icemelt timestep:    ' + str(iip_dt) + ' [s]')        
-        # TF_Print('Overland timestep:   ' + str(op_dt) + ' [s]')
-        # TF_Print('Sampled timestep:    ' + str(sample_dt) + ' [s]')
-
         if (self.stop_method == 'Until_model_time'):    
             report.append('T_stop:            ' + str(T_stop) + ' [min]')
             report.append(' ')
@@ -1204,10 +1192,10 @@ class topoflow_driver( BMI_base.BMI_component ):
         #-------------------------------------
         # This is too verbose in most cases?
         #------------------------------------- 
-        #TF_Print,'Uniform precip. rate information: '
-        #TF_Print,'Precip. rate:     ' + rstr + ' [mm/hr]'
-        #TF_Print,'Duration:         ' + dstr + ' [min]'
-        #TF_Print,' '
+        # print('Uniform precip. rate information: ')
+        # print('Precip. rate:     ' + rstr + ' [mm/hr]' )
+        # print('Duration:         ' + dstr + ' [min]' )
+        # print()
         
         #----------------------
         # Write to log file ?
@@ -1259,14 +1247,15 @@ class topoflow_driver( BMI_base.BMI_component ):
         Q_peak_pred = (np.float64(0.2) * rates[0] * (basin_length) ** np.float64(2) / np.float64(3))
         T_peak_pred = (np.float64(3) * durations[0])
         
-        TF_Print('Dimensionless number information:\n')
-        TF_Print('T_peak /Duration: ' + tpstr + "\n")
-        TF_Print('T_final/Duration: ' + tfstr + "\n") 
-        vTF_Print('Psi=L/(R*TD):     ' + str(PSI) + ' [unitless]\n')
-        TF_Print(' ')
-        TF_Print('Q_peak predicted: ' + str(Q_peak_pred) + ' [m^3/s]\n')
-        TF_Print('T_peak predicted: ' + str(T_peak_pred) + ' (min]\n')
-        TF_Print(' ')
+        if not(self.SILENT):
+            print('Dimensionless number information:\n')
+            print('T_peak /Duration: ' + tpstr + "\n")
+            print('T_final/Duration: ' + tfstr + "\n") 
+            print('Psi=L/(R*TD):     ' + str(PSI) + ' [unitless]\n')
+            print()
+            print('Q_peak predicted: ' + str(Q_peak_pred) + ' [m^3/s]\n')
+            print('T_peak predicted: ' + str(T_peak_pred) + ' (min]\n')
+            print()
         
         #----------------------
         # Write to log file ?
@@ -1299,16 +1288,16 @@ class topoflow_driver( BMI_base.BMI_component ):
 #         vol_R   = self.vol_R
 #         vol_chan = self.vol_chan    # (2019-09-17)
 #         
-#         TF_Print('Volume rain         = ' + str(vol_P)  + ' [m^3]')
-#         TF_Print('Volume snowpack H20 = ' + str(vol_swe)+ ' [m^3]')
-#         TF_Print('Volume snowmelt     = ' + str(vol_SM) + ' [m^3]')
-#         TF_Print('Volume infiltrated  = ' + str(vol_IN) + ' [m^3]')
-#         TF_Print('Volume evaporated   = ' + str(vol_ET) + ' [m^3]')
-#         TF_Print('Volume seepage      = ' + str(vol_GW) + ' [m^3]')
-#         TF_Print('Volume runoff       = ' + str(vol_R)  + ' [m^3]')
-#         TF_Print('Volume bottom loss  = ' + str(vol_Rg) + ' [m^3]')
-#         TF_Print('Volume all channels = ' + str(vol_chan) + ' [m^3]')
-#         TF_Print(' ')
+#         print('Volume rain         = ' + str(vol_P)  + ' [m^3]')
+#         print('Volume snowpack H20 = ' + str(vol_swe)+ ' [m^3]')
+#         print('Volume snowmelt     = ' + str(vol_SM) + ' [m^3]')
+#         print('Volume infiltrated  = ' + str(vol_IN) + ' [m^3]')
+#         print('Volume evaporated   = ' + str(vol_ET) + ' [m^3]')
+#         print('Volume seepage      = ' + str(vol_GW) + ' [m^3]')
+#         print('Volume runoff       = ' + str(vol_R)  + ' [m^3]')
+#         print('Volume bottom loss  = ' + str(vol_Rg) + ' [m^3]')
+#         print('Volume all channels = ' + str(vol_chan) + ' [m^3]')
+#         print(' ')
 # 
 #         RICHARDS = self.ip.get_scalar_long('RICHARDS')
 #         print('In topoflow.print_mass_balance_report(),')
@@ -1358,9 +1347,9 @@ class topoflow_driver( BMI_base.BMI_component ):
 #                 vol_stored += dm
 #             mass_error = np.float64(100) * (vol_IN - vol_stored) / vol_IN
 #             err_str = ('%6.2f' % mass_error) + ' % '
-#             TF_Print('Volume stored      = ' + TF_String(vol_stored) + ' [m^3]')
-#             TF_Print('Volume error       = ' + err_str)
-#         TF_Print(' ')
+#             print('Volume stored      = ' + TF_String(vol_stored) + ' [m^3]')
+#             print('Volume error       = ' + err_str)
+#         print()
 # 
 #     #   print_mass_balance_report()
     #-------------------------------------------------------------

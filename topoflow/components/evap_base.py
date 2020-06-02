@@ -119,7 +119,8 @@ class evap_component( BMI_base.BMI_component):
     def initialize(self, cfg_file=None, mode="nondriver",
                    SILENT=False):
 
-        if not(SILENT):
+        self.SILENT = SILENT
+        if not(self.SILENT):
             print(' ')
             print('Evaporation component: Initializing...')
         
@@ -144,7 +145,7 @@ class evap_component( BMI_base.BMI_component):
         #     Check all other process modules.
         #------------------------------------------------------
         if (self.comp_status == 'Disabled'):
-            if not(SILENT):
+            if not(self.SILENT):
                 print('Evaporation component: Disabled in CFG file.')
             self.disable_all_output()
             self.ET     = self.initialize_scalar(0, dtype='float64')
@@ -228,7 +229,8 @@ class evap_component( BMI_base.BMI_component):
             self.close_output_files()
         self.status = 'finalized'  # (OpenMI)
 
-        self.print_final_report(comp_name='Evaporation component')
+        if not(self.SILENT):
+            self.print_final_report(comp_name='Evaporation component')
   
     #   finalize()
     #-------------------------------------------------------------------
@@ -562,7 +564,7 @@ class evap_component( BMI_base.BMI_component):
         # Note:  Qc (conduction heat flux), from Priestly-Taylor
         #        component, could also be saved.
         #---------------------------------------------------------
-        model_output.check_netcdf()
+        model_output.check_netcdf( SILENT=self.SILENT )
         self.update_outfile_names()
 
         #--------------------------------------

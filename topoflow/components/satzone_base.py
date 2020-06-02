@@ -152,7 +152,8 @@ class satzone_component( infil_base.infil_component ):
     def initialize(self, cfg_file=None, mode="nondriver",
                    SILENT=False):
 
-        if not(SILENT):
+        self.SILENT = SILENT
+        if not(self.SILENT):
             print(' ')
             print('Groundwater component: Initializing...')
             
@@ -177,7 +178,7 @@ class satzone_component( infil_base.infil_component ):
         self.initialize_time_vars()
         
         if (self.comp_status == 'Disabled'):
-            if not(SILENT):
+            if not(self.SILENT):
                 print('Groundwater component: Disabled in CFG file.')
             
             #-------------------------------------------------------
@@ -295,7 +296,8 @@ class satzone_component( infil_base.infil_component ):
         self.close_output_files()
         self.status = 'finalized'  # (OpenMI 2.0 convention)
 
-        self.print_final_report(comp_name='Groundwater component')
+        if not(self.SILENT):
+            self.print_final_report(comp_name='Groundwater component')
     
     #   finalize()
     #-------------------------------------------------------------------
@@ -1465,7 +1467,7 @@ class satzone_component( infil_base.infil_component ):
     #-------------------------------------------------------------------  
     def open_output_files(self):
 
-        model_output.check_netcdf()
+        model_output.check_netcdf( SILENT=self.SILENT )
         self.update_outfile_names()
         
         #--------------------------------------

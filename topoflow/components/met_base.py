@@ -585,7 +585,8 @@ class met_component( BMI_base.BMI_component ):
     def initialize(self, cfg_file=None, mode="nondriver",
                    SILENT=False):
 
-        if not(SILENT):
+        self.SILENT = SILENT
+        if not(self.SILENT):
             print(' ')
             print('Meteorology component: Initializing...')
             
@@ -654,7 +655,7 @@ class met_component( BMI_base.BMI_component ):
         #     Check all other process modules.
         #------------------------------------------------------
         if (self.comp_status == 'Disabled'):
-            if not(SILENT):
+            if not(self.SILENT):
                 print('Meteorology component: Disabled in CFG file.')
             self.e_air    = self.initialize_scalar(0, dtype=dtype)
             self.e_surf   = self.initialize_scalar(0, dtype=dtype)
@@ -786,7 +787,8 @@ class met_component( BMI_base.BMI_component ):
                 self.close_output_files()
         self.status = 'finalized'  # (OpenMI)
 
-        self.print_final_report(comp_name='Meteorology component')
+        if not(self.SILENT):
+            self.print_final_report(comp_name='Meteorology component')
      
     #   finalize()
     #-------------------------------------------------------------------
@@ -849,14 +851,14 @@ class met_component( BMI_base.BMI_component ):
         # Print info message about PRECIP_ONLY
         # See set_missing_cfg_options().
         #---------------------------------------
-        if (self.PRECIP_ONLY):
+        if (self.PRECIP_ONLY and not(self.SILENT)):
             print('------------------------------------------')
             print(' NOTE: Since PRECIP_ONLY = True, output')
             print('       variables for met component will')
             print('       not be computed or saved to files.')
             print('       And evap component may not work.')
             print('------------------------------------------')
-            print(' ')
+            print()
 
         #---------------------------------------------
         # Convert GMT_offset from string to int
@@ -997,11 +999,12 @@ class met_component( BMI_base.BMI_component ):
 ##            rtg_files.write_grid( self.lon_deg, lon_file, self.rti )
 ##            lat_file = (self.out_directory + self.site_prefix + '_lats.bin')
 ##            rtg_files.write_grid( self.lat_deg, lat_file, self.rti )
-        else:    
-            print('SORRY: Cannot yet create lon and lat grids for')
-            print('       this DEM because it uses UTM coordinates.')
-            print('       Will use lat/lon for Denver, Colorado.')
-            print(' ')
+        else:
+            if not(self.SILENT):    
+                print('SORRY: met_base.py cannot yet create lon and lat')
+                print('       grids for this DEM because it uses UTM')
+                print('       coordinates.  Using lat/lon for Denver, CO.')
+                print()
             #--------------------------------------------
             # For now, use scalar values for Denver, CO
             #--------------------------------------------
@@ -1926,14 +1929,15 @@ class met_component( BMI_base.BMI_component ):
             ## print('P.min, P.max =', P.min(), P.max() )   
             self.update_var( 'P', P )  ## (In BMI_base.py, 11/15/16)
 
-            if (self.DEBUG or (self.time_index == 0)):
-                print('In met_base read_input_files():')
-                print('   time = ' + str(self.time) )
-                Pmin_str = str( P.min() * self.mps_to_mmph )
-                Pmax_str = str( P.max() * self.mps_to_mmph )
-                print('   min(P) = ' + Pmin_str + ' [mmph]')
-                print('   max(P) = ' + Pmax_str + ' [mmph]')
-                print(' ')
+            if not(self.SILENT):
+                if (self.DEBUG or (self.time_index == 0)):
+                    print('In met_base read_input_files():')
+                    print('   time = ' + str(self.time) )
+                    Pmin_str = str( P.min() * self.mps_to_mmph )
+                    Pmax_str = str( P.max() * self.mps_to_mmph )
+                    print('   min(P) = ' + Pmin_str + ' [mmph]')
+                    print('   max(P) = ' + Pmax_str + ' [mmph]')
+                    print(' ')
 
         #------------------------------------------------------------
         # Read variables from files into scalars or grids while
@@ -2069,14 +2073,15 @@ class met_component( BMI_base.BMI_component ):
         if not(REPORT):
             return
       
-        if (SCALAR_P):
-            print('Reached end of scalar rainfall duration.')
-            print('  P set to 0 by read_input_files().')
-        else:
-            print('Reached end of precip file:')
-            ## print( self.P_file )
-            print('  P set to 0 by met_base.read_input_files().')
-            print('  time =', self.time_min, 'minutes.')
+        if not(self.SILENT):
+            if (SCALAR_P):
+                print('Reached end of scalar rainfall duration.')
+                print('  P set to 0 by read_input_files().')
+            else:
+                print('Reached end of precip file:')
+                ## print( self.P_file )
+                print('  P set to 0 by met_base.read_input_files().')
+                print('  time =', self.time_min, 'minutes.')
             
         # print '######### In met_base.read_input_files() #######'
         # print 'self.P_type =', self.P_type
@@ -2156,7 +2161,7 @@ class met_component( BMI_base.BMI_component ):
 
         if (self.DEBUG):
             print('Calling open_output_files()...')
-        model_output.check_netcdf()
+        model_output.check_netcdf( SILENT=self.SILENT )
         self.update_outfile_names()
         
         #--------------------------------------

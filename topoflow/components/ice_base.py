@@ -381,6 +381,7 @@ class ice_component( BMI_base.BMI_component ):
     def initialize(self, cfg_file=None, mode="nondriver",
                    SILENT=False):
 
+        self.SILENT = SILENT
         #---------------------------------------------------
         # When a user clicks on a component's "run" button,
         # that component's "run_model()" method is called
@@ -393,7 +394,7 @@ class ice_component( BMI_base.BMI_component ):
         # call "set_directory()" again to override and new
         # directory setting from the user.
         #---------------------------------------------------
-        if not(SILENT):
+        if not(self.SILENT):
             print(' ')
             print('Ice component: Initializing...')
 
@@ -432,7 +433,7 @@ class ice_component( BMI_base.BMI_component ):
         self.set_gc2d_parameters()
         
         if (self.comp_status == 'Disabled'):
-            if not(SILENT):
+            if not(self.SILENT):
                 print('Ice component: Disabled in CFG file.')
             self.disable_all_output()
             self.MR       = self.initialize_scalar(0, dtype='float64')
@@ -556,7 +557,8 @@ class ice_component( BMI_base.BMI_component ):
             self.close_output_files()
         self.status = 'finalized'  # (OpenMI)
 
-        self.print_final_report(comp_name='Ice component')
+        if not(self.SILENT):
+            self.print_final_report(comp_name='Ice component')
 
         if (self.DEBUG):
             print('Ice: dt_min =', self.dt_min, '### Smallest dt ###')
@@ -705,7 +707,7 @@ class ice_component( BMI_base.BMI_component ):
     #-------------------------------------------------------------------  
     def open_output_files(self):
 
-        model_output.check_netcdf()
+        model_output.check_netcdf( SILENT=self.SILENT )
         self.update_outfile_names()
         
         #----------------------------------

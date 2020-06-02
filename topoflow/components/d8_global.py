@@ -96,7 +96,7 @@ class d8_component( d8_base.d8_component ):
 
     #   get_attribute()
     #-------------------------------------------------------------------
-    def update_flow_grid(self, DEM=None, SILENT=True, REPORT=False):
+    def update_flow_grid(self, DEM=None, REPORT=False):
 
         #--------------------------------------------------------
         # This can be used to test whether "update_area_grid()"
@@ -117,25 +117,25 @@ class d8_component( d8_base.d8_component ):
         #         A RiverTools resolve array is returned by:
         #            self.get_resolve_array().
         #------------------------------------------------------
-        if not(SILENT):    
+        if not(self.SILENT):    
             print('Updating D8 flow grid...')
             
         #----------------------------------------
         # Assign directions where well-defined,
         # and special codes otherwise
         #----------------------------------------
-        self.start_new_d8_codes(DEM, SILENT=SILENT, REPORT=REPORT)
+        self.start_new_d8_codes(DEM, REPORT=REPORT)
         
         #----------------------------------
         # Break ties with "resolve" array
         #----------------------------------
         if (self.BREAK_TIES):
-            self.break_flow_grid_ties(SILENT=SILENT)
+            self.break_flow_grid_ties()
         
         #-------------------
         # Link the flats ?
         #-------------------
-        if (self.LINK_FLATS): self.link_flats(SILENT=SILENT)
+        if (self.LINK_FLATS): self.link_flats()
         
         #--------------------------------------------------
         # Change data type from 2-byte to 1-byte (NEW WAY)
@@ -178,8 +178,7 @@ class d8_component( d8_base.d8_component ):
           
     #   update_flow_grid()
     #-------------------------------------------------------------------    
-    def start_new_d8_codes(self, DEM=None,
-                           SILENT=True, REPORT=False):
+    def start_new_d8_codes(self, DEM=None, REPORT=False):
         
         #--------------------------------------------------------------
         # Notes: If (z is not None), then update D8 codes only for the
@@ -194,7 +193,7 @@ class d8_component( d8_base.d8_component ):
 
         #        Use of NumPy's ROLL induces periodic boundaries.
         #--------------------------------------------------------------
-        if not(SILENT):
+        if not(self.SILENT):
             print('   update_d8_codes(): Initializing grid...')
             ## print '   Starting new D8 codes...'
             ## print '   Initializing D8 codes in update_d8_codes()...'
@@ -335,9 +334,11 @@ class d8_component( d8_base.d8_component ):
         #-------------------------
         self.d8_grid = d8_grid
         
-        if (REPORT):
+        #### if (REPORT):
+        if not(self.SILENT):
             dmin = d8_grid.min()
             dmax = d8_grid.max()
+
             print('   --------------------------------------------')
             print('   Data type of flow grid at start = ' + str(d8_grid.dtype))
             if not(self.LINK_FLATS):
@@ -351,7 +352,7 @@ class d8_component( d8_base.d8_component ):
 
     #   start_new_d8_codes()
     #-------------------------------------------------------------------    
-    def break_flow_grid_ties(self, SILENT=True):
+    def break_flow_grid_ties(self):
 
         #----------------------------------------------------------
         # Notes: This routine resolves all non-flat ties, using
@@ -360,7 +361,7 @@ class d8_component( d8_base.d8_component ):
         #        D8 flow codes.  Note that "resolve" maps valid
         #        D8 flow codes to themselves.
         #----------------------------------------------------------
-        if not(SILENT):
+        if not(self.SILENT):
             print('   update_d8_codes(): Breaking ties...')
             ## print '   Breaking ties in update_d8_codes():...'
 
@@ -370,7 +371,7 @@ class d8_component( d8_base.d8_component ):
 
     #   break_flow_grid_ties()
     #-------------------------------------------------------------------    
-    def link_flats(self, SILENT=True):
+    def link_flats(self):
 
         #--------------------------------------------------------
         # Notes: This procedure uses NumPy array operations to
@@ -403,7 +404,7 @@ class d8_component( d8_base.d8_component ):
 
         #       Current solution is to use a NOTEDGE array.
         #--------------------------------------------------------
-        if not(SILENT):
+        if not(self.SILENT):
             print('   update_d8_codes(): Linking flats...')
             ## print '   Linking flats in update_d8_codes()...'
 
@@ -568,13 +569,13 @@ class d8_component( d8_base.d8_component ):
         #--------------------------------------
         self.d8_grid = d8_grid
         
-        if not(SILENT):
+        if not(self.SILENT):
             n_rep_str = str( n_reps )
             print('   Number of iterations = ' + n_rep_str + ' (in link_flats())')
         
     #   link_flats()
     #---------------------------------------------------------------------
-    def update_parent_ID_grid(self, SILENT=True):
+    def update_parent_ID_grid(self):
 
         #-----------------------------------------------------
         # Get a grid which for each grid cell contains the
@@ -584,7 +585,7 @@ class d8_component( d8_base.d8_component ):
         # Note: This version can handle periodic boundaries,
         #       as can occur in a landscape evolution model.
         #-----------------------------------------------------
-        if not(SILENT):
+        if not(self.SILENT):
             print('Finding parent pixel IDs...')
         
         nx = self.nx
@@ -864,7 +865,7 @@ class d8_component( d8_base.d8_component ):
     #   update_noflow_IDs()   
     #-------------------------------------------------------------------    
     def update_flow_width_grid(self, DOUBLE=False, METHOD2=False,
-                               SILENT=True, REPORT=False):
+                               REPORT=False):
 
         #-------------------------------------------------------------
         # NOTES: This routine returns the flow widths for each
@@ -888,7 +889,7 @@ class d8_component( d8_base.d8_component ):
         #        second part when applied to a 1D array.  This means
         #        that nw = w[0].size still works.
         #-------------------------------------------------------------
-        if not(SILENT):
+        if not(self.SILENT):
             print('Updating flow width grid...')
 
         fg = self.d8_grid   # (local synonym)
@@ -940,7 +941,8 @@ class d8_component( d8_base.d8_component ):
         #------------------
         # Optional report
         #------------------
-        if (REPORT):
+        ### if (REPORT):
+        if not(self.SILENT):
             dw_str = str(self.dw.min()) + ', ' + str(self.dw.max())
             print('    min(dw), max(dw) = ' + dw_str + ' [m]')
             
@@ -949,8 +951,7 @@ class d8_component( d8_base.d8_component ):
 
     #   update_flow_width_grid()
     #-------------------------------------------------------------------
-    def update_flow_length_grid(self, DOUBLE=False,
-                                SILENT=True, REPORT=False):
+    def update_flow_length_grid(self, DOUBLE=False, REPORT=False):
 
         #-------------------------------------------------------------
         # NOTES: This routine returns the flow lengths for each
@@ -965,7 +966,7 @@ class d8_component( d8_base.d8_component ):
         #        Flow lengths are set to dx[0] for the pixels where
         #       (flow grid eq 0), such as on the edges of the DEM.
         #-------------------------------------------------------------
-        if not(SILENT):
+        if not(self.SILENT):
             print('Updating flow length grid...')
 
         fg = self.d8_grid  # (local synonym)
@@ -1009,7 +1010,8 @@ class d8_component( d8_base.d8_component ):
         #------------------
         # Optional report
         #------------------
-        if (REPORT):
+        ### if (REPORT):
+        if not(self.SILENT):
             ds_str = str(self.ds.min()) + ', ' + str(self.ds.max())
             print('    min(ds), max(ds) = ' + ds_str + ' [m]')
             
@@ -1018,7 +1020,7 @@ class d8_component( d8_base.d8_component ):
 
     #   update_flow_length_grid()
     #-------------------------------------------------------------------
-    def update_area_grid(self, SILENT=True, REPORT=False):
+    def update_area_grid(self, REPORT=False):
 
         #------------------------------------------------------
         # Notes: Idea is to find the pixels whose area has
@@ -1038,7 +1040,7 @@ class d8_component( d8_base.d8_component ):
         #           |32  x  2|          |5  x  1|    (i2)
         #           |16  8  4|          |4  3  2|    (i3)
         #------------------------------------------------------
-        if not(SILENT):    
+        if not(self.SILENT):    
             print('Updating upstream area grid...')
         
         #------------------
@@ -1263,8 +1265,9 @@ class d8_component( d8_base.d8_component ):
             if not(UNFINISHED) or not(STILL_ACTIVE):
                 break
         
-        if (UNFINISHED):    
-            print('Upstream area not defined for all pixels.')
+        if (UNFINISHED):
+            if not(self.SILENT):    
+                print('Upstream area not defined for all pixels.')
 
         #-----------------------------
         # Save area grid for testing
@@ -1283,14 +1286,16 @@ class d8_component( d8_base.d8_component ):
         #------------------
         # Optional report
         #------------------
-        if (REPORT):
+        ## if (REPORT):
+        if not(self.SILENT):
             if ('km' in self.A_units.lower()):
                 unit_str = ' [km^2]'
             else:
                 unit_str = ' [m^2]'
             A_str = str(self.A.min()) + ', ' + str(self.A.max())
-            print('    min(A), max(A) = ' + A_str + unit_str)
-            print('    Number of iterations = ' + str(n_reps))
+            if not(self.SILENT):
+               print('    min(A), max(A) = ' + A_str + unit_str)
+               print('    Number of iterations = ' + str(n_reps))
 
         #-------------------------------------------------
         # Compare saved area grid to one just computed
@@ -1320,7 +1325,7 @@ class d8_component( d8_base.d8_component ):
                 
     #   update_area_grid()
     #-------------------------------------------------------------------
-    def update_slope_grid(self, SILENT=True, REPORT=False):
+    def update_slope_grid(self, REPORT=False):
 
         pIDs = self.parent_IDs
         self.S = (self.DEM - self.DEM[ pIDs ]) / self.ds
@@ -1336,7 +1341,7 @@ class d8_component( d8_base.d8_component ):
 
     #   update_slope_grid()
     #-------------------------------------------------------------------
-    def update_aspect_grid(self, SILENT=True, REPORT=False):
+    def update_aspect_grid(self, REPORT=False):
 
         #------------------------------------------------------
         # Note: This is a D8 "aspect", really the flow angle,

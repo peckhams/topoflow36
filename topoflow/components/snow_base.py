@@ -126,6 +126,8 @@ class snow_component( BMI_base.BMI_component ):
     def initialize(self, cfg_file=None, mode="nondriver",
                    SILENT=False):
 
+        self.SILENT = SILENT
+
         #---------------------------------------------------------
         # Notes:  Need to make sure than h_swe matches h_snow ?
         #         User may have entered incompatible values.
@@ -135,7 +137,7 @@ class snow_component( BMI_base.BMI_component ):
         # there is no snowmelt method because the snow depth
         # affects the ET rate.  Otherwise, return to caller.
         #---------------------------------------------------------
-        if not(SILENT):
+        if not(self.SILENT):
             print(' ')
             print('Snow component: Initializing...')
             
@@ -156,7 +158,7 @@ class snow_component( BMI_base.BMI_component ):
         self.initialize_time_vars()
    
         if (self.comp_status == 'Disabled'):
-            if not(SILENT):
+            if not(self.SILENT):
                 print('Snow component: Disabled in CFG file.')
             self.disable_all_output()
             self.h_snow  = self.initialize_scalar(0, dtype='float64')
@@ -253,7 +255,8 @@ class snow_component( BMI_base.BMI_component ):
         self.close_output_files()
         self.status = 'finalized'  # (OpenMI)
 
-        self.print_final_report(comp_name='Snow component')
+        if not(self.SILENT):
+            self.print_final_report(comp_name='Snow component')
        
     #   finalize()
     #-------------------------------------------------------------------
@@ -588,7 +591,7 @@ class snow_component( BMI_base.BMI_component ):
     #-------------------------------------------------------------------  
     def open_output_files(self):
 
-        model_output.check_netcdf()
+        model_output.check_netcdf( SILENT=self.SILENT )
         self.update_outfile_names()
         
         #----------------------------------

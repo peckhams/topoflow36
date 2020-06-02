@@ -252,8 +252,9 @@ class HIS_component(BMI_base.BMI_component):
     def initialize(self, cfg_file=None, mode="nondriver",
                    SILENT=False):
 
-        if not(SILENT):
-            print(' ')
+        self.SILENT = SILENT
+        if not(selfSILENT):
+            print()
             print('Data-HIS component: Initializing...')
             
         self.status   = 'initializing'  # (OpenMI 2.0 convention)
@@ -275,7 +276,7 @@ class HIS_component(BMI_base.BMI_component):
         # Has component been turned off ?
         #----------------------------------
         if (self.comp_status == 'Disabled'):
-            if not(SILENT):
+            if not(self.SILENT):
                 print('HIS Data component: Disabled in CFG file.')
             self.T_air  = np.float64(0)   ####################################
             self.P      = np.float64(0)
@@ -324,9 +325,10 @@ class HIS_component(BMI_base.BMI_component):
         ymin   = str(self.south_edge_lat)
         networkIDs = ''
         
-        print('Attempting to retrieve data from HIS Central...')
-        print('     HIS_Central_URL =', self.HIS_Central_URL)
-        print('     Data keyword    =', self.data_keyword)
+        if not(self.SILENT):
+            print('Attempting to retrieve data from HIS Central...')
+            print('     HIS_Central_URL =', self.HIS_Central_URL)
+            print('     Data keyword    =', self.data_keyword)
 ##        print '     xmin, xmax      =', xmin, ',', xmax
 ##        print '     ymin, ymax      =', ymin, ',', ymax
 ##        print '     start_date      =', self.start_date
@@ -715,7 +717,7 @@ class HIS_component(BMI_base.BMI_component):
         #-------------------------------------------------
         # Notes:  v0 = infiltration rate at surface
         #-------------------------------------------------
-        model_output.check_netcdf()
+        model_output.check_netcdf( SILENT=self.SILENT )
         self.update_outfile_names()
         
 ##        #--------------------------------------
