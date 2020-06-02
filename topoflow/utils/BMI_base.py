@@ -212,13 +212,15 @@ class BMI_component:
         # self.CCA              = tf_utils.TF_Use_CCA()
         # self.USE_GUI_SETTINGS = False
         ######################################################
-        
+ 
+        self.SILENT      = True    # (new default: 11/16/11)        
         ## self.DEBUG    = True
-        self.DEBUG       = False
-        self.SKIP_ERRORS = False
-        self.SILENT      = True   # (new default: 11/16/11) 
+        self.DEBUG       = False   # a "VERBOSE" setting
+        if (self.DEBUG):
+            self.SILENT  = False
         self.REPORT      = False
         self.DONE        = False
+        self.SKIP_ERRORS = False
         self.status      = 'created'   # (OpenMI 2.0 conventions)
 
         self.in_directory     = None
@@ -1259,7 +1261,7 @@ class BMI_component:
                 
     #   update_time()
     #-------------------------------------------------------------------
-    def print_time_and_value(self, var, var_name='Q_out',
+    def print_time_and_value(self, value, var_name='Q_out',
                              units_name='[m^3/s]',
                              interval=2.0,
                              PRINT_INDEX=False):
@@ -1287,12 +1289,27 @@ class BMI_component:
             else:
                 cur_time = self.time
                 time_units_str = ' [' + self.time_units + ']' 
+            #------------------------
+            # Build the time string
+            #------------------------
             time_str = 'Time = ' + ("%10.2f" % cur_time)
             time_str = time_str + time_units_str
-            #-------------------------------------------------
-            var_str  = var_name + ' = ' + ("%10.5f" % var)
-            var_str  = var_str  + ' ' + units_name          
-            #-------------------------------------------------      
+
+            #------------------------
+            # Build the value string
+            #------------------------
+            if (value < 1e6):
+                val_str   = ("%10.5f" % value)
+                units_str = units_name
+            else:
+                val_str = ("%10.5f" % (value / 1e6))
+                units_str = 'x 10^6 ' + units_name          
+            #--------------------------------------
+            var_str  = var_name + ' = ' + val_str
+            var_str  = var_str  + ' ' + units_str                 
+            # var_str  = var_name + ' = ' + ("%10.5f" % var)
+            # var_str  = var_str  + ' ' + units_name          
+            #----------------------------------------     
             print((time_str + ',  ' + var_str))
             #-----------------------------------------------------
             if (PRINT_INDEX):
@@ -1480,7 +1497,7 @@ class BMI_component:
         #        this method must be called before that from the
         #        initialize_config_vars() method.
         #------------------------------------------------------------
-        if not(self.SILENT):
+        if (self.DEBUG):
             print('Reading path info config file.')
         # print( 'In read_path_info(), cfg_file =')
         # print( self.cfg_file )         
@@ -1560,7 +1577,7 @@ class BMI_component:
         #        This is virtually identical to read_path_info().
         #        Also see read_grid_info() in this file.
         #--------------------------------------------------------------        
-        if not(self.SILENT):
+        if (self.DEBUG):
             print('Reading time info config file.')
 
 #         print ('In read_file_info, cfg_directory = ' + self.cfg_directory)
