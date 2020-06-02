@@ -1013,7 +1013,7 @@ class framework():
     #   set_values_at_indices()
     #-------------------------------------------------------------------
     def initialize( self, comp_name, cfg_file=None,
-                    mode='nondriver'):
+                    mode='nondriver', SILENT=False):
 
         #------------------------------
         # Is comp_name in comp_list ?
@@ -1024,7 +1024,7 @@ class framework():
         bmi = self.comp_set[ comp_name ]
         if (cfg_file == None):
             cfg_file = self.get_cfg_filename( bmi )
-        bmi.initialize( cfg_file=cfg_file, mode=mode )
+        bmi.initialize( cfg_file=cfg_file, mode=mode, SILENT=SILENT )
             
     #   initialize()
     #-------------------------------------------------------------------
