@@ -396,8 +396,7 @@ class calibrator:
     #---------------------------------------------------------------------
     def modify_channel_grid_file(self, cal_var, param, SILENT=True ):    
 
-        ## REPORT       = not(SILENT)
-        REPORT = True
+        REPORT       = not(SILENT)
         topo_dir     = self.topo_dir
         site_prefix  = self.site_prefix
         d8_area_file = site_prefix + '_area.rtg'
@@ -544,7 +543,7 @@ class calibrator:
             #------------------------------------------------
             main.run_model(cfg_prefix=self.cfg_prefix,
                            cfg_directory=self.cfg_dir,
-                           SILENT=True,  #######
+                           SILENT=True,  ### (always for calibration)
                            time_interp_method=tf_time_interp_method)
 
             #---------------------------------
