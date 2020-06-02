@@ -127,16 +127,16 @@
 #
 #-----------------------------------------------------------------------
 
-import numpy as np
 import os, sys, time
-# import traceback
-# import wx
+import numpy as np
 import xml.dom.minidom
 
 from topoflow.framework import time_interpolation    # (time_interpolator class)
 # from topoflow.framework import unit_conversion  # (unit_convertor class)
 # from topoflow.framework import grid_remapping
 
+# import traceback
+# import wx
 # import OrderedDict_backport  # (for Python 2.4 to 2.7)
 
 #--------------------------------------------------------------
@@ -182,17 +182,6 @@ framework_dir = framework_dir + os.sep
 parent_dir    = parent_dir    + os.sep
 examples_dir  = examples_dir  + os.sep
 
-# SILENT = False
-# if not(SILENT):
-#     # print ' '
-#     print('Paths for this package:')
-#     print('framework_dir = ' + framework_dir)
-#     print('parent_dir    = ' + parent_dir)
-#     print('examples_dir  = ' + examples_dir)
-#     print('__file__      = ' + __file__)
-#     print('__name__      = ' + __name__)
-#     print(' ')
-
 #--------------------------------------
 # Save the full paths in a dictionary
 #--------------------------------------
@@ -232,10 +221,10 @@ class comp_data():
         self.version        = version
         self.language       = language
         self.author         = author
-        #---------------------------------------       
+        #-------------------------------------       
         self.help_url       = help_url
         self.cfg_template   = cfg_template
-        #---------------------------------------
+        #-------------------------------------
         self.time_step_type = time_step_type
         self.time_units     = time_units
         self.grid_type      = grid_type
@@ -245,8 +234,7 @@ class comp_data():
         # This should be a Python list
         #-------------------------------
         self.uses_types     = uses_types
-
-        
+     
 #   comp_data (class)
 #-----------------------------------------------------------------------
 class framework():
@@ -266,47 +254,6 @@ class framework():
 #     # calls to get_package_paths().  This is a known Python issue
 #     # that has been discussed frequently online.  (9/17/14)
 #     ##################################################################
-# 
-#     #------------------------------------------------------
-#     # Get path to the current file (emeli.py).  (7/29/13)
-#     # At top need: "#! /usr/bin/env python" ??
-#     # See: https://docs.python.org/2/library/os.path.html
-#     #------------------------------------------------------
-#     framework_dir = os.path.dirname( __file__ )
-#     parent_dir    = os.path.join( framework_dir, '..' )
-#     # parent_dir    = os.path.join( framework_dir, os.path.pardir )
-#     examples_dir  = os.path.join( parent_dir, 'examples' )
-#     #-------------------------------------------------------
-#     framework_dir = os.path.abspath( framework_dir )
-#     parent_dir    = os.path.abspath( parent_dir )
-#     examples_dir  = os.path.abspath( examples_dir )
-#     #-------------------------------------------------------
-# #     framework_dir = os.path.realpath( framework_dir )
-# #     parent_dir    = os.path.realpath( parent_dir )
-# #     examples_dir  = os.path.realpath( examples_dir )
-#     #-------------------------------------------------------
-#     framework_dir = framework_dir + os.sep
-#     parent_dir    = parent_dir    + os.sep
-#     examples_dir  = examples_dir  + os.sep
-# 
-#     SILENT = False
-#     if not(SILENT):
-#         print ' '
-#         print 'Paths for this package:'
-#         print 'framework_dir =', framework_dir
-#         print 'parent_dir    =', parent_dir
-#         print 'examples_dir  =', examples_dir
-#         print '__file__      =', __file__
-#         print '__name__      =', __name__
-#         print ' '
-#     
-#     #--------------------------------------
-#     # Save the full paths in a dictionary
-#     #--------------------------------------
-#     paths = dict()
-#     paths['framework']        = framework_dir
-#     paths['examples']         = examples_dir
-#     paths['framework_parent'] = parent_dir
 
     #-------------------------------------------------------------------
     def __init__( self, SILENT=True ):

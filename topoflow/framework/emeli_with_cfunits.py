@@ -175,24 +175,9 @@ framework_dir = os.path.abspath( framework_dir )
 parent_dir    = os.path.abspath( parent_dir )
 examples_dir  = os.path.abspath( examples_dir )
 #-------------------------------------------------------
-#     framework_dir = os.path.realpath( framework_dir )
-#     parent_dir    = os.path.realpath( parent_dir )
-#     examples_dir  = os.path.realpath( examples_dir )
-#-------------------------------------------------------
 framework_dir = framework_dir + os.sep
 parent_dir    = parent_dir    + os.sep
 examples_dir  = examples_dir  + os.sep
-
-SILENT = False
-if not(SILENT):
-    # print ' '
-    print('Paths for this package:')
-    print('framework_dir = ' + framework_dir)
-    print('parent_dir    = ' + parent_dir)
-    print('examples_dir  = ' + examples_dir)
-    print('__file__      = ' + __file__)
-    print('__name__      = ' + __name__)
-    print(' ')
 
 #--------------------------------------
 # Save the full paths in a dictionary
@@ -202,13 +187,14 @@ paths['framework']        = framework_dir
 paths['examples']         = examples_dir
 paths['framework_parent'] = parent_dir
 
+#-----------------------------------------------------------------------
+
 ## This works fine.
 # from topoflow.framework.tests import rti_files   ## (works fine)
 
 ## This doesn't work because test_framework.py already imported emeli.py.
 # from topoflow.framework.tests import test_framework
-
-  
+ 
 #-----------------------------------------------------------------------
 class comp_data():
     
@@ -260,54 +246,29 @@ class framework():
     secs_per_year  = 365 * secs_per_day
     secs_per_month = secs_per_year / 12    #########
 
-#     ##################################################################
-#     # NOTE:  "get_package_paths" will not work as intended on Python
-#     # versions less than 3.4 if os.chddir() is called between two
-#     # calls to get_package_paths().  This is a known Python issue
-#     # that has been discussed frequently online.  (9/17/14)
-#     ##################################################################
-# 
-#     #------------------------------------------------------
-#     # Get path to the current file (emeli.py).  (7/29/13)
-#     # At top need: "#! /usr/bin/env python" ??
-#     # See: https://docs.python.org/2/library/os.path.html
-#     #------------------------------------------------------
-#     framework_dir = os.path.dirname( __file__ )
-#     parent_dir    = os.path.join( framework_dir, '..' )
-#     # parent_dir    = os.path.join( framework_dir, os.path.pardir )
-#     examples_dir  = os.path.join( parent_dir, 'examples' )
-#     #-------------------------------------------------------
-#     framework_dir = os.path.abspath( framework_dir )
-#     parent_dir    = os.path.abspath( parent_dir )
-#     examples_dir  = os.path.abspath( examples_dir )
-#     #-------------------------------------------------------
-# #     framework_dir = os.path.realpath( framework_dir )
-# #     parent_dir    = os.path.realpath( parent_dir )
-# #     examples_dir  = os.path.realpath( examples_dir )
-#     #-------------------------------------------------------
-#     framework_dir = framework_dir + os.sep
-#     parent_dir    = parent_dir    + os.sep
-#     examples_dir  = examples_dir  + os.sep
-# 
-#     SILENT = False
-#     if not(SILENT):
-#         print ' '
-#         print 'Paths for this package:'
-#         print 'framework_dir =', framework_dir
-#         print 'parent_dir    =', parent_dir
-#         print 'examples_dir  =', examples_dir
-#         print '__file__      =', __file__
-#         print '__name__      =', __name__
-#         print ' '
-#     
-#     #--------------------------------------
-#     # Save the full paths in a dictionary
-#     #--------------------------------------
-#     paths = dict()
-#     paths['framework']        = framework_dir
-#     paths['examples']         = examples_dir
-#     paths['framework_parent'] = parent_dir
-        
+    #-------------------------------------------------------------------
+    def __init__( self, SILENT=True ):
+    
+        self.SILENT = SILENT
+        if not(self.SILENT):
+            # print ' '
+            print('Paths for this package:')
+            print('framework_dir = ' + framework_dir)
+            print('parent_dir    = ' + parent_dir)
+            print('examples_dir  = ' + examples_dir)
+            print('__file__      = ' + __file__)
+            print('__name__      = ' + __name__)
+            print()
+
+        #----------------------------------------
+        # Save the full paths in a dictionary
+        #----------------------------------------
+        # paths is already saved in the module,
+        # saving it here in the instance.
+        #----------------------------------------
+        self.paths = paths
+
+    #   __init__()           
     #-------------------------------------------------------------------
     def read_repository( self, SILENT=True ):
 
