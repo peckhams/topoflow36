@@ -343,6 +343,7 @@ class topoflow_driver( BMI_base.BMI_component ):
         #------------------------------------------------------
         self.SILENT = SILENT
         if not(self.SILENT):
+            print()
             print('TopoFlow component: Initializing...')
         
         self.status     = 'initializing'  # (OpenMI 2.0 convention)
@@ -376,15 +377,7 @@ class topoflow_driver( BMI_base.BMI_component ):
         #-----------------------
         self.initialize_time_vars()  # (uses cp.dt from above)
         self.initialize_stop_vars()   #### (do this with CFG file ?)
-                          
-        #### self.nz = self.ip.get_scalar_long('nz')   #######
-
-        #------------------------------------
-        # Check if output options are valid
-        #------------------------------------
-##        outlet_IDs, n_outlets, outlet_ID, OK = \
-##            Check_Output_Options(grid_vars, rv, cv, sv, ev, iv, gv, nx, ny)
-      
+    
         #---------------------
         # Open the logfile ?      *** (Append or overwrite ??)
         #---------------------
@@ -396,14 +389,14 @@ class topoflow_driver( BMI_base.BMI_component ):
             if not(self.SILENT):
                 print('Opening log file:')
                 print('    log_file = ' + self.log_file)
+
         #----------------------
         # Print start message
         #----------------------
         if not(self.SILENT):
-            print(' ')
             print('Starting TopoFlow model run...')
-            hline = ''.ljust(60, '-')
-            print(hline)
+            ## hline = ''.ljust(60, '-')
+            ## print(hline)
         self.status = 'initialized'
         
     #   initialize()        
@@ -435,7 +428,6 @@ class topoflow_driver( BMI_base.BMI_component ):
         
         self.status = 'updating'
         OK = True
-        ## if (self.VERBOSE):
         if (self.mode == 'driver') and not(self.SILENT):
             self.print_time_and_value(self.Q_outlet, 'Q_out', '[m^3/s]',
                                       interval=0.5)  # [seconds]

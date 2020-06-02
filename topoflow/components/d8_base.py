@@ -350,7 +350,6 @@ class d8_component( BMI_base.BMI_component ):
     #   initialize()
     #-------------------------------------------------------------------
     def update(self, time=None, DEM=None, REPORT=False):
-               #### SILENT=True)  # (self.SILENT set in initialize)
 
         self.status = 'updating'  # (OpenMI 2.0 convention)
         if not(self.SILENT):
@@ -435,7 +434,6 @@ class d8_component( BMI_base.BMI_component ):
     #   set_computed_input_vars()
     #-------------------------------------------------------------------
     def initialize_computed_vars(self, DOUBLE=False, REPORT=False):
-                                 ### SILENT=True)  # now using self.SILENT
 
         self.RT3_TEST = False  # (default setting)
         nx = self.nx  # (Local synonyms)
@@ -472,8 +470,9 @@ class d8_component( BMI_base.BMI_component ):
         # Option to fill pits in the initial DEM (11/7/11)
         #---------------------------------------------------
         if (self.FILL_PITS_IN_Z0):
-            print(' ')
-            print('Filling pits in initial DEM...')
+            if not(self.SILENT):
+                print()
+                print('Filling pits in initial DEM...')
             fill_pits.fill_pits( self.DEM, 'FLOAT', self.nx, self.ny,
                                  SILENT=self.SILENT )
             #--------------------------
@@ -489,7 +488,7 @@ class d8_component( BMI_base.BMI_component ):
     #---------------------------------------------------------------------
     def get_pixel_dimensions(self, DOUBLE=False, REPORT=False):
 
-        if not(self.SILENT):
+        if (self.DEBUG):
             print('Computing pixel dimensions...')
 
         dx, dy, dd = pixels.get_sizes_by_row(self.rti, METERS=True)
@@ -597,7 +596,7 @@ class d8_component( BMI_base.BMI_component ):
         # Get a grid which for each grid cell contains the
         # calendar-style index (or ID) of that grid cell.
         #-----------------------------------------------------
-        if not(self.SILENT):
+        if (self.DEBUG):
             print('Computing pixel IDs...')
         
         nx = self.nx
@@ -626,7 +625,7 @@ class d8_component( BMI_base.BMI_component ):
     #-------------------------------------------------------------------
     def get_edge_IDs(self):
 
-        if not(self.SILENT):
+        if (self.DEBUG):
             print('Computing edge pixel IDs...')
 
         #------------------------------------------
@@ -657,7 +656,7 @@ class d8_component( BMI_base.BMI_component ):
     #---------------------------------------------------------------------
     def get_not_edge_grid(self):
 
-        if not(self.SILENT):
+        if (self.DEBUG):
             print('Computing "not_edge" grid...')
 
         self.not_edge_grid = np.ones([self.ny, self.nx],

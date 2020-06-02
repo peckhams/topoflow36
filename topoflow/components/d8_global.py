@@ -585,7 +585,7 @@ class d8_component( d8_base.d8_component ):
         # Note: This version can handle periodic boundaries,
         #       as can occur in a landscape evolution model.
         #-----------------------------------------------------
-        if not(self.SILENT):
+        if (self.DEBUG):
             print('Finding parent pixel IDs...')
         
         nx = self.nx

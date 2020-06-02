@@ -978,8 +978,8 @@ class channels_component( BMI_base.BMI_component ):
                 self.nval_min = self.nval.min()
                 self.nval_max = self.nval.max()
                 if not(self.SILENT):
-                    print('    min(nval) = ' + str(self.nval_min) )
-                    print('    max(nval) = ' + str(self.nval_max) )
+                    print('    min(nval)      = ' + str(self.nval_min) )
+                    print('    max(nval)      = ' + str(self.nval_max) )
             #-------------------------------------------------------------
             self.z0val     = self.initialize_scalar(-1, dtype='float64')
             self.z0val_min = self.initialize_scalar(-1, dtype='float64')
@@ -990,8 +990,8 @@ class channels_component( BMI_base.BMI_component ):
                 self.z0val_min = self.z0val.min()
                 self.z0val_max = self.z0val.max()
                 if not(self.SILENT):
-                    print('    min(z0val) = ' + str(self.z0val_min) )
-                    print('    max(z0val) = ' + str(self.z0val_max) )
+                    print('    min(z0val)     = ' + str(self.z0val_min) )
+                    print('    max(z0val)     = ' + str(self.z0val_max) )
             #-------------------------------------------------------------
             self.nval      = self.initialize_scalar(-1, dtype='float64')
             self.nval_min  = self.initialize_scalar(-1, dtype='float64')
@@ -3619,10 +3619,15 @@ class channels_component( BMI_base.BMI_component ):
         #------------------------
         wnan = np.where( np.isnan( self.slope ) )
         nnan = np.size( wnan[0] )
+        #------------------------
+        # Are any slopes zero ?
+        #------------------------
+        wzero = np.where( self.slope == 0.0 )
+        nzero = np.size( wzero[0] )
         #-------------------------------
-        # Are any slopes nonpositive ?
+        # Are any slopes negative ?
         #-------------------------------
-        wneg = np.where( self.slope <= 0.0 )
+        wneg = np.where( self.slope < 0.0 )
         nneg = np.size( wneg[0] )
         #-------------------------------
         # Are any slopes infinite ?
@@ -3630,7 +3635,7 @@ class channels_component( BMI_base.BMI_component ):
         winf = np.where( np.isinf( self.slope ) )
         ninf = np.size( winf[0] )
         #----------------------------
-        nbad = (nnan + nneg + ninf)
+        nbad = (nnan + nneg + ninf + nzero)
         if (nbad == 0):
             return
 
@@ -3640,6 +3645,7 @@ class channels_component( BMI_base.BMI_component ):
         S_shape = self.slope.shape
         bad = np.zeros( S_shape, dtype='bool' )
         if (nnan > 0): bad[ wnan ] = True
+        if (nzero >0): bad[ wzero] = True
         if (nneg > 0): bad[ wneg ] = True
         if (ninf > 0): bad[ winf ] = True
         good = np.invert( bad )
@@ -3657,7 +3663,8 @@ class channels_component( BMI_base.BMI_component ):
         #--------------------
         if not(self.SILENT):
             print('Total number of slope values = ' + str(np.size(self.slope)) )
-            print('Number of nonpositive values = ' + str(nneg) )
+            print('Number of zero values        = ' + str(nzero) + ' (maybe edge)' )
+            print('Number of negative values    = ' + str(nneg) )
             print('Number of NaN values         = ' + str(nnan) )
             print('Number of infinite values    = ' + str(ninf) )
             print('-------------------------------------------------')
