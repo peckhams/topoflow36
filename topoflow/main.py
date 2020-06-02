@@ -12,7 +12,7 @@ from topoflow.framework import emeli
 #-----------------------------------------------------------------------
 def run_model( driver_comp_name ='topoflow_driver',
                cfg_prefix='June_20_67',
-               cfg_directory=None,
+               cfg_directory=None, SILENT=False,
                time_interp_method='Linear'):
 
     #----------------------------------------------------------
@@ -36,34 +36,35 @@ def run_model( driver_comp_name ='topoflow_driver',
     f.run_model( driver_comp_name =driver_comp_name ,
                  cfg_prefix=cfg_prefix,
                  cfg_directory=cfg_directory,
+                 SILENT=SILENT,
                  time_interp_method=time_interp_method )
 
 #   run_model()
 #-------------------------------------------------------------------
-def run_test(test='treynor_kin_wave'):
-
-    #---------------------------------------------------
-    # Notes: These all use the Treynor, Iowa watershed
-    #        and historic rain storm of June 20, 1967.
-    #        Treynor is within the Nishnabotna River.
-    #---------------------------------------------------
-    cfg_prefix = 'June_20_67'
-    test_dir = emeli.paths['examples']
-    test_dir += 'Treynor_Iowa_30m/__Tests/'
- 
-    if (test == 'treynor_kin_wave'):
-        cfg_dir = test_dir + 'Test1_kin_wave/'
-    elif (test == 'treynor_diff_wave'):
-        cfg_prefix = 'June_20_67'
-        cfg_dir  = test_dir + 'Test2_diff_wave'
-    elif (test == 'treynor_infil_smith_parlange'):
-        cfg_prefix = 'June_20_67'
-        cfg_dir  = test_dir + 'Test3_infil_smith_parlange'
-        
-    #----------------------       
-    # Run the chosen test
-    #----------------------  
-    run_model(cfg_prefix=cfg_prefix, cfg_directory=cfg_dir)
+# def run_test(test='treynor_kin_wave'):
+# 
+#     #---------------------------------------------------
+#     # Notes: These all use the Treynor, Iowa watershed
+#     #        and historic rain storm of June 20, 1967.
+#     #        Treynor is within the Nishnabotna River.
+#     #---------------------------------------------------
+#     cfg_prefix = 'June_20_67'
+#     test_dir = emeli.paths['examples']
+#     test_dir += 'Treynor_Iowa_30m/__Tests/'
+#  
+#     if (test == 'treynor_kin_wave'):
+#         cfg_dir = test_dir + 'Test1_kin_wave/'
+#     elif (test == 'treynor_diff_wave'):
+#         cfg_prefix = 'June_20_67'
+#         cfg_dir  = test_dir + 'Test2_diff_wave'
+#     elif (test == 'treynor_infil_smith_parlange'):
+#         cfg_prefix = 'June_20_67'
+#         cfg_dir  = test_dir + 'Test3_infil_smith_parlange'
+#         
+#     #----------------------       
+#     # Run the chosen test
+#     #----------------------  
+#     run_model(cfg_prefix=cfg_prefix, cfg_directory=cfg_dir)
    
 #   run_test()
 #-------------------------------------------------------------------
