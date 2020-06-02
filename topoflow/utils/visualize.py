@@ -738,8 +738,8 @@ def create_movie_from_images( mp4_file, png_dir, fps=10, REPORT=True):
 
 #   create_movie_from_images()
 #--------------------------------------------------------------------
-def plot_data( x, y, xmin=None, xmax=None, ymin=None, ymax=None,
-               x_name='x', x_units='', marker=',', 
+def plot_data( x, y, y2=None, xmin=None, xmax=None, ymin=None, ymax=None,
+               x_name='x', x_units='', marker=',', title=None,
                y_name='y', y_units='',
                x_size=8,   y_size=4):
 
@@ -766,9 +766,14 @@ def plot_data( x, y, xmin=None, xmax=None, ymin=None, ymax=None,
     # y_name2 = y_name.replace('_', ' ').title()
         
     plt.plot( x, y, marker=marker)
+    if (y2 is not None):
+        plt.plot(x, y2, marker=marker)
+
     plt.xlabel( x_name + ' [' + x_units + ']' )
     plt.ylabel( y_name + ' [' + y_units + ']' )
-    
+    if (title is not None):
+        plt.title( title )
+
     plt.ylim( ymin, ymax )
     plt.xlim( xmin, xmax )
     #-------------------------------------

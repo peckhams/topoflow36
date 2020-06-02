@@ -89,7 +89,7 @@ def test2():
                            
 #   test2()   
 #------------------------------------------------------------------------
-def get_grid_from_TCA( site_prefix=None, cfg_dir=None, 
+def get_grid_from_TCA( site_prefix=None, topo_dir=None, 
                        area_file=None, out_file=None,
                        A1=None, g1=None,
                        A2=None, g2=None,
@@ -97,9 +97,9 @@ def get_grid_from_TCA( site_prefix=None, cfg_dir=None,
 
     if (site_prefix is None):
         site_prefix = 'Treynor'
-    if (cfg_dir is None):
-        cfg_dir = '/Users/peckhams/Dropbox/TopoFlow_3.6/topoflow/'
-        cfg_dir += 'examples/Treynor_Iowa_30m/'
+    if (topo_dir is None):
+        topo_dir = '/Users/peckhams/Dropbox/TopoFlow_3.6/topoflow/'
+        topo_dir += 'examples/Treynor_Iowa_30m/'
     if (area_file is None):
         area_file = site_prefix + '_area.rtg'
     if (out_file is None):
@@ -108,7 +108,7 @@ def get_grid_from_TCA( site_prefix=None, cfg_dir=None,
     #-------------------------------------------------------
     # Read header_file info for both area_file and out_file
     #-------------------------------------------------------
-    header_file = (cfg_dir + site_prefix + '.rti')
+    header_file = (topo_dir + site_prefix + '.rti')
     grid_info = rti_files.read_info( header_file, REPORT=False)
     
     #-------------------------------------------------------
@@ -116,7 +116,7 @@ def get_grid_from_TCA( site_prefix=None, cfg_dir=None,
     #-------------------------------------------------------
     # Also available as d8.A
     #-------------------------------------------------------------
-    area_file2 = cfg_dir + area_file
+    area_file2 = topo_dir + area_file
     A = rtg_files.read_grid( area_file2, grid_info, RTG_type='FLOAT' )
 
     #----------------------------------- 
@@ -199,11 +199,12 @@ def get_grid_from_TCA( site_prefix=None, cfg_dir=None,
     #----------------------------------
     # Write computed grid to out_file
     #----------------------------------
-    out_file2 = (cfg_dir + out_file)
+    out_file2 = (topo_dir + out_file)
     rtg_files.write_grid( grid, out_file2, grid_info, RTG_type='FLOAT')
-    print( 'Finished writing file: ')
-    print( out_file2 )
-    print()
+    if (REPORT):
+        print( 'Finished writing file: ')
+        print( out_file2 )
+        print()
 
 #   get_grid_from_TCA()
 #------------------------------------------------------------------------

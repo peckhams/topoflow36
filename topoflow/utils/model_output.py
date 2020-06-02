@@ -49,7 +49,7 @@ from . import text_ts_files
 # import text_ps_files  # (not written yet)
 
 #-------------------------------------------------------------------
-def check_netcdf():
+def check_netcdf( SILENT=False ):
 
     #---------------------------------------------------
     # Try to import the Nio module from PyNIO package.
@@ -61,12 +61,15 @@ def check_netcdf():
     #---------------------------------------------------
     try:
         import netCDF4
-        print('Imported netCDF4 version: ' + netCDF4.__version__)
+        if not(SILENT):
+            print('Imported netCDF4 version: ' + netCDF4.__version__)
     except:
-        print(' ')
-        print('SORRY, Cannot write netCDF files because')
-        print('the "netCDF4" package cannot be imported.')
-        print(' ')
+        if not(SILENT):
+            print()
+            print('SORRY, Cannot write netCDF files because')
+            print('the "netCDF4" package cannot be imported.')
+            print()
+            
 #         python_version = sys.version[:3]
 #         if (python_version != '2.6'):
 #             print 'Note that "PyNIO" is only installed for'
@@ -74,40 +77,40 @@ def check_netcdf():
 #             print 'The current Python version is:', python_version
 
 #   check_netcdf()
-    #----------------------------------------------------------
-    def get_dtype_map(self):
+#----------------------------------------------------------
+def get_dtype_map(self):
 
-        #----------------------------------------
-        # Possible settings for "dtype_code"
-        #----------------------------------------------------
-        # These two-char codes are used for netCDF4 package
-        #----------------------------------------------------
-        # See:  http://unidata.github.io/netcdf4-python/
-        #----------------------------------------------------
-        dtype_map = {'float64':'f8', 'float32':'f4',
-                        'int64':'i8', 'int32':'i4',
-                        'int16':'i2', 'int8':'i',
-                        'S|100':'S1'}  # ( ????? )       
+    #----------------------------------------
+    # Possible settings for "dtype_code"
+    #----------------------------------------------------
+    # These two-char codes are used for netCDF4 package
+    #----------------------------------------------------
+    # See:  http://unidata.github.io/netcdf4-python/
+    #----------------------------------------------------
+    dtype_map = {'float64':'f8', 'float32':'f4',
+                 'int64':'i8', 'int32':'i4',
+                 'int16':'i2', 'int8':'i',
+                 'S|100':'S1'}  # ( ????? )       
         
-        #-------------------------------------------------
-        # These one-char codes are used for Nio in PyNIO
-        #-------------------------------------------------
-        # dtype_code = "d"  # (double, Float64)
-        # dtype_code = "f"  # (float,  Float32)
-        # dtype_code = "l"  # (long,   Int64)
-        # dtype_code = "i"  # (int,    Int32)
-        # dtype_code = "h"  # (short,  Int16)
-        # dtype_code = "b"  # (byte,   Int8)
-        # dtype_code = "S1" # (char)
-        #-------------------------------------------
+    #-------------------------------------------------
+    # These one-char codes are used for Nio in PyNIO
+    #-------------------------------------------------
+    # dtype_code = "d"  # (double, Float64)
+    # dtype_code = "f"  # (float,  Float32)
+    # dtype_code = "l"  # (long,   Int64)
+    # dtype_code = "i"  # (int,    Int32)
+    # dtype_code = "h"  # (short,  Int16)
+    # dtype_code = "b"  # (byte,   Int8)
+    # dtype_code = "S1" # (char)
+    #-------------------------------------------
 #         dtype_map = {'float64':'d', 'float32':'f',
 #                         'int64':'l', 'int32':'i',
 #                         'int16':'s', 'int8':'b',
 #                         'S|100':'S1'}  # (check last entry)                      
 
-        return dtype_map
+    return dtype_map
     
-    #   get_dtype_map()
+#   get_dtype_map()
 #-------------------------------------------------------------------
 def open_new_gs_file(self, file_name, info=None,
                      var_name='X',
