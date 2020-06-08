@@ -233,9 +233,9 @@ class rtg_file():
         #-----------------------------
         info.grid_file   = file_name
         info.data_type   = rti_files.get_rti_data_type( dtype )
-        info.data_source = 'TopoFlow 3.0'
-        info.gmin        = -9999.0
-        info.gmax        = -9999.0
+        info.data_source = 'TopoFlow 3.6'
+        ### info.gmin        = -9999.0
+        ### info.gmax        = -9999.0
         
         #---------------------------------------
         # If new "info" was provided, store it

@@ -24,6 +24,7 @@
 #
 #  Define functions to show grids as color images:
 #  read_grid_from_nc_file()
+#  read_and_show_rtg()
 #  show_grid_as_image()
 #  save_grid_stack_as_images()
 #  save_rts_as_images()
@@ -47,13 +48,15 @@
 
 import glob, os
 import numpy as np
+
 import matplotlib.pyplot as plt
+from matplotlib import cm
+from matplotlib.colors import ListedColormap
 import imageio
 
 from topoflow.utils import ncgs_files
 from topoflow.utils import ncts_files
 from topoflow.utils import ncps_files
-
 from topoflow.utils import rtg_files
 from topoflow.utils import rts_files
 
@@ -163,6 +166,7 @@ def stretch_grid( grid, stretch, a=1, b=2, p=0.5 ):
 #   stretch_grid()
 #--------------------------------------------------------------------
 #--------------------------------------------------------------------
+
 def read_grid_from_nc_file( nc_file, time_index=1, REPORT=True ):
 
     # Typical 2D nc files
@@ -218,8 +222,40 @@ def read_grid_from_nc_file( nc_file, time_index=1, REPORT=True ):
     
 #   read_grid_from_nc_file()
 #--------------------------------------------------------------------
+def read_and_show_rtg( rtg_filename, long_name, VERBOSE=True,
+                       cmap='jet', BLACK_ZERO=False,
+                       stretch='hist_equal',
+                       a=1, b=2, p=0.5,
+                       xsize=8, ysize=8, dpi=None ):
+    
+    rtg = rtg_files.rtg_file()
+    OK  = rtg.open_file( rtg_filename )
+    if not(OK):
+        print('Sorry, Could not open RTG file:')
+        print( rtg_filename )
+        return
+    
+    grid   = rtg.read_grid( VERBOSE=VERBOSE )
+    extent = rtg.get_bounds()
+    rtg.close_file()
+
+    if (VERBOSE):
+        print('Byte swap needed =', rtg.byte_swap_needed())
+        print('Reading grid from RTG file...')
+        print('extent =', extent)
+        print('min(grid), max(grid) =', grid.min(), grid.max())
+        print('Finished.')
+        print()
+
+    show_grid_as_image( grid, long_name, extent=extent, cmap=cmap,
+                        BLACK_ZERO=BLACK_ZERO, stretch=stretch,
+                        a=a, b=b, p=p,
+                        xsize=xsize, ysize=ysize, dpi=dpi)
+                              
+#   read_and_show_rtg()
+#--------------------------------------------------------------------
 def show_grid_as_image( grid, long_name, extent=None,
-                        cmap='rainbow',
+                        cmap='rainbow', BLACK_ZERO=False,
                         stretch='power3',
                         a=1, b=2, p=0.5,
                         NO_SHOW=False, im_file=None,
@@ -254,6 +290,23 @@ def show_grid_as_image( grid, long_name, extent=None,
 #         print('SORRY, Unknown stretch =', stretch)
 #         return 
 
+    #---------------------------------------
+    # Modify the colormap (0 = black) ?
+    # cmap is name of colormap, a string
+    #--------------------------------------------------------
+    # cmap arg to imshow can be name (as str) or cmap array
+    # 4th entry is opacity, or alpha channel (I think)
+    #--------------------------------------------------------
+    if (BLACK_ZERO):
+        n_colors = 256
+        color_map  = cm.get_cmap( cmap, n_colors )
+        new_colors = color_map( np.linspace(0, 1, 256) )
+        black = np.array([0.0, 0.0, 0.0, 1.0])
+        new_colors[0,:] = black
+        new_cmap = ListedColormap( new_colors )
+    else:
+        new_cmap = cmap
+    
     #----------------------------
     # Set up and show the image
     #----------------------------
@@ -267,7 +320,7 @@ def show_grid_as_image( grid, long_name, extent=None,
     gmin = grid2.min()
     gmax = grid2.max()
 
-    im = ax.imshow(grid2, interpolation='nearest', cmap=cmap,
+    im = ax.imshow(grid2, interpolation='nearest', cmap=new_cmap,
                    vmin=gmin, vmax=gmax, extent=extent)
 
     #--------------------------------------------------------        
@@ -366,7 +419,8 @@ def save_grid_stack_as_images( nc_file, png_dir, extent=None,
 def save_rts_as_images( rts_file, png_dir, extent=None,
                         long_name='River Discharge',
                         stretch='power3', a=1, b=2, p=0.5,
-                        cmap='rainbow', REPORT=True,
+                        cmap='rainbow', BLACK_ZERO=False,
+                        REPORT=True,
                         xsize=6, ysize=6, dpi=192):
 
     # Example rts_files:
@@ -428,7 +482,7 @@ def save_rts_as_images( rts_file, png_dir, extent=None,
                 
         show_grid_as_image( grid, long_name, cmap=cmap,
                             stretch=stretch, a=a, b=b, p=p,
-                            extent=extent,
+                            BLACK_ZERO=BLACK_ZERO, extent=extent,
                             NO_SHOW=True, im_file=im_file,
                             xsize=xsize, ysize=ysize, dpi=dpi )
 
@@ -440,8 +494,8 @@ def save_rts_as_images( rts_file, png_dir, extent=None,
 
 #   save_rts_as_images()
 #--------------------------------------------------------------------
-def plot_time_series(nc_file, output_dir=None, marker=',',
-                     REPORT=True, xsize=11, ysize=6):
+def plot_time_series(nc_file, output_dir=None, var_index=1,
+                     marker=',', REPORT=True, xsize=11, ysize=6):
 
     # Example nc_files:
     # nc_file = case_prefix + '_0D-Q.nc'
@@ -470,7 +524,6 @@ def plot_time_series(nc_file, output_dir=None, marker=',',
     lon_list      = ncts.get_var_lons()
     lat_list      = ncts.get_var_lats()
 
-    var_index = 1
     var_name = var_name_list[ var_index ]
 
     if (REPORT):
@@ -725,8 +778,21 @@ def create_movie_from_images( mp4_file, png_dir, fps=10, REPORT=True):
         print('Creating movie from', n_frames, 'PNG files.')
         ## print('This may take a few minutes.')
         print('Working...')
-    writer = imageio.get_writer( mp4_file, fps=fps )
 
+    #---------------------------------------------------------------        
+    # Note:  The default codec for imageio is "libx264", which
+    #        is widely used and supports mp4; H.264 codec.
+    #        You can request  "mpeg4" also, and it works.
+    #        If you use Get Info on an MP4, the More Info section
+    #        give codecs for these as:  "H.264" or "MPEG-4 Video".
+    #        If I copy an MP4 to: topoflow36/movies on GitHub,
+    #        I can't get them to play in Jupyter notebook or lab.
+    #        See the notebook:  MP4_Video_Test.ipynb for more info.
+    # https://imageio.readthedocs.io/en/stable/format_ffmpeg.html
+    #----------------------------------------------------------------
+    writer = imageio.get_writer( mp4_file, fps=fps )
+    ## writer = imageio.get_writer( mp4_file, fps=fps, codec='mpeg4' )
+        
     for im_file in im_file_list:
         writer.append_data(imageio.imread( im_file ))
     writer.close()
@@ -830,6 +896,44 @@ def plot_soil_profile( z, var, var_name='theta', qs=None,
 
 #   plot_soil_profile()
 #----------------------------------------------------------------------------
-   
+# FOR AN IDEA IN THE VISUALIZATION NOTEBOOK.
+#----------------------------------------------------------------------------
+# import glob, os, os.path, shutil
+# 
+# class dataset_info():
+#     
+#     def __init__(self, name='Baro'):  
+#         self.home_dir = os.path.expanduser("~")
+#         if (name.lower() == 'baro'):
+#             #-------------------------------------------------
+#             # Baro River, with mouth near Gambella, Ethiopia
+#             #-------------------------------------------------
+#             self.site_prefix = 'Baro-Gam_60sec'
+#             self.case_prefix = 'Test1'
+#             ## self.case_prefix = 'Test2'
+#             self.test_dir    = self.home_dir + '/TF_Tests3/'           ########
+#         elif (name.lower() == 'treynor'):
+#             #-------------------------------------------------
+#             # Treynor River, in Iowa (part of Nishnabotna R.)
+#             #-------------------------------------------------
+#             self.site_prefix = 'Treynor'
+#             self.case_prefix = 'June_20_67'
+#             # self.case_prefix = 'June_07_67'
+#             self.test_dir    = self.home_dir + '/TF_Output/'
+#     
+#         self.basin_dir  = self.test_dir + self.site_prefix + '/'    
+#         self.output_dir = self.basin_dir    ######
+#         self.topo_dir   = self.basin_dir + '__topo/'
+#         self.met_dir    = self.basin_dir + '__met/'
+#         self.soil_dir   = self.basin_dir + '__soil/'
+# 
+#         print('Home directory   =', self.home_dir)
+#         print('Basin directory  =', self.basin_dir)
+#         print('Output directory =', self.output_dir)
+# 
+#         os.chdir( self.output_dir )  ##########
+# 
+# ds = dataset_info( name='Baro' )
 
+#----------------------------------------------------------------------------
    

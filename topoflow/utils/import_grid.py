@@ -1,31 +1,38 @@
 
-#  Copyright (c) 2019, Scott D. Peckham
-#  November 2019
-
+#  Copyright (c) 2019-2020, Scott D. Peckham
+#
+#  Jun. 2020.  Cleaned up; added import_dem_as_rtg()
+#  Nov. 2019.
+#
 #-------------------------------------------------------------------
-
+#
 #  test1()
-
+#
+#  import_dem_as_rtg()
+#  get_raster_dimensions()
+#  get_raster_cellsize()         # copied from regrid.py
+#  get_raster_bounds()           # copied from regrid.py
+#  get_rtg_type_from_gdal_type()
+#
 #  read_from_geotiff()
 #  read_from_netcdf()
 #  read_from_rtg()
-
+#
 #  print_gdal_grid_info()
-
-#  rtg_type_from_gdal_type()
 #  make_rti_for_gdal_grid()
-
+#
 #  save_geotiff_as_rtg()
-
+#
 #-------------------------------------------------------------------
 
 import gdal, osr  ## ogr
 import os.path
-# import glob
+import numpy as np
 
 from . import rtg_files, rti_files
+# from . import regrid   # (not needed here now)
 
-#-------------------------------------------------------------------
+#-------------------------------------------------------------------------------
 def test1():
 
     test_dir = '/Users/peckhams/TF_Tests/Import/'
@@ -52,7 +59,206 @@ def test1():
     grid = read_from_rtg( rtg_file, REPORT=True)
         
 #   test1()
-#-------------------------------------------------------------------
+#-------------------------------------------------------------------------------
+def import_dem_as_rtg( dem_file, new_prefix, SILENT=False ):
+ 
+    #------------------------------------------------------------------------
+    # Note:  This should work for most DEM types supported by GDAL, such as
+    #        GeoTIFF, ERDAS IMG, etc..  May need more to import netCDF.
+    #------------------------------------------------------------------------
+    if (not(os.path.exists( dem_file ))):
+        print('ERROR:  Wrong filename or file does not exist.')
+        return
+      
+    #-------------------------------------    
+    # Open the input DEM file & get info
+    #-------------------------------------
+    raster = gdal.Open( dem_file )   ## e.g. extension could be .img, others.
+    ## raster = gdal.Open( dem_file, gdal.GA_ReadOnly)
+    (ncols, nrows)   = get_raster_dimensions( raster )
+    bounds           = get_raster_bounds( raster )
+    (dx_deg, dy_deg) = get_raster_cellsize( raster ) 
+    #### bounds = regrid.get_raster_bounds( raster ) 
+    #### (dx_deg, dy_deg) = regrid.get_raster_cellsize( raster )  
+    xres_sec = (dx_deg * 3600.0)
+    yres_sec = (dy_deg * 3600.0)
+    rtg_type = get_rtg_type_from_gdal_type( raster )
+
+    if not(SILENT):
+        print('Opened: ', dem_file )
+        print('type(raster) =', type(raster) )
+        print('ncols, nrows =', ncols, ', ', nrows)
+        print('xres,  yres  =', xres_sec, ', ', yres_sec, ' [arcseconds]' )
+        print('(minlon, minlat, maxlon, maxlat) =' )
+        print( bounds )
+        print('Reading raster band...')
+    band = raster.GetRasterBand(1)
+    if not(SILENT):
+        print('type(band) =', type(band) )
+        print('Reading grid as ndarray...')
+    grid = band.ReadAsArray()
+    gmin = grid.min()
+    gmax = grid.max()
+    if not(SILENT):
+        print('grid.min() =', gmin )
+        print('grid.max() =', gmax )
+        print('grid.dtype =', grid.dtype )
+    #-----------------------
+    # Close the input file
+    #-----------------------
+    raster = None
+    
+    #---------------------------------------
+    # Prepare to write to RTG and RTI file
+    #---------------------------------------
+    rtg = rtg_files.rtg_file()
+    rti_file = new_prefix + '.rti'
+    rti = rti_files.make_info( rti_file, ncols, nrows, xres_sec, yres_sec )
+    ### print(rti.x_west_edge)
+    rti.x_west_edge  = bounds[0]
+    rti.y_south_edge = bounds[1]
+    rti.x_east_edge  = bounds[2]
+    rti.y_north_edge = bounds[3]
+    rti.gmin         = gmin
+    rti.gmax         = gmax
+    rti.data_type    = rtg_type
+
+    ###########################    
+    # These need more work
+    # These will vary.
+    ###########################
+    rti.pixel_geom   = 0
+    rti.box_units    = 'DEGREES'
+    rti.z_units      = 'METERS'
+    rti.zres        = 0.01
+    rti.byte_order   = 'LSB'
+        
+    #--------------------------
+    # Write RTG and RTI files
+    #--------------------------
+    rtg_file = new_prefix + '_DEM.rtg'
+    OK = rtg.open_new_file( rtg_file, rti )
+    #---------------------------------
+    # Apply additional conversions ?
+    #---------------------------------
+    ## grid2 = np.float32(grid)/100
+    ## rtg.write_grid(grid2)
+    #---------------------------------
+    rtg.write_grid( grid )
+    rtg.close_file()
+    if not(SILENT):
+        print('Finished writing RTG file:')
+        print(rtg_file)
+
+#   import_dem_as_rtg()
+#-------------------------------------------------------------------------------
+def get_raster_dimensions( raster ):
+
+    ncols = raster.RasterXSize
+    nrows = raster.RasterYSize
+    return (ncols, nrows)
+    
+#   get_raster_dimensions()
+#-------------------------------------------------------------------------------
+def get_raster_cellsize( raster ):
+
+    geotransform = raster.GetGeoTransform()
+    # ulx  = geotransform[0]
+    xres = geotransform[1]
+    # xrtn = geotransform[2]
+    #-----------------------
+    # uly  = geotransform[3]
+    # yrtn = geotransform[4]  # (not yres !!)
+    yres = geotransform[5]  # (not yrtn !!)
+    
+    return (xres, abs(yres))
+
+#   get_raster_cellsize()
+#-------------------------------------------------------------------------------
+def get_raster_bounds( raster, VERBOSE=False):
+
+    #-------------------------------------------------------------
+    # Note:  The bounds depend on the map projection and are not
+    # necessarily a Geographic bounding box of lons and lats.    
+    #-------------------------------------------------------------
+    # See:
+    # https://pcjericks.github.io/py-gdalogr-cookbook/raster_layers.html
+    # and search on "geotransform".  An example of gdal.SetGeoTransform
+    # gives: [xmin, pixel_size, 0, ymax, 0, -pixel_size].
+    # Also says args are:
+    # [ulx, xDist, rtnX, uly, yDist, rtnY]
+    # This is consistent with information below.
+    #-------------------------------------------------------------    
+    # ulx = upper left x  = xmin
+    # uly = upper left y  = ymax
+    # lrx = lower right x = xmax
+    # lry = lower right y = ymin
+    #-----------------------------
+
+    #----------------------------------------------------------  
+    # Notice the strange order or parameters here is CORRECT.
+    # It is not:  ulx, xres, xskew, uly, yres, yskew
+    #----------------------------------------------------------
+    ulx, xres, xskew, uly, yskew, yres  = raster.GetGeoTransform()
+    lrx = ulx + (raster.RasterXSize * xres)
+    lry = uly + (raster.RasterYSize * yres)
+
+    if (VERBOSE):
+        print('ulx, uly   =', ulx, uly)
+        print('lrx, lry   =', lrx, lry)
+        print('xres, yres = ', xres, yres)
+        print('xskew, yskew =', xskew, yskew)
+        print('----------------------------------')
+
+    #########################################################
+    # Bounding box reported by gdal.info does not match
+    # what the GES DISC website is saying.  The result is
+    # that gdal.Warp gives all nodata values in output. 
+    #########################################################
+    return [ulx, lry, lrx, uly]  # [xmin, ymin, xmax, ymax]
+ 
+    #########################################################
+    # Bounding box reported by gdal.info does not match
+    # what the GES DISC website is saying.  Reversing lats
+    # and lons like this doesn't fix the problem.
+    #########################################################    
+    ## return [lry, ulx, uly, lrx]
+    
+#   get_raster_bounds()
+#-------------------------------------------------------------------------------
+def get_rtg_type_from_gdal_type( raster ):
+
+#     gdal.GDT_Unknown = 0
+#     gdal.GDT_Byte    = 1
+#     gdal.GDT_UInt16  = 2	
+#     gdal.GDT_Int16   = 3	
+#     gdal.GDT_UInt32  = 4 	
+#     gdal.GDT_Int32   = 5	
+#     gdal.GDT_Float32 = 6	
+#     gdal.GDT_Float64 = 7	
+#     gdal.GDT_CInt16  = 8 	
+#     gdal.GDT_CInt32  = 9 	
+#     gdal.GDT_CFloat32 = 10	
+#     gdal.GDT_CFloat64 = 11
+
+    type_map = {
+    0 : 'UNKNOWN',
+    1 : 'BYTE',
+    2 : 'UINT',
+    3 : 'INTEGER',
+    4 : 'ULONG',
+    5 : 'LONG',
+    6 : 'FLOAT',
+    7 : 'DOUBLE' }
+
+    gdal_data_type_code = raster.GetRasterBand(1).DataType
+    rtg_type = type_map[ gdal_data_type_code ]
+        
+    return rtg_type
+    
+#   get_rtg_type_from_gdal_type()
+#-------------------------------------------------------------------------------
+#-------------------------------------------------------------------------------
 def read_from_geotiff( tif_file, REPORT=False, rti_file=None):
 
     #-----------------------------------------------------
@@ -82,7 +288,7 @@ def read_from_geotiff( tif_file, REPORT=False, rti_file=None):
     return grid
 
 #   read_from_geotiff()
-#-------------------------------------------------------------------
+#-------------------------------------------------------------------------------
 def read_from_netcdf( nc_file, layer_name='', REPORT=False,
                       rti_file=None):
 
@@ -117,7 +323,7 @@ def read_from_netcdf( nc_file, layer_name='', REPORT=False,
     return grid
     
 #   read_from_netcdf()
-#-------------------------------------------------------------------
+#-------------------------------------------------------------------------------
 def read_from_rtg( rtg_file, REPORT=False):
 
     if (not(os.path.exists( rtg_file ))):
@@ -145,7 +351,7 @@ def read_from_rtg( rtg_file, REPORT=False):
     return grid
 
 #   read_from_rtg()
-#-------------------------------------------------------------------
+#-------------------------------------------------------------------------------
 def print_gdal_grid_info( filename, grid, ds ):
 
     #----------------------
@@ -181,39 +387,7 @@ def print_gdal_grid_info( filename, grid, ds ):
     print()
 
 #   print_gdal_grid_info()
-#-------------------------------------------------------------------
-def rtg_type_from_gdal_type( ds ):
-
-#     gdal.GDT_Unknown = 0
-#     gdal.GDT_Byte    = 1
-#     gdal.GDT_UInt16  = 2	
-#     gdal.GDT_Int16   = 3	
-#     gdal.GDT_UInt32  = 4 	
-#     gdal.GDT_Int32   = 5	
-#     gdal.GDT_Float32 = 6	
-#     gdal.GDT_Float64 = 7	
-#     gdal.GDT_CInt16  = 8 	
-#     gdal.GDT_CInt32  = 9 	
-#     gdal.GDT_CFloat32 = 10	
-#     gdal.GDT_CFloat64 = 11
-
-    type_map = {
-    0 : 'UNKNOWN',
-    1 : 'BYTE',
-    2 : 'UINT',
-    3 : 'INTEGER',
-    4 : 'ULONG',
-    5 : 'LONG',
-    6 : 'FLOAT',
-    7 : 'DOUBLE' }
-
-    gdal_data_type_code = ds.GetRasterBand(1).DataType
-    rtg_type = type_map[ gdal_data_type_code ]
-        
-    return rtg_type
-    
-#   rtg_type_from_gdal_type()
-#-------------------------------------------------------------------
+#-------------------------------------------------------------------------------
 def make_rti_for_gdal_grid( grid_file, grid, ds, rti_file,
                             z_units='METERS', box_units='DEGREES'):
     
@@ -230,7 +404,7 @@ def make_rti_for_gdal_grid( grid_file, grid, ds, rti_file,
     #--------------------    
     # Get the data type
     #--------------------
-    data_type = rtg_type_from_gdal_type( ds )
+    data_type = get_rtg_type_from_gdal_type( ds )
 
     #-----------------------------  
     # Get the machine byte order
