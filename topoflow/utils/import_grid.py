@@ -127,7 +127,7 @@ def import_dem_as_rtg( dem_file, new_prefix, SILENT=False ):
     # These need more work
     # These will vary.
     ###########################
-    rti.pixel_geom   = 0
+    rti.pixel_geom   = 0   # (for geographic coords; use 1 for UTM)
     rti.box_units    = 'DEGREES'
     rti.z_units      = 'METERS'
     rti.zres        = 0.01
