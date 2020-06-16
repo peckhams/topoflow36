@@ -840,7 +840,7 @@ class d8_component( d8_base.d8_component ):
 
     #   update_flow_to_IDs()
     #-------------------------------------------------------------------
-    def update_noflow_IDs(self):
+    def update_noflow_IDs(self, REPORT=False):
         
         #--------------------------------------------------
         # 1/19/07.  Need to set d and u to zero at any ID
@@ -851,16 +851,22 @@ class d8_component( d8_base.d8_component ):
         # zero at all of these places.
         #--------------------------------------------------
         noflow_IDs = np.where(self.d8_grid <= 0)
-        num_IDs    = noflow_IDs[0].size
-        
-        if (num_IDs != 0):
+        n_noflow_IDs = noflow_IDs[0].size
+
+        if (n_noflow_IDs != 0):
             self.noflow_IDs = noflow_IDs
         else:
-            #----------------------------
-            # Return IDs of edge pixels
-            #----------------------------
-            ## self.get_edge_IDs()  # (called by initialize())
+            #-------------------------------
+            # Return IDs of edge pixels:
+            # get_edge_IDs() in d8_base.py
+            #-------------------------------
             self.noflow_IDs = self.edge_IDs()
+
+        if (REPORT):
+            print('D8 flow code = 0 for', n_noflow_IDs, 'cells.')
+            n_edge_IDs = self.edge_IDs[0].size
+            print('Number of cells on 4 DEM edges =', n_edge_IDs)
+            print()
 
     #   update_noflow_IDs()   
     #-------------------------------------------------------------------    

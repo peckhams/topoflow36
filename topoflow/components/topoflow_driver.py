@@ -132,8 +132,10 @@ class topoflow_driver( BMI_base.BMI_component ):
         'soil_surface_water__domain_time_integral_of_infiltration_volume_flux',  # vol_IN@infil
         'soil_water__domain_time_integral_of_volume_fraction',                   # vol_soil    
         'soil_water_sat-zone_top__domain_time_integral_of_recharge_volume_flux', # vol_Rg
-        #-----------------------------------------------------------   
-        'network_channel_water__volume',                                         # vol_chan@channels
+        #-----------------------------------------------------------
+        'channel_water_x-section__boundary_time_integral_of_volume_flow_rate',   # vol_edge@channels
+        'river-network_channel_water__initial_volume',                           # vol_chan0
+        'river-network_channel_water__volume',                                   # vol_chan@channels
         'land_surface_water__area_integral_of_depth' ]                           # vol_land@channels
         
         #----------------------------------------------------------------
@@ -207,9 +209,11 @@ class topoflow_driver( BMI_base.BMI_component ):
         'soil_water_sat-zone_top__domain_time_integral_of_recharge_volume_flux': 'vol_Rg',
         #---------------------
         'model__time_step':                                      'dt',
-        #----------------------------------------------------------------------------   
-        'network_channel_water__volume':                         'vol_chan',
-        'land_surface_water__area_integral_of_depth':            'vol_land' }       
+        #----------------------------------------------------------------------------
+        'channel_water_x-section__boundary_time_integral_of_volume_flow_rate': 'vol_edge',   
+        'river-network_channel_water__initial_volume' : 'vol_chan0',
+        'river-network_channel_water__volume':          'vol_chan',
+        'land_surface_water__area_integral_of_depth':   'vol_land' }       
 
             
     _var_units_map = {
@@ -257,9 +261,11 @@ class topoflow_driver( BMI_base.BMI_component ):
         'soil_water_sat-zone_top__domain_time_integral_of_recharge_volume_flux':   'm3',
         #----------------------------
         'model__time_step': 's',
-        #----------------------------------------------------------------------------   
-        'network_channel_water__volume':                         'm3',
-        'land_surface_water__area_integral_of_depth':            'm3'   }  
+        #----------------------------------------------------------------------------
+        'channel_water_x-section__boundary_time_integral_of_volume_flow_rate': 'm3',  
+        'river-network_channel_water__initial_volume' : 'm3',
+        'river-network_channel_water__volume':          'm3',
+        'land_surface_water__area_integral_of_depth':   'm3'  }  
     
     #------------------------------------------------    
     # Return NumPy string arrays vs. Python lists ?
@@ -888,7 +894,7 @@ class topoflow_driver( BMI_base.BMI_component ):
     #-------------------------------------------------------------
     def vol_str( self, value ):
     
-        if (value < 1e6):
+        if (np.abs(value) < 1e6):
             return (str(value) + ' [m^3]')
         else:
             new_val = (value / 1e6)
@@ -927,38 +933,42 @@ class topoflow_driver( BMI_base.BMI_component ):
         Tu_peak    = self.Tu_peak
         d_peak     = self.d_peak
         Td_peak    = self.Td_peak
-        #-----------------------------
+        #--------------------------
         P_max      = self.P_max
-
+        #--------------------------
         vol_P   = self.vol_P
         vol_Q   = self.vol_Q 
         vol_SM  = self.vol_SM
-        vol_swe = self.vol_swe     # (2020-05-05)
         vol_MR  = self.vol_MR
         vol_ET  = self.vol_ET
         vol_IN  = self.vol_IN
         vol_Rg  = self.vol_Rg
         vol_GW  = self.vol_GW
         vol_R   = self.vol_R
-        vol_soil = self.vol_soil    # (2020-05-08)
-        vol_chan = self.vol_chan    # (2019-09-17)
-        vol_land = self.vol_land    # (2019-09-17)
-        
-        #-----------------------------------------------------------------
-        # (2/6/13) BMI_base.py has an "initialize_basin_vars()" method
-        # that embeds an instance of the "basin" component in the caller
-        # as "bp".  So this block of code should still work.
-        #-----------------------------------------------------------------
+        #--------------------------
+        # vol_soil0 = self.vol_soil0   # (2020-05-08)
+        vol_soil0 = 0.0  ##### placeholder        
+        vol_soil  = self.vol_soil    # (2020-05-08)
+        vol_chan0 = self.vol_chan0   # (2020-06-15)
+        vol_chan  = self.vol_chan    # (2019-09-17)
+        vol_land  = self.vol_land    # (2019-09-17)
+        # vol_swe0  = self.vol_swe0    # (2020-05-05)
+        vol_swe0  = 0.0  ##### placeholder
+        vol_swe   = self.vol_swe       # (2020-05-05)
+        vol_edge  = self.vol_edge    # (2020-06-15)
+        #-----------------------------        
         basin_area = self.basin_area
-        ##################################################################
-        # We need an "update_basin_vars()" method to be called from each
-        # component's update() method in order to compute "volume_in".
-        # Then we can set TRACK_VOLUME to True.
-        ##################################################################
-        ## volume_in  = self.bp.volume_in
-        TRACK_VOLUME = False    ##### (since not ready yet) ######
-        volume_in    = self.initialize_scalar( 0, dtype='float64')
 
+        ##################################################################
+#         TRACK_VOLUME = False    ##### (since not ready yet) ######
+#         volume_in    = self.initialize_scalar( 0, dtype='float64')
+#         if (TRACK_VOLUME):  
+#             if (volume_in != 0):    
+#                 percent_out = np.float64(100) * vol_Q / volume_in
+#             else:    
+#                 percent_out = np.float64(0)
+
+          
         #----------------------------
         # Construct run time string
         #----------------------------
@@ -969,13 +979,7 @@ class topoflow_driver( BMI_base.BMI_component ):
         else:
             rt_units = ' [sec]'
         run_time_str = str(run_time) + rt_units
-        
-        if (TRACK_VOLUME):  
-            if (volume_in != 0):    
-                percent_out = np.float64(100) * vol_Q / volume_in
-            else:    
-                percent_out = np.float64(0)
-  
+
         #-----------------------------------------------      
         # Prepare to save report as a list of strings
         #-----------------------------------------------
@@ -1036,12 +1040,12 @@ class topoflow_driver( BMI_base.BMI_component ):
         report.append(' ')
         
         ##############################################################################
-        if (TRACK_VOLUME):    
-            report.append('Total volume out:  ' + str(vol_Q) + ' [m^3]')
-            if (basin_area != 0):    
-                report.append('Rain volume in:    ' + str(volume_in)   + ' [m^3]')
-                report.append('Percentage out:    ' + str(percent_out) + ' [%]')
-                report.append(' ')
+#         if (TRACK_VOLUME):    
+#             report.append('Total volume out:  ' + str(vol_Q) + ' [m^3]')
+#             if (basin_area != 0):    
+#                 report.append('Rain volume in:    ' + str(volume_in)   + ' [m^3]')
+#                 report.append('Percentage out:    ' + str(percent_out) + ' [%]')
+#                 report.append(' ')
         ##############################################################################
                 
         #--------------------------------
@@ -1054,7 +1058,7 @@ class topoflow_driver( BMI_base.BMI_component ):
         #--------------------------------------------
         # Print the area_time integrals over domain
         #--------------------------------------------
-        report.append('Total accumulated volumes over entire DEM:')
+        report.append('Total accumulated volumes over entire DEM: (fluxes)')
         report.append('vol_P    (precip):        ' + self.vol_str(vol_P) + '   (incl. leq snowfall)')
         report.append('vol_Q    (discharge):     ' + self.vol_str(vol_Q) + '   (main basin outlet)')
         report.append('vol_SM   (snowmelt):      ' + self.vol_str(vol_SM))
@@ -1064,10 +1068,40 @@ class topoflow_driver( BMI_base.BMI_component ):
         report.append('vol_Rg   (recharge):      ' + self.vol_str(vol_Rg) + '   (bottom loss)')
         report.append('vol_GW   (baseflow):      ' + self.vol_str(vol_GW))
         report.append('vol_R    (runoff):        ' + self.vol_str(vol_R)  + '  R = (P+SM+MR) - (ET+IN)')
-        report.append('vol_soil (infiltration):  ' + self.vol_str(vol_soil) + '  (change in storage)') 
-        report.append('vol_chan (channels):      ' + self.vol_str(vol_chan))
-        report.append('vol_land (surface):       ' + self.vol_str(vol_land))
-        report.append('vol_swe  (snowpack):      ' + self.vol_str(vol_swe))
+        report.append(' ')
+
+        #---------------------------------
+        # Print various forms of storage
+        #---------------------------------
+        report.append('Total accumulated volumes over entire DEM: (storage)')
+        report.append('vol_soil  (infiltration):  ' + self.vol_str(vol_soil) + '  (change in storage)') 
+        report.append('vol_chan0 (channels):      ' + self.vol_str(vol_chan0) + '  (initial)')
+        report.append('vol_chan  (channels):      ' + self.vol_str(vol_chan))
+        report.append('vol_land  (surface):       ' + self.vol_str(vol_land))
+        report.append('vol_edge  (boundary):      ' + self.vol_str(vol_edge))
+        report.append('vol_swe   (snowpack):      ' + self.vol_str(vol_swe))
+        report.append(' ')
+
+        #---------------------------------------------
+        # Print mass balance check (over entire DEM)
+        #---------------------------------------------
+        vol_in      = (vol_P + vol_SM + vol_MR + vol_GW)
+        vol_out     = (vol_IN + vol_ET + vol_edge)
+        vol_stored  = (vol_chan - vol_chan0)  # change in storage
+        vol_stored += (vol_soil - vol_soil0)
+        vol_stored += (vol_swe  - vol_swe0)
+        vol_stored += vol_land   # (due to flood water depth)
+        vol_error   = (vol_out + vol_stored) - vol_in
+        report.append('Mass balance check:')
+        report.append('volume in         = ' + self.vol_str(vol_in) )
+        report.append('volume out        = ' + self.vol_str(vol_out) )
+        report.append('change in storage = ' + self.vol_str(vol_stored) )
+        if (vol_error > 0):
+            msg_prefix = 'volume gain error = '
+        else:
+            msg_prefix = 'volume loss error = '
+        report.append(msg_prefix + self.vol_str(vol_error) )
+        report.append('vol_error/ vol_in = ' + str(vol_error / vol_in) )
         report.append(' ')
 
         #----------------------------------        
@@ -1266,83 +1300,7 @@ class topoflow_driver( BMI_base.BMI_component ):
     #   print_dimless_number_data()
     #-------------------------------------------------------------
 #     def print_mass_balance_report(self):            
-# 
-#         #--------------------------------------
-#         # Updated for new framework. (2/5/13)
-#         #--------------------------------------
-#         vol_P   = self.vol_P
-#         vol_SM  = self.vol_SM
-#         vol_swe = self.vol_swe
-#         vol_IN  = self.vol_IN
-#         vol_Rg  = self.vol_Rg
-#         vol_ET  = self.vol_ET
-#         vol_GW  = self.vol_GW
-#         vol_R   = self.vol_R
-#         vol_chan = self.vol_chan    # (2019-09-17)
-#         
-#         print('Volume rain         = ' + str(vol_P)  + ' [m^3]')
-#         print('Volume snowpack H20 = ' + str(vol_swe)+ ' [m^3]')
-#         print('Volume snowmelt     = ' + str(vol_SM) + ' [m^3]')
-#         print('Volume infiltrated  = ' + str(vol_IN) + ' [m^3]')
-#         print('Volume evaporated   = ' + str(vol_ET) + ' [m^3]')
-#         print('Volume seepage      = ' + str(vol_GW) + ' [m^3]')
-#         print('Volume runoff       = ' + str(vol_R)  + ' [m^3]')
-#         print('Volume bottom loss  = ' + str(vol_Rg) + ' [m^3]')
-#         print('Volume all channels = ' + str(vol_chan) + ' [m^3]')
-#         print(' ')
-# 
-#         RICHARDS = self.ip.get_scalar_long('RICHARDS')
-#         print('In topoflow.print_mass_balance_report(),')
-#         print('   RICHARDS =', RICHARDS)
-#         print(' ')
-#         if (RICHARDS):    
-#             #----------------------------------------
-#             # Richards' equation for infiltration
-#             # Ground water losses not counted above
-#             #----------------------------------------
-#             da         = self.da
-#             n_pixels   = self.n_pixels   #####
-#             vol_stored = np.float64(0)
-#             SCALAR_dz  = (np.size( self.ip.dz ) == 1)
-#             SCALAR_da  = (np.size(da) == 1)     #(assume da is scalar or grid)
-#             #-----------------------------------
-#             dim_q  = np.ndim( self.ip.q )
-#             dim_qi = np.ndim( self.ip.qi )
-#             #----------------------------------
-#             for k in range(self.ip.nz):
-#                 #--------------------------------------
-#                 # In this loop, dz is always a scalar
-#                 #--------------------------------------
-#                 if (SCALAR_dz):    
-#                     dz = self.ip.dz
-#                 else:    
-#                     dz = self.ip.dz[k]
-#                 if (dim_q == 3):    
-#                     qq = self.ip.q[k,:,:]
-#                 else:    
-#                     qq = self.ip.q[k]
-#                 if (dim_qi == 3):    
-#                     qqi = self.ip.qi[k,:,:]
-#                 else:    
-#                     qqi = self.ip.qi[k]
-#                 #----------------------------------------
-#                 # Get increase in q over initial values
-#                 # (but q may have decreased due to ET)
-#                 #----------------------------------------
-#                 dq = (qq - qqi)   #(grid or scalar)
-#                 da
-#                 SCALAR_dq = (np.size(dq) == 1)
-#                 if (SCALAR_da and SCALAR_dq):    
-#                     dm = dq * (dz * da * n_pixels)      #(da is a SCALAR)
-#                 else:    
-#                     dm = np.sum(np.double(dq * (da * dz)))    #(da is a GRID)
-#                 vol_stored += dm
-#             mass_error = np.float64(100) * (vol_IN - vol_stored) / vol_IN
-#             err_str = ('%6.2f' % mass_error) + ' % '
-#             print('Volume stored      = ' + TF_String(vol_stored) + ' [m^3]')
-#             print('Volume error       = ' + err_str)
-#         print()
-# 
+#
 #     #   print_mass_balance_report()
     #-------------------------------------------------------------
 
