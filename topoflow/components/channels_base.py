@@ -725,9 +725,6 @@ class channels_component( BMI_base.BMI_component ):
             self.print_time_and_value(self.Q_outlet, 'Q_out', '[m^3/s]')
                                       ### interval=0.5)  # [seconds]
 
-        # For testing (5/19/12)
-        # self.print_time_and_value(self.Q_outlet, 'Q_out', '[m^3/s]  CHANNEL')
-
         #-------------------------------------------
         # Read from files as needed to update vars 
         #-----------------------------------------------------
@@ -813,15 +810,12 @@ class channels_component( BMI_base.BMI_component ):
         self.update_peak_values()
         if (DEBUG): print('#### Calling update_Q_out_integral()...')
         self.update_Q_out_integral()
-        if (DEBUG): print('#### Calling update_edge_loss()...')
+        if (DEBUG): print('#### Calling update_edge_values()...')
         self.update_edge_values()
         
         #---------------------------------------------
         # This takes extra time and is now done
         # only at the end, in finalize().  (8/19/13)
-        #---------------------------------------------
-        # But then "topoflow_driver" doesn't get
-        # correctly updated values for some reason.
         #---------------------------------------------
         ## self.update_mins_and_maxes()
 
