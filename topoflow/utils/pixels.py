@@ -194,7 +194,8 @@ def get_da(rti, METERS=False, REPORT=False, VERBOSE=False):
         # Convert da from 1D to 2D array
         # Then subscript with the wk's.
         #---------------------------------
-        TF_Print('Computing pixel area grid...')
+        if (REPORT):
+            TF_Print('Computing pixel area grid...')
         nx = rti.ncols
         ny = rti.nrows
 
