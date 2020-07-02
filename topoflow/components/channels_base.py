@@ -948,13 +948,13 @@ class channels_component( BMI_base.BMI_component ):
         # the new "d8_base.py", but are not needed when
         # using the older "tf_d8_base.py".      
         #---------------------------------------------------
-        self.d8.update(self.time, REPORT=True)
+        self.d8.update(self.time, REPORT=self.REPORT)
 
         #----------------------------------------------------------- 
         # Note: This is also needed, but is not done by default in
         #       d8.update() because it hurts performance of Erode.
         #----------------------------------------------------------- 
-        self.d8.update_noflow_IDs(REPORT=True)
+        self.d8.update_noflow_IDs(REPORT=self.REPORT)
 
         #--------------------------------------------------- 
         # Initialize separate set of d8 vars for flooding.
@@ -1121,7 +1121,8 @@ class channels_component( BMI_base.BMI_component ):
         if (self.FLOOD_OPTION):
             self.Qf = self.initialize_grid( 0, dtype=dtype )   #(9/20/19)
             self.Q  = self.initialize_grid( 0, dtype=dtype )   #(total)
-            self.flood_manning_n = 0.15  ##########
+            self.flood_manning_n = 0.10  ##########
+            ### self.flood_manning_n = 0.15  ##########
         else:
             self.Q = self.Qc   # (2 names for same thing)
         
@@ -2126,30 +2127,25 @@ class channels_component( BMI_base.BMI_component ):
         # HOWEVER, values of w_bankfull found by remote sensing
         # may be more accurate than values of d_bankfull.
         #----------------------------------------------------------
+        # Depending on grid cell size, it may be unrealistic to
+        # assume flood plain spans the entire grid cell.
+        #----------------------------------------------------------        
         SCALAR_DA = (np.size(self.d8.da) == 1) 
         d_flood   = self.d_flood
-        vol_flood = self.vol_flood   ###################
+        vol_flood = self.vol_flood
 
-        w1 = (vol_flood > 0)  # (array of True or False)
+        w1 = (vol_flood > 0)   # (boolean array)
         w2 = np.invert( w1 )
         if (SCALAR_DA):
             d_flood[ w1 ] = vol_flood[ w1 ] / self.d8.da
         else:
             d_flood[ w1 ] = vol_flood[ w1 ] / self.d8.da[ w1 ]
         d_flood[ w2 ] = 0.0
-
-        #-------------------------------------------
-        # Set depth values on edges to zero since
-        # otherwise they become spikes (no outflow)
-        #-----------------------------------------------------------
-        # NB!  This destroys mass, and will have a small effect on
-        # mass balance calculations.  Since flooding uses the
-        # free-surface gradient (DEM + d_flood), we should not
-        # set it to zero at interior noflow_IDs.
-        #-----------------------------------------------------------
-        ## d_flood[ self.d8f.noflow_IDs ] = 0.0 
-        ## d_flood[ self.d8f.edge_IDs ] = 0.0      
         self.d_flood[:] = d_flood   # write in place 
+        
+        #-------------------------------------------
+        # See: update_edge_values() for noflow_IDs
+        #-------------------------------------------    
 
     #   update_flood_depth()
     #-------------------------------------------------------------------
@@ -2580,10 +2576,10 @@ class channels_component( BMI_base.BMI_component ):
         Q_max = self.Q[1:ny_lim,1:nx_lim].max()
         #-------------------------------------------------
         u_min = self.u[1:ny_lim,1:nx_lim].min()
-        u_max = self.u[1:ny_lim,1:nx_lim].min()       
+        u_max = self.u[1:ny_lim,1:nx_lim].max()       
         #-------------------------------------------------
         d_min = self.d[1:ny_lim,1:nx_lim].min()
-        d_max = self.d[1:ny_lim,1:nx_lim].min()
+        d_max = self.d[1:ny_lim,1:nx_lim].max()
 
         #-------------------------------------------------
         # (2/6/13) This preserves "mutable scalars" that
@@ -3431,6 +3427,13 @@ class channels_component( BMI_base.BMI_component ):
         if (model_time % int(self.save_grid_dt) == 0):
             self.save_grids()
         if (model_time % int(self.save_pixels_dt) == 0):
+            #-----------------------------------------------------
+            # Note: If dt = 250 sec, and save_pixels_dt = 600,
+            #       values will only be printed every 3000 secs.
+            #-----------------------------------------------------
+            # print('model_time =', model_time, '[sec]')
+            # print('time_min   =', self.time_min, '[min]')
+            # print('save_pixels_dt =', self.save_pixels_dt, '[sec]')
             self.save_pixel_values()
 
         #----------------------------------------
