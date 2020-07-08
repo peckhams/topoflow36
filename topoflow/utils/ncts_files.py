@@ -383,6 +383,8 @@ class ncts_file():
         #-------------------------------------------
         # Need this to compute grid cell lat & lon
         #-------------------------------------------
+        ncols    = grid_info.ncols
+        nrows    = grid_info.nrows
         xres_deg = (grid_info.xres / 3600.0)
         yres_deg = (grid_info.yres / 3600.0)
         minlon   = grid_info.x_west_edge
@@ -548,8 +550,27 @@ class ncts_file():
             p   = var_name.split('_')
             row = np.int16( p[-2] ) 
             col = np.int16( p[-1] )
-            lon = minlon + (col * xres_deg)
-            lat = minlat + (row * yres_deg)
+            #-----------------
+            # This is wrong.
+            #-----------------
+            ## lon = minlon + (col * xres_deg)       
+            ## lat = minlat + (row * yres_deg)
+            #--------------------------------------
+            # Get lon and lat of southwest corner 
+            # of grid cell.  Row zero is at top.
+            # Bug fix: 2020-07-07
+            #--------------------------------------                       
+            # lon = minlon + (col * xres_deg)
+            # lat = minlat + ((nrows - 1 - row) * yres_deg)
+            #---------------------------------------
+            # Get lon and lat of grid cell center. 
+            # Row zero is at top.
+            #--------------------------------------
+            col2 = (col + 0.5)
+            row2 = (row - 0.5)
+            lon = minlon + (col2 * xres_deg)
+            lat = minlat + ((nrows - 1 - row2) * yres_deg)       
+            #---------------------------------------------------                      
             ncts_unit.variables[var_name].geospatial_lon = lon
             ncts_unit.variables[var_name].geospatial_lat = lat            
             #----------------------------------------------------------------           

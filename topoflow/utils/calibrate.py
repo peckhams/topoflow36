@@ -2,6 +2,7 @@
 #------------------------------------------------------------------------
 #  Copyright (c) 2020, Scott D. Peckham
 #
+#  Jul 2020.  Continued improvements (for Baro-Masha).
 #  Jun 2020.  Modified for use with remote-sensing data.
 #  May 2020.  Created for TopoFlow calibration notebook.
 #
@@ -12,17 +13,19 @@
 #  class calibrator():
 #      __init__()
 #      read_cfg_file()
-#      set_file_info()
+#      set_info()
 #      print_file_info()
 #      print_cfg_info()
 #
 #      read_time_series()
-#      regularize_obs_time_series()
+#      interpolate_obs_time_series()
+#      interpolate_sim_time_series()
 #
 #      get_observed_values()
 #      get_simulated_values()
 #      modify_cfg_file()
 #      backup_input_file()
+#      restore_input_file()
 #      modify_channel_grid_file()
 #      compute_cost()
 #      get_parameter_values()
@@ -37,11 +40,13 @@
 #--------------------------------------------
 #  read_any_time_series()
 #  compute_rain_rates_from_accumulations()
+#  Lp_norm()
+#  Lp_metric()   # (synonym fcn)
 #  spearman_metric()
 #
 #---------------------------------------------------------------------
 
-import glob, os, os.path, shutil, time
+import glob, os, os.path, shutil, sys, time
 
 import numpy as np
 from scipy.interpolate import interp1d
@@ -57,7 +62,7 @@ from topoflow import main
 def test():
 
     c = calibrator()
-    c.print_file_info()
+    c.print_cfg_info()
     c.get_simulated_values( SILENT=False )
     c.get_observed_values( SILENT=False  )
     print('obs_times[0:20]  =', c.obs_times[0:8])
@@ -76,7 +81,7 @@ class calibrator:
 
         self.version       = '0.5'
         self.cfg_file      = cfg_file
-        self.set_file_info()
+        self.set_info()
 
     #   __init__()
     #---------------------------------------------------------------------
@@ -102,10 +107,16 @@ class calibrator:
                 parts = line.split( delim )
                 key   = parts[0].strip()   # string
                 value = parts[1].strip()   # string
+                #----------------------------
+                # Try to convert to a number
+                #----------------------------
                 try:
-                    value = int(value)   #######
+                    value = int(value)
                 except:
-                    pass   
+                    try:
+                        value = float(value)
+                    except:
+                        pass
                 #-------------------------------------
                 if (value == 'True'):  value = True
                 if (value == 'False'): value = False
@@ -141,7 +152,7 @@ class calibrator:
         
     #   read_cfg_file()
     #---------------------------------------------------------------------
-    def set_file_info(self):
+    def set_info(self):
  
         self.home_dir     = os.path.expanduser("~")
         self.examples_dir = emeli.paths['examples']
@@ -174,7 +185,7 @@ class calibrator:
         # Attributes of the observed data file
         #---------------------------------------
         self.obs_time_format    = 'hhmm'
-        self.obs_time_irregular = True
+        self.obs_time_interval  = 'irregular'
         self.obs_time_units     = 'minutes'   ####################
         self.obs_header_lines   = 6
         self.obs_time_column    = 0    # (HHMM)
@@ -191,7 +202,7 @@ class calibrator:
         # obs is multi-column, sim is single-column now.
         #-------------------------------------------------
         self.sim_time_format    = 'timesince'
-        self.sim_time_irregular = False
+        self.sim_time_interval  = 1.0
         self.sim_time_units     = 'minutes'   ####################
         self.sim_header_lines = 2
         self.sim_time_column  = 0    # [min]
@@ -201,7 +212,7 @@ class calibrator:
         self.sim_dir       = self.output_dir
         self.sim_data_file = self.sim_dir + (self.cfg_prefix + '_0D-Q.txt')
               
-    #   set_file_info()
+    #   set_info()
     #---------------------------------------------------------------------
     def print_file_info(self):
  
@@ -241,7 +252,7 @@ class calibrator:
         print('obs_data_file      =', self.obs_data_file )
         print('obs_data_delim     =', self.obs_data_delim )
         print('obs_time_format    =', self.obs_time_format )
-        print('obs_time_irregular =', self.obs_time_irregular )
+        print('obs_time_interval  =', self.obs_time_interval )
         print('obs_time_units     =', self.obs_time_units )
         print('obs_start_datetime =', self.obs_start_datetime )
         print('obs_header_lines   =', self.obs_header_lines )
@@ -253,7 +264,7 @@ class calibrator:
         print('sim_data_file      =', self.sim_data_file )
         print('sim_data_delim     =', self.sim_data_delim )
         print('sim_time_format    =', self.sim_time_format )
-        print('sim_time_irregular =', self.sim_time_irregular )
+        print('sim_time_interval  =', self.sim_time_interval )
         print('sim_time_units     =', self.sim_time_units )
         print('sim_start_datetime =', self.sim_start_datetime )
         print('sim_header_lines   =', self.sim_header_lines )
@@ -341,30 +352,38 @@ class calibrator:
             # Make a copy of the original info, because we
             # may apply conversion or regularize later.
             #-----------------------------------------------
-            self.obs_orig_times  = times.copy()
-            self.obs_orig_values = values.copy()
+            self.obs_times_orig  = times.copy()
+            self.obs_values_orig = values.copy()
         else:
             self.sim_times  = times
             self.sim_values = values
+            #-----------------------------------------------       
+            # Make a copy of the original info, because we
+            # may apply conversion or regularize later.
+            #-----------------------------------------------
+            # self.sim_times_orig  = times.copy()
+            # self.sim_values_orig = values.copy()
                  
     #   read_time_series()
     #---------------------------------------------------------------------
-    def regularize_obs_time_series( self, SILENT=True ): 
+    def interpolate_obs_time_series( self, SILENT=True ): 
 
         #----------------------------------------------------------
-        # Notes:  This function is for the special case where the
-        #         time column contains times in hhmm format that
-        #         are not evenly spaced in time.  It returns a
-        #         new time series (decimal hours) with values at
-        #         self.sim_times (whether regular or irregular).
+        # Notes:  This function is for the common case where
+        #         the observed time series has either:
+        #           (1) an irregular time interval, or
+        #           (2) obs_time_interval > sim_time_interval
+        #         It builds an interpolation function and creates
+        #         a new time series with the same time interval
+        #         as the simulated values.
         #----------------------------------------------------------
         # e.g. interp_method = linear, nearest, etc.
         #----------------------------------------------------------
         # The read_time_series() method saves a copy of the
         # original times and values, as:
         #    self.obs_orig_times and self.obs_orig_values
-        # since we may apply conversion or regularize.
-        #----------------------------------------------------------       
+        # since we may apply conversion or interpolate.
+        #----------------------------------------------------------        
         times  = self.obs_times
         values = self.obs_values
 
@@ -387,98 +406,217 @@ class calibrator:
         # tmax = times.max()
         # nt   = 1 + (tmax - tmin) / dt
         # new_times = (dt * np.arange( nt )) + tmin
-        #------------------------------------------------------
-        # Notes:  We currently regularize the observed values
+        #-------------------------------------------------------
+        # Notes:  We currently interpolate the observed values
         #         to match the times of the simulated values.
         #         This requires running the first simulation
         #         before we retrieve the observed values.
-        #------------------------------------------------------
+        #-------------------------------------------------------
         #         This may also result in discarding some of
         #         the observed values.
-        #------------------------------------------------------        
-        new_times = self.sim_times 
-        #-----------------------------
-        new_values = f1( new_times )
+        #-------------------------------------------------------
+        n_old_times     = self.obs_times.size
+        n_new_times     = self.sim_times.size        
+        self.obs_times  = self.sim_times 
+        self.obs_values = f1( self.sim_times )
     
         if not(SILENT):
-            print('In regularize_obs_time_series():')
-            print('   Orig number of times =', len(times) )
-            print('   New number of times  =', len(new_times) )
+            print('In interpolate_obs_time_series():')
+            print('   Orig number of times =', n_old_times )
+            print('   New number of times  =', n_new_times )
             print()
 
-        self.obs_times  = new_times
-        self.obs_values = new_values
+    #   interpolate_obs_time_series()
+    #---------------------------------------------------------------------
+    def interpolate_sim_time_series( self, SILENT=True ): 
 
-    #   regularize_obs_time_series()
+        #----------------------------------------------------------
+        # Notes:  This function is for the case where
+        #         the simulated time series has:
+        #           (1) obs_time_interval < sim_time_interval
+        #         It builds an interpolation function and creates
+        #         a new time series with the same time interval
+        #         as the observed values.
+        #----------------------------------------------------------
+        # e.g. interp_method = linear, nearest, etc.
+        #----------------------------------------------------------
+        # The read_time_series() method saves a copy of the
+        # original times and values, as:
+        #    self.obs_orig_times and self.obs_orig_values
+        # since we may apply conversion or interpolate.
+        #----------------------------------------------------------       
+        times  = self.sim_times
+        values = self.sim_values
+
+        #----------------------------------------------             
+        # First, define an interpolation function, f1
+        #----------------------------------------------
+        # f1 = interp1d( times, values, kind='nearest')
+        # f1 = interp1d( times, values, kind=self.obs_interp_method)
+        f1 = interp1d( times, values, kind=self.obs_interp_method,
+                       fill_value='extrapolate')
+        
+        n_old_times     = self.sim_times.size
+        n_new_times     = self.obs_times.size
+        self.sim_times  = self.obs_times 
+        self.sim_values = f1( self.obs_times )
+    
+        if not(SILENT):
+            print('In interpolate_sim_time_series():')
+            print('   Orig number of times =', n_old_times )
+            print('   New number of times  =', n_new_times )
+            print()
+
+    #   interpolate_sim_time_series()
+    #---------------------------------------------------------------------
+    def convert_obs_time_format(self):
+        
+        otf = self.obs_time_format
+
+        #------------------------------------------        
+        # Convert times to the "timesince" format
+        #------------------------------------------
+        if (otf == 'hhmm'):
+            times_hhmm = self.obs_times
+            self.obs_times = tu.convert_times_from_hhmm_to_minutes( times_hhmm )
+        elif (otf == 'date'):
+            #---------------------------------------------------
+            # Note: This gets a little complicated due to the
+            #       use of a numpy string array for obs_times.
+            #---------------------------------------------------
+            n_times = self.obs_times.size
+            times_datetime = np.zeros( n_times, dtype='<U19')
+            for k in range(n_times):
+                times_datetime[k] = self.obs_times[k] + ' 00:00:00'
+            self.obs_times = times_datetime
+            ## print('n_times =', n_times)
+            ## print('self.obs_times[0:5] =', self.obs_times[0:5])
+            origin_datetime_str = times_datetime[0]
+            self.obs_start_datetime = origin_datetime_str
+            origin_datetime_obj = tu.get_datetime_obj_from_one_str( origin_datetime_str )
+            self.obs_times = tu.convert_times_from_datetime_to_minutes( times_datetime,
+                                        origin_datetime_obj )                        
+        elif (otf == 'datetime'):
+            times_datetime = self.obs_times
+            origin_datetime_str = self.obs_start_datetime
+            origin_datetime_obj = tu.get_datetime_obj_from_one_str( origin_datetime_str )
+            self.obs_times = tu.convert_times_from_datetime_to_minutes( times_datetime,
+                                        origin_datetime_obj )
+
+    #   convert_obs_time_format()
     #---------------------------------------------------------------------
     def get_observed_values(self, SILENT=True):
 
         #----------------------------------------------------
-        # For example:
+        # Example of use:
         # Get the observed discharge data for Treynor Creek
         # for the extreme rainfall event of June 20, 1967.
+        # obs_file = 'June_20_1967_Observed_Discharge.txt'
         #----------------------------------------------------
-        ## txt_file = 'June_20_1967_Observed_Discharge.txt'
-
-        #--------------------------------------        
-        # Set self.obs_times, self.obs_values
-        #--------------------------------------
+        
         if not(SILENT):
             print('Reading time series data...')
         otf = self.obs_time_format
-        if (otf == 'hhmm'):
-            self.read_time_series( source='observed', time_type='str' )
-            times_hhmm = self.obs_times
-            self.obs_times = tu.convert_times_from_hhmm_to_minutes( times_hhmm )
-            ## self.convert_times_from_hhmm_to_minutes()
-        elif (otf == 'datetime'):
-            self.read_time_series( source='observed', time_type='str' )
-            times_datetime = self.obs_times
-            origin_datetime_str = self.obs_start_datetime  ################
-            origin_datetime_obj = tu.get_datetime_obj_from_one_str( origin_datetime_str )
-            self.obs_times = tu.convert_times_from_datetime_to_minutes( times_datetime,
-                                        origin_datetime_obj )
-            ## self.convert_times_from_datetime_to_minutes()        
+        if (otf in ['hhmm', 'date', 'datetime']):
+            time_type = 'str'
         else:
-            self.read_time_series( source='observed' )
-                         
-        #------------------------------------------------------  
-        # Use 1D interpolation to create even spacing in time
-        #------------------------------------------------------
-        if (self.obs_time_irregular):
+            time_type = 'float'
+
+        #------------------------------------------
+        # Read the time series of observed values
+        # Set self.obs_times, self.obs_values
+        #------------------------------------------
+        self.read_time_series( source='observed', time_type=time_type )
+        self.convert_obs_time_format()   # (to "timesince" format)
+        
+        #------------------------------------------        
+        # Convert times to the "timesince" format
+        #------------------------------------------
+#         if (otf == 'hhmm'):
+#             times_hhmm = self.obs_times
+#             self.obs_times = tu.convert_times_from_hhmm_to_minutes( times_hhmm )
+#         elif (otf == 'date'):
+#             #---------------------------------------------------
+#             # Note: This gets a little complicated due to the
+#             #       use of a numpy string array for obs_times.
+#             #---------------------------------------------------
+#             n_times = self.obs_times.size
+#             times_datetime = np.zeros( n_times, dtype='<U19')
+#             for k in range(n_times):
+#                 times_datetime[k] = self.obs_times[k] + ' 00:00:00'
+#             self.obs_times = times_datetime
+#             ## print('n_times =', n_times)
+#             ## print('self.obs_times[0:5] =', self.obs_times[0:5])
+#             origin_datetime_str = times_datetime[0]
+#             self.obs_start_datetime = origin_datetime_str
+#             origin_datetime_obj = tu.get_datetime_obj_from_one_str( origin_datetime_str )
+#             self.obs_times = tu.convert_times_from_datetime_to_minutes( times_datetime,
+#                                         origin_datetime_obj )                        
+#         elif (otf == 'datetime'):
+#             times_datetime = self.obs_times
+#             origin_datetime_str = self.obs_start_datetime
+#             origin_datetime_obj = tu.get_datetime_obj_from_one_str( origin_datetime_str )
+#             self.obs_times = tu.convert_times_from_datetime_to_minutes( times_datetime,
+#                                         origin_datetime_obj )
+
+        #-------------------------------------------------------
+        # Note:  Are both observed and simulated irregular ?
+        #        Then interpolate to one with the most values.
+        #-------------------------------------------------------
+#         if (self.obs_time_interval == 'irregular') and \
+#            (self.sim_time_interval == 'irregular'):
+#             print('SORRY, Cannot yet handle the case where both')
+#             print('       observed & simulated are irregular.')
+#             print()
+#             sys.exit()
+
+        #---------------------------------------------
+        # Interpolate to the simulated time series ?
+        #--------------------------------------------- 
+        interpolate_obs = (self.obs_time_interval == 'irregular') or \
+                          (self.sim_time_interval < self.obs_time_interval)
+        if (interpolate_obs):
             if not(SILENT):
-                print('Regularizing time series data...')
+                print('Interpolating obs. time series data...')
                 print()
-            self.regularize_obs_time_series()
-            #--------------------------------------------------
-            # Returning to hhmm-format times isn't necessary.
-            # It depends on what we want to do next with the
-            # times, like using them for x-axis of a plot.
-            # They are not used to compute the cost function.
-            #--------------------------------------------------
-            times_min = self.obs_times
-            # For testing
-            ## print('###### times_min[0:10] =', times_min[0:10])
-            ## print('###### times_min[-10:] =', times_min[-10:])
-            if (otf == 'hhmm'):
-                self.obs_times = tu.convert_times_from_minutes_to_hhmm( times_min )
-                ## self.convert_times_from_minutes_to_hhmm()
-            elif (otf == 'datetime'):
-                origin_datetime_str = self.obs_start_datetime  ################
-                origin_datetime_obj = tu.get_datetime_obj_from_one_str( origin_datetime_str )
-                self.obs_times = tu.convert_times_from_minutes_to_datetime( times_min,
-                                            origin_datetime_obj )
-                ## self.convert_times_from_minutes_to_datetime()
+            self.interpolate_obs_time_series()
+                         
+        #--------------------------------------------------
+        # Returning to hhmm-format times isn't necessary.
+        # It depends on what we want to do next with the
+        # times, like using them for x-axis of a plot.
+        # They are not used to compute the cost function.
+        #--------------------------------------------------
+#         times_min = self.obs_times
+#         if (otf == 'hhmm'):
+#             self.obs_times = tu.convert_times_from_minutes_to_hhmm( times_min )
+#         elif (otf == 'date'):
+#             origin_datetime_str = self.obs_start_datetime
+#             origin_datetime_obj = tu.get_datetime_obj_from_one_str( origin_datetime_str )
+#             self.obs_times = tu.convert_times_from_minutes_to_datetime( times_min,
+#                                         origin_datetime_obj )           
+#         elif (otf == 'datetime'):
+#             origin_datetime_str = self.obs_start_datetime  ################
+#             origin_datetime_obj = tu.get_datetime_obj_from_one_str( origin_datetime_str )
+#             self.obs_times = tu.convert_times_from_minutes_to_datetime( times_min,
+#                                         origin_datetime_obj )
+                                            
         if not(SILENT):
             print('In get_observed_values():')
             print('Obs time format    =', self.obs_time_format )
-            print('Obs time irregular =', self.obs_time_irregular )
-            if (otf not in ['hhmm', 'datetime']):
+            print('Obs time interval  =', self.obs_time_interval )
+            if (otf not in ['hhmm', 'date', 'datetime']):
                 print('Min(obs_times)     =', self.obs_times.min() )
                 print('Max(obs_times)     =', self.obs_times.max() )
+            print('obs_values.size    =', self.obs_values.size )
             print('Min(obs_values)    =', self.obs_values.min() )
             print('Max(obs_values)    =', self.obs_values.max() )
             print()
+            if not(interpolate_obs):
+                return
+            print('obs_values_orig.size =', self.obs_values_orig.size )
+            print('Min(obs_values_orig) =', self.obs_values_orig.min())
+            print('Max(obs_values_orig) =', self.obs_values_orig.max())                
 
     #   get_observed_values()
     #---------------------------------------------------------------------
@@ -495,11 +633,22 @@ class calibrator:
         # Set self.sim_times, self.sim_values
         #--------------------------------------
         self.read_time_series( source='simulated' )
- 
+
+        #--------------------------------------------
+        # Interpolate to the observed time series ?
+        #--------------------------------------------
+#         interpolate_sim = (self.sim_time_interval == 'irregular') or \
+#                           (self.obs_time_interval < self.sim_time_interval)
+#         if (interpolate_sim):
+#             if not(SILENT):
+#                 print('Interpolating sim. time series data...')
+#                 print()
+#             self.interpolate_sim_time_series()
+         
         if not(SILENT):
             print('In get_simulated_values():')
             print('Sim time format    =', self.sim_time_format )
-            print('Sim time irregular =', self.sim_time_irregular)
+            print('Sim time interval  =', self.sim_time_interval)
             print('Min(sim_times)     =', self.sim_times.min() )
             print('Max(sim_times)     =', self.sim_times.max() )
             print('Min(sim_values)    =', self.sim_values.min() )
@@ -517,6 +666,11 @@ class calibrator:
     #---------------------------------------------------------------------
     def backup_input_file(self, file_type='manning'):  
 
+        #----------------------------------------------------------
+        # Note:  This creates a backup of an input file that will
+        #        be overwritten during the calibration process.
+        #        It is called by the calibrate() method.
+        #----------------------------------------------------------
         topo_dir     = self.topo_dir
         site_prefix  = self.site_prefix
         cfg_dir      = self.cfg_dir
@@ -531,6 +685,28 @@ class calibrator:
         shutil.copyfile( input_file, backup_file)
 
     #   backup_input_file()
+    #---------------------------------------------------------------------
+    def restore_input_file(self, file_type='manning'):  
+
+        #----------------------------------------------------------
+        # Note:  This restores an input file that was overwritten
+        #        during the calibration process with a backup.
+        #        It is called by the calibrate() method.
+        #----------------------------------------------------------
+        topo_dir     = self.topo_dir
+        site_prefix  = self.site_prefix
+        cfg_dir      = self.cfg_dir
+        
+        if (file_type == 'manning'):
+            input_file  = topo_dir + site_prefix + '_chan-n.rtg'
+            backup_file = topo_dir + site_prefix + '_chan-n.ORIG'
+        elif (file_type == 'width'):
+            input_file  = topo_dir + site_prefix + '_chan-w.rtg'   
+            backup_file = topo_dir + site_prefix + '_chan-w.ORIG'
+                             
+        shutil.copyfile( backup_file, input_file)
+
+    #   restore_input_file()
     #---------------------------------------------------------------------
     def modify_channel_grid_file(self, cal_var, param, SILENT=True ):    
 
@@ -568,7 +744,7 @@ class calibrator:
             parameterize.get_grid_from_TCA(site_prefix=site_prefix,
                          topo_dir=topo_dir, area_file=d8_area_file,
                          out_file=manning_file, REPORT=REPORT,
-                         g1=self.manning_n_max, g2=param )
+                         g1=self.manning_n_min, g2=param )
 
     #   modify_channel_grid_file()
     #---------------------------------------------------------------------
@@ -597,12 +773,8 @@ class calibrator:
         # Compute cost with chosen cost function
         #-----------------------------------------
         if (self.cost_fcn_name == 'Lp_norm'):
-            #--------------------------------
-            # Lp norm with array operations
-            #--------------------------------
             p    = self.p_for_Lp_norm
-            arg  = np.abs( Y_obs - Y_sim )**p
-            cost = (arg.sum())**(1.0/p)
+            cost = Lp_norm(Y_obs, Y_sim, p=p)
         elif (self.cost_fcn_name == 'spearman'):
             cost = spearman_metric(Y_obs, Y_sim)
     
@@ -625,12 +797,25 @@ class calibrator:
 
     #   get_parameter_values()
     #---------------------------------------------------------------------
-    def calibrate(self, PLOT=True, SILENT=True,
-                  cal_var='channel_width_power' ):
-                  ### cal_var='channel_width_max' ):
-                  ### cal_var='manning_n_min' ):
-                  ### cal_var='manning_n_max' ):
-
+    def calibrate(self, PLOT=True, NORMALIZE_PLOT=False, SILENT=True,
+                  var_range=None, n_values=2,
+                  cal_var='manning_n_min',
+                  ## cal_var='manning_n_max',
+                  ## cal_var='channel_width_power',
+                  ## cal_var='channel_width_max',
+                  #------------------------------------------
+                  channel_width_max=150.0,   # [meters]  ######## CHANGE THIS
+                  channel_width_power=0.5,
+                  manning_n_min = 0.03,
+                  manning_n_max = 0.3):
+                  # log_law_z0_min =
+                  # log_law_z0_max = 
+        
+        #-------------------------------------------------------
+        # Note:  The keywords above are set to default values,
+        #        but "cal_var" will be made to vary.
+        #-------------------------------------------------------
+        
         #---------------------------------------
         # Create backup of grid to be modified
         #---------------------------------------
@@ -644,12 +829,12 @@ class calibrator:
         # Default parameter values
         # (unless made to vary)
         #--------------------------- 
-        self.channel_width_power = 0.5
-        self.channel_width_max   = 3.0  # [meters]
-        self.manning_n_min       = 0.03
-        self.manning_n_max       = 0.3
-        # self.log_law_z0_min      =
-        # self.log_law_z0_max      = 
+        self.channel_width_power = channel_width_power
+        self.channel_width_max   = channel_width_max  # [meters]
+        self.manning_n_min       = manning_n_min
+        self.manning_n_max       = manning_n_max
+        # self.log_law_z0_min      = log_law_z0_min  # [meters]
+        # self.log_law_z0_max      = log_law_z0_max
         
         #--------------------   
         # Initialize values
@@ -658,23 +843,29 @@ class calibrator:
         min_cost = 1e6
         tf_time_interp_method = 'None'
         ## tf_time_interp_method = 'Linear'
-        
-        if (cal_var == 'channel_width_power'):
-            range = [0.2, 1.0]
-        if (cal_var == 'channel_width_max'):
-            range = [1.0, 10.0]
-        if (cal_var == 'manning_n_min'):
-            ## range = [0.04, 0.05]
-            range = [0.02, 0.16]
-        if (cal_var == 'manning_n_max'):
-            range = [0.1, 0.9]
-        npv = 15
-        p_values = self.get_parameter_values( range=range, n=npv)
-        costs = np.zeros( npv )
 
-        #-------------------------------------------      
-        # Run the model repeatedly, vary parameter
-        #-------------------------------------------
+        #----------------------------------------        
+        # If var_range is not set, use defaults
+        #----------------------------------------
+        if (var_range is None):
+            if (cal_var == 'channel_width_power'):
+                var_range = [0.2, 1.0]
+            if (cal_var == 'channel_width_max'):
+                var_range = [1.0, 10.0]
+            if (cal_var == 'manning_n_min'):
+                var_range = [0.02, 0.16]
+            if (cal_var == 'manning_n_max'):
+                var_range = [0.1, 0.9]
+            print('Warning: var_range is not set.')
+            print('  Using default:', var_range )
+
+        p_values = self.get_parameter_values( range=var_range, n=n_values)
+        costs = np.zeros( n_values )
+        cal_start_time = time.time()   # [seconds]
+        
+        #-------------------------------------------------      
+        # Run the model repeatedly, vary input parameter
+        #-------------------------------------------------
         print('Working...')
         for param in p_values:
             print('   param =', param )
@@ -683,6 +874,7 @@ class calibrator:
             time.sleep( 1.0 )  ###### IS THIS NEEDED?
             ############################################
             #------------------------------------------------
+            run_start_time = time.time()  # [seconds]
             main.run_model(cfg_prefix=self.cfg_prefix,
                            cfg_directory=self.cfg_dir,
                            SILENT=True,  ### (always for calibration)
@@ -715,19 +907,41 @@ class calibrator:
                 best_index = index
             index += 1
 
+            #------------------------------------
+            # Print the time for this model run
+            #------------------------------------
+            run_time = (time.time() - run_start_time) / 60.0
+            print('   run_time =', run_time, '[minutes]')
+            
             if (PLOT):
                 str1 = cal_var.replace('_',' ').title()
                 title = (str1 + ' = ' + str(param))
                 ## print('title =', title)
                 ## self.plot_time_series( title=title )
-                self.plot_time_series( title=title, normalize=True, marker=',')
+                self.plot_time_series( title=title, marker=',',
+                                       normalize=NORMALIZE_PLOT )
 
+        #------------------------------------------
+        # Restore input file that was overwritten
+        #------------------------------------------
+        self.restore_input_file( file_type=file_type )
+        
+        total_time = (time.time() - cal_start_time) / 60.0
+                    
         #--------------------------------------
         # Save value of p that minimizes cost
         #--------------------------------------
         self.params     = p_values
         self.costs      = costs
         self.best_param = p_values[ best_index ]
+        self.total_time = total_time
+
+        if not(SILENT):
+            print('total time =', total_time, '[minutes]') 
+            print('best param =', cal.best_param)
+            print('params =', cal.params)
+            print('costs  =', cal.costs)
+            print()
 
     #   calibrate()
     #---------------------------------------------------------------------
@@ -766,7 +980,7 @@ class calibrator:
 
     #   plot_time_series()
     #---------------------------------------------------------------------
-    def update_sim_data_file(self):
+    def update_sim_data_file(self, SILENT=True):
 
         #--------------------------------------------------------    
         # Note: There is a check_overwrite() method in 
@@ -799,37 +1013,38 @@ class calibrator:
                 if (num > maxnum):
                     maxnum = num
                     target = fname
-         
-        print('target file =', target )       
+
         self.sim_data_file = target
+        if not(SILENT):
+            print('target file =', target )       
 
     #   update_sim_data_file()
     #---------------------------------------------------------------------
-    def delete_output_files(self):
-
-        ### os.remove( self.sim_data_file )
-
-        #-----------------------------------      
-        # Note:  This seems too dangerous.
-        #-----------------------------------          
-        os.chdir( self.output_dir )
-        #------------------------------------
-        txt_files = glob.glob( '*.txt' )
-        for fname in txt_files: 
-            print( fname )   
-            ## os.remove( fname )
-        #------------------------------------
-        rts_files = glob.glob( '*.rts' )
-        for fname in rts_files:
-            print( fname )    
-            ## os.remove( fname )        
-        #------------------------------------
-        nc_files = glob.glob( '*.nc' )
-        for fname in nc_files:
-            print( fname )    
-            ## os.remove( fname )
-             
-    #   delete_output_files()
+#     def delete_output_files(self):
+# 
+#         ### os.remove( self.sim_data_file )
+# 
+#         #-----------------------------------      
+#         # Note:  This seems too dangerous.
+#         #-----------------------------------          
+#         os.chdir( self.output_dir )
+#         #------------------------------------
+#         txt_files = glob.glob( '*.txt' )
+#         for fname in txt_files: 
+#             print( fname )   
+#             ## os.remove( fname )
+#         #------------------------------------
+#         rts_files = glob.glob( '*.rts' )
+#         for fname in rts_files:
+#             print( fname )    
+#             ## os.remove( fname )        
+#         #------------------------------------
+#         nc_files = glob.glob( '*.nc' )
+#         for fname in nc_files:
+#             print( fname )    
+#             ## os.remove( fname )
+#              
+#     #   delete_output_files()
     #---------------------------------------------------------------------
                          
 #---------------------------------------------------------------------
@@ -950,6 +1165,23 @@ def compute_rain_rates_from_accumulations( SILENT=False ):
 #   compute_rain_rates_from_accumulations()  
 #---------------------------------------------------------------------
 #---------------------------------------------------------------------
+def Lp_norm(Y_obs, Y_sim, p=2.0):
+
+    #--------------------------------
+    # Lp norm with array operations
+    #--------------------------------
+    arg  = np.abs( Y_obs - Y_sim )**p
+    d    = (arg.sum())**(1.0/p)
+    return d
+     
+#   Lp_norm()
+#---------------------------------------------------------------------
+def Lp_metric(Y_obs, Y_sim, p=2.0):
+
+    return Lp_norm(Y_obs, Y_sim, p=p)
+
+#   Lp_metric()
+#---------------------------------------------------------------------          
 def spearman_metric(x, y):
 
     #------------------------------------------------------------

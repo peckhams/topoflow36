@@ -1,6 +1,8 @@
 
-#  Copyright (c) 2019, Scott D. Peckham
+#  Copyright (c) 2019-2020, Scott D. Peckham
 #  August, September, October, Nov. 2019
+#  Jun. 2020.  Updated create_rts_from_nc_files() to suppport
+#              non-precip variables.
 
 #-------------------------------------------------------------------
 
@@ -894,11 +896,17 @@ def gdal_regrid_to_dem_grid( ds_in, tmp_file,
 #   gdal_regrid_to_dem_grid()       
 #-------------------------------------------------------------------    
 def create_rts_from_nc_files( rts_file='TEST.rts', NC4=False,
-           BARO_60=False, GPM=True, IN_MEMORY=False, VERBOSE=False,
+           var_name=None, GPM=True, resample_algo='bilinear',
+           BARO_60=False, IN_MEMORY=False, VERBOSE=False,
            DEM_bounds=None, DEM_xres_sec=None, DEM_yres_sec=None,
-           DEM_ncols=None, DEM_nrows=None, resample_algo='bilinear',
-           SILENT=False):
+           DEM_ncols=None, DEM_nrows=None, SILENT=False):
 
+    #------------------------------------
+    # Note: GPM and GLDAS are currently
+    #       the only supported products
+    #------------------------------------
+    GLDAS = not(GPM)  #############
+    
     #------------------------------------------------------
     # Note: See function above for resampling algorithms.
     #------------------------------------------------------
@@ -945,15 +953,21 @@ def create_rts_from_nc_files( rts_file='TEST.rts', NC4=False,
         #------------------------------------------
         # IMERG Technical Documentation, Table 1,
         # p. 25 (Huffman et al. (2019)).
-        # Should be "precipitationCal" and NOT
+        # Should be 'precipitationCal' and NOT
         #   HQprecipitation (microwave only).
         #------------------------------------------
-        var_name = "precipitationCal"  ## [mmph]
-        ### var_name = "HQprecipitation"
-    else:
-        # GLDAS
-        var_name = "Rainf_tavg"   ## [kg m-2 s-1]
- 
+        if (var_name is None):
+            var_name = 'precipitationCal'    # [mmph]
+            ## var_name = 'HQprecipitation'
+    #------------------------------------------------  
+    if (GLDAS):
+        if (var_name is None):
+            var_name = 'Rainf_tavg'   ## [kg m-2 s-1]
+        GLDAS_RAIN = (var_name == 'Rainf_tavg')
+    #------------------------------------------------     
+    if (var_name is None):
+        print('ERROR: var_name is required.')
+
     #-----------------------------------------    
     # Use a temp file in memory or on disk ?
     #-----------------------------------------
@@ -989,8 +1003,8 @@ def create_rts_from_nc_files( rts_file='TEST.rts', NC4=False,
     rts_nodata = None   # (do not change nodata values)
    
     count = 0
-    Pmax  = -1e6
-    Pmin  = 1e6
+    vmax  = -1e8
+    vmin  = 1e8
     bad_count = 0
     BAD_FILE  = False
     tif_file  = 'TEMP1.tif'
@@ -1012,16 +1026,20 @@ def create_rts_from_nc_files( rts_file='TEST.rts', NC4=False,
                                      out_nodata=rts_nodata )
             ds_in = gdal.Open( tif_file )
             grid1 = ds_in.ReadAsArray()
-        else:
+        elif (GLDAS):
             #-------------------------------
             # Open the original netCDF file
             #--------------------------------
             (ds_in, grid1, nodata) = gdal_open_nc_file( nc_file, var_name, VERBOSE=VERBOSE)
-  
-        gmax  = grid1.max()
-        gmin  = grid1.min()
-        Pmax  = max( Pmax, gmax )
-        Pmin  = min( Pmin, gmin )
+
+        #------------------------------------  
+        # Note: This gives min & max before
+        #       clipping to DEM bounds
+        #------------------------------------
+#         gmax  = grid1.max()
+#         gmin  = grid1.min()
+#         vmax  = max( vmax, gmax )
+#         vmin  = min( vmin, gmin )
         band  = ds_in.GetRasterBand(1)
         nc_nodata = band.GetNoDataValue()
 
@@ -1094,47 +1112,22 @@ def create_rts_from_nc_files( rts_file='TEST.rts', NC4=False,
             if (rts_nodata is not None):
                 grid2 += rts_nodata
  
+        if (GLDAS_RAIN):
+            #-------------------------------
+            # Convert [kg m-2 s-1] to mmph
+            #-------------------------------
+            w = (grid2 != -9999.0)        # (boolean array)
+            grid2[w] = grid2[w] * 3600.0  # (preserve nodata)
+
         #-------------------------  
         # Write grid to RTS file
         #-------------------------
         grid2 = np.float32( grid2 )
-        if not(GPM):
-            grid2 *= 3600.0    # (convert [kg m-2 s-1] to mmph)
+        vmax  = max( vmax, grid2.max() )
+        vmin  = min( vmin, grid2.min() )
         grid2.tofile( rts_unit )
         count += 1
         if not(SILENT):  print('count =', count)
-         
-        # DELETE THIS WHEN GPM IS WORKING.   
-        #--------------------------------------------
-        # Read resampled data from tmp GeoTIFF file
-        #--------------------------------------------
-        # This step shouldn't be necessary now.   #######
-        #--------------------------------------------
-#         ds_tmp = gdal.Open( tmp_file )
-#         ## ds_tmp = gdal.Open( tmp_file, gdal.GA_ReadOnly  )
-#         ## print( gdal.Info( ds_tmp ) )
-#         grid3  = ds_tmp.ReadAsArray()
-#         if (VERBOSE):
-#             print( 'grid3: min, max =', grid3.min(), grid3.max() )
-#             print( 'grid3.shape =', grid3.shape)
-#             print( 'grid3.dtype =', grid3.dtype)
-#             w  = np.where(grid3 != nodata)
-#             nw = w[0].size
-#             print( 'grid3 # data =', nw)
-#         ds_tmp = None   # Close tmp file
-#    
-#         if (IN_MEMORY):
-#             gdal.Unlink( tmp_file )
-#         #-------------------------  
-#         # Write grid to RTS file
-#         #-------------------------
-#         grid3 = np.float32( grid3 )
-#         ## rts_unit.write( grid3 )  # (doesn't work)
-#         grid3.tofile( rts_unit )
-#         count += 1
-
-#         if (count == 300):  ##################################
-#             break
 
     #---------------------
     # Close the RTS file
@@ -1160,16 +1153,35 @@ def create_rts_from_nc_files( rts_file='TEST.rts', NC4=False,
               box_units='DEGREES')
     rti_files.write_info( rts_file, rti )
 
-    #-----------------------
-    # Print final messages
-    #-----------------------
-    if not(GPM):
-        Pmax = (Pmax * 3600.0)
-        if (Pmin != -9999.0):
-            Pmin = (Pmin * 3600.0)
+    #---------------------------
+    # Determine variable units
+    #---------------------------
+    if (GPM or GLDAS_RAIN):
+        units = 'mmph'  # (GLDAS_RAIN is converted from mass flux)
+    else:
+        #-----------------------------------------------
+        # Note: This is not all of the GLDAS variables
+        #-----------------------------------------------   
+        umap = {
+        'Swnet_tavg'         : 'W m-2',
+        'Lwnet_tavg'         : 'W m-2',
+        'Rainf_tavg'         : 'kg m-2 s-1',
+        'Evap_tavg'          : 'kg m-2 s-1',
+        'Qsb_acc'            : 'kg m-2',   # (baseflow groundwater runoff)
+        'SoilMoi0_10cm_inst' : 'kg m-2',  # (soil moisture content)
+        'Albedo_inst'        : '%',
+        'Wind_f_inst'        : 'm s-1',
+        'Tair_f_inst'        : 'K' }     # (air temperature)
+        units = umap[ var_name ]
+
+    #----------------------     
+    # Print final message
+    #----------------------  
     print( ' ')
-    print( 'Max precip rate =', Pmax, '[mmph]' )
-    print( 'Min precip rate =', Pmin, '[mmph]', '(possible nodata)' )
+    print( 'Variable name  =', var_name )
+    print( 'Variable units =', units)
+    print( 'max(variable)  =', vmax)
+    print( 'min(variable)  =', vmin, '(possible nodata)' )
     print( 'bad_count =', bad_count )
     print( 'n_grids   =', count )
     print( 'Finished saving data to rts file.')
