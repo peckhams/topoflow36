@@ -170,6 +170,11 @@ class snow_component( BMI_base.BMI_component ):
             self.status  = 'initialized'
             return
  
+        #----------------------------------------
+        # Initialize vars to be read from files
+        #----------------------------------------
+        self.initialize_input_file_vars()
+ 
         #---------------------------------------------
         # Open input files needed to initialize vars 
         #---------------------------------------------

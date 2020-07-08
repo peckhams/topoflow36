@@ -19,6 +19,7 @@ flag in their CFG file.
 #------------------------------------------------------------------------
 #  Copyright (c) 2001-2020, Scott D. Peckham
 #
+#  Jul 2020.  Separate initialize_input_file_vars().
 #  Apr 2020.  Added set_new_defaults(), disable_all_output().
 #  Oct 2019.  Added FLOOD_OPTION and CHECK_STABILITY flags.
 #  Sep 2014.  Wrote new update_diversions().
@@ -87,7 +88,8 @@ flag in their CFG file.
 #      finalize()
 #      set_computed_input_vars()   # (5/11/10)
 #----------------------------------
-#      initialize_d8_vars()          ########
+#      initialize_input_file_vars()     # (7/3/20)
+#      initialize_d8_vars()
 #      initialize_computed_vars()
 #      initialize_diversion_vars()      # (9/22/14)
 #      initialize_outlet_values()
@@ -617,41 +619,12 @@ class channels_component( BMI_base.BMI_component ):
         #--------------------------------------------------------
         self.code_type  = 'Grid'  # (may not need this one)
         self.slope_type = 'Grid'
-        
-        ##################################################################
-        # Move this block into new: "initialize_input_file_vars()"  ???
-        #---------------------------------------------------
-        # Initialize vars to be read from files (11/16/16)
-        #---------------------------------------------------
-        # Need this in order to use "update_var()".
-        #----------------------------------------------------------
-        # NOTE: read_config_file() sets these to '0.0' if they
-        #       are not type "Scalar", so self has the attribute.
-        #----------------------------------------------------------
-        dtype = 'float64'
-        if (self.slope_type.lower() != 'scalar'):
-            self.slope = self.initialize_var(self.slope_type, dtype=dtype)
-        if (self.width_type.lower() != 'scalar'):
-            self.width = self.initialize_var(self.width_type, dtype=dtype)
-        if (self.angle_type.lower() != 'scalar'):
-            self.angle = self.initialize_var(self.angle_type, dtype=dtype)
-        if (self.sinu_type.lower() != 'scalar'):
-            self.sinu  = self.initialize_var(self.sinu_type,  dtype=dtype)
-        if (self.d0_type.lower() != 'scalar'):
-            self.d0    = self.initialize_var(self.d0_type,    dtype=dtype)
-        #-------------------------------------------------------------------------------- 
-        if (self.d_bankfull_type.lower() != 'scalar'):
-            self.d_bankfull = self.initialize_var(self.d_bankfull_type, dtype=dtype)  
-#         if (self.w_bankfull_type.lower() != 'scalar'):
-#             self.w_bankfull = self.initialize_var(self.w_bankfull_type, dtype=dtype)    
-        #-------------------------------------------------------------------------------- 
-        if (self.MANNING):
-            if (self.nval_type.lower() != 'scalar'):   
-                self.nval  = self.initialize_var(self.nval_type, dtype=dtype)
-        if (self.LAW_OF_WALL):
-            if (self.z0val_type.lower() != 'scalar'):      
-                self.z0val = self.initialize_var(self.z0val_type, dtype=dtype)
-       
+
+        #----------------------------------------
+        # Initialize vars to be read from files
+        #----------------------------------------
+        self.initialize_input_file_vars()
+  
         #------------------------------------------------------
         # Must now do this before read_input_files (11/11/16) 
         #------------------------------------------------------
@@ -906,6 +879,42 @@ class channels_component( BMI_base.BMI_component ):
         self.save_pixels_dt = np.maximum(self.save_pixels_dt, self.dt)
         
     #   set_computed_input_vars()
+    #-------------------------------------------------------------------
+    def initialize_input_file_vars(self):    
+    
+        #---------------------------------------------------
+        # Initialize vars to be read from files (11/16/16)
+        #---------------------------------------------------
+        # Need this in order to use "bmi.update_var()".
+        #----------------------------------------------------------
+        # NOTE: read_config_file() sets these to '0.0' if they
+        #       are not type "Scalar", so self has the attribute.
+        #----------------------------------------------------------
+        dtype = 'float64'
+        if (self.slope_type.lower() != 'scalar'):
+            self.slope = self.initialize_var(self.slope_type, dtype=dtype)
+        if (self.width_type.lower() != 'scalar'):
+            self.width = self.initialize_var(self.width_type, dtype=dtype)
+        if (self.angle_type.lower() != 'scalar'):
+            self.angle = self.initialize_var(self.angle_type, dtype=dtype)
+        if (self.sinu_type.lower() != 'scalar'):
+            self.sinu  = self.initialize_var(self.sinu_type,  dtype=dtype)
+        if (self.d0_type.lower() != 'scalar'):
+            self.d0    = self.initialize_var(self.d0_type,    dtype=dtype)
+        #-------------------------------------------------------------------------------- 
+        if (self.d_bankfull_type.lower() != 'scalar'):
+            self.d_bankfull = self.initialize_var(self.d_bankfull_type, dtype=dtype)  
+#         if (self.w_bankfull_type.lower() != 'scalar'):
+#             self.w_bankfull = self.initialize_var(self.w_bankfull_type, dtype=dtype)    
+        #-------------------------------------------------------------------------------- 
+        if (self.MANNING):
+            if (self.nval_type.lower() != 'scalar'):   
+                self.nval  = self.initialize_var(self.nval_type, dtype=dtype)
+        if (self.LAW_OF_WALL):
+            if (self.z0val_type.lower() != 'scalar'):      
+                self.z0val = self.initialize_var(self.z0val_type, dtype=dtype)
+                
+    #   initialize_input_file_vars()
     #-------------------------------------------------------------------
     def initialize_d8_vars(self):
 

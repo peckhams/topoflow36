@@ -43,6 +43,7 @@ See evap_priestley_taylor.py, evap_energy_balance.py, evap_read_file.py
 #      -----------------------------
 #      check_input_types()
 #      check_if_types_match()
+#      initialize_input_file_vars()   # 7/3/20
 #      initialize_computed_vars()
 #      -----------------------------
 #      update_Qc()                   # (not used yet)
@@ -154,6 +155,11 @@ class evap_component( BMI_base.BMI_component):
             self.status = 'initialized'
             return
 
+        #----------------------------------------
+        # Initialize vars to be read from files
+        #----------------------------------------
+        self.initialize_input_file_vars()
+        
         #---------------------------------------------
         # Open input files needed to initialize vars 
         #---------------------------------------------
@@ -264,6 +270,28 @@ class evap_component( BMI_base.BMI_component):
         self.ALL_SCALARS = np.all(are_scalars)
         
     #   check_input_types()
+    #-------------------------------------------------------------------
+    def initialize_input_file_vars(self):
+
+        #---------------------------------------------------
+        # Initialize vars to be read from files (11/16/16)
+        #---------------------------------------------------
+        # Need this in order to use "bmi.update_var()".
+        #----------------------------------------------------------
+        # NOTE: read_config_file() sets these to '0.0' if they
+        #       are not type "Scalar", so self has the attribute.
+        #----------------------------------------------------------
+        dtype = 'float64'
+        if (self.alpha_type.lower() != 'scalar'):
+            self.alpha = self.initialize_var(self.alpha_type, dtype=dtype) 
+        if (self.K_soil_type.lower() != 'scalar'):
+            self.K_soil = self.initialize_var(self.K_soil_type, dtype=dtype) 
+        if (self.soil_x_type.lower() != 'scalar'):
+            self.soil_x = self.initialize_var(self.soil_x_type, dtype=dtype) 
+        if (self.T_soil_x_type.lower() != 'scalar'):
+            self.T_soil_x = self.initialize_var(self.T_soil_x_type, dtype=dtype) 
+ 
+    #   initialize_input_file_vars()
     #-------------------------------------------------------------------
     def initialize_computed_vars(self):
 
@@ -545,16 +573,16 @@ class evap_component( BMI_base.BMI_component):
         #-------------------------------------------------
         # Notes:  Append out_directory to outfile names.
         #-------------------------------------------------
-        self.ET_gs_file = (self.out_directory + self.er_gs_file)
+        self.ET_gs_file = (self.out_directory + self.ET_gs_file)
         #---------------------------------------------------------
-        self.ET_ts_file = (self.out_directory + self.er_ts_file)
+        self.ET_ts_file = (self.out_directory + self.ET_ts_file)
 
     #   update_outfile_names()
     #-------------------------------------------------------------------
     def disable_all_output(self):
 
-        self.SAVE_ER_GRIDS  = False
-        self.SAVE_ER_PIXELS = False
+        self.SAVE_ET_GRIDS  = False
+        self.SAVE_ET_PIXELS = False
             
     #   disable_all_output()   
     #-------------------------------------------------------------------  
@@ -570,7 +598,7 @@ class evap_component( BMI_base.BMI_component):
         #--------------------------------------
         # Open new files to write grid stacks
         #--------------------------------------
-        if (self.SAVE_ER_GRIDS):
+        if (self.SAVE_ET_GRIDS):
             model_output.open_new_gs_file( self, self.ET_gs_file, self.rti,
                                            var_name='ET',
                                            long_name='evaporation_rate',
@@ -581,8 +609,8 @@ class evap_component( BMI_base.BMI_component):
         # Open new files to write time series
         #--------------------------------------
         IDs = self.outlet_IDs
-        if (self.SAVE_ER_PIXELS):
-            model_output.open_new_ts_file( self, self.ER_ts_file, IDs,
+        if (self.SAVE_ET_PIXELS):
+            model_output.open_new_ts_file( self, self.ET_ts_file, IDs,
                                            var_name='ET',
                                            long_name='evaporation_rate',
                                            units_name='mm/hr')
@@ -601,8 +629,8 @@ class evap_component( BMI_base.BMI_component):
         #         the "save_dts" are larger than or equal to the
         #         process dt.
         #---------------------------------------------------------
-##        if (SAVE_ER_GRIDS  == False) and  \
-##           (SAVE_ER_PIXELS == False): return
+##        if (SAVE_ET_GRIDS  == False) and  \
+##           (SAVE_ET_PIXELS == False): return
            
         #-----------------------------------------
         # Allows time to be passed from a caller
@@ -631,9 +659,9 @@ class evap_component( BMI_base.BMI_component):
     #---------------------------------------------------------------------
     def close_output_files(self):
     
-        if (self.SAVE_ER_GRIDS):  model_output.close_gs_file( self, 'ET')
+        if (self.SAVE_ET_GRIDS):  model_output.close_gs_file( self, 'ET')
         #-----------------------------------------------------------------
-        if (self.SAVE_ER_PIXELS): model_output.close_gs_file( self, 'ET')  
+        if (self.SAVE_ET_PIXELS): model_output.close_gs_file( self, 'ET')  
 
     #   close_output_files()   
     #---------------------------------------------------------------------  
@@ -645,10 +673,10 @@ class evap_component( BMI_base.BMI_component):
         # Note that add_grid() methods will convert
         # var from scalar to grid now, if necessary.
         #--------------------------------------------- 
-        if (self.SAVE_ER_GRIDS):
+        if (self.SAVE_ET_GRIDS):
             ET_mmph = self.ET * self.mps_to_mmph    # (Bolton 28 Aug)
             model_output.add_grid( self, ET_mmph, 'ET', self.time_min )
-
+            
     #   save_grids()            
     #---------------------------------------------------------------------  
     def save_pixel_values(self):
@@ -656,10 +684,10 @@ class evap_component( BMI_base.BMI_component):
         IDs  = self.outlet_IDs
         time = self.time_min   ########
          
-        if (self.SAVE_ER_PIXELS):
+        if (self.SAVE_ET_PIXELS):
             ET_mmph = self.ET * self.mps_to_mmph    # (Bolton 28 Aug)
             model_output.add_values_at_IDs( self, time, ET_mmph, 'ET', IDs )
-
+            
     #   save_pixel_values()
     #---------------------------------------------------------------------
 

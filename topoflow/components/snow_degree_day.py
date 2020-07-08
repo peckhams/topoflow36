@@ -32,7 +32,8 @@ functions.  It inherits from the snow "base class" in
 #      ----------------------
 #      check_input_types()
 #      update_meltrate()
-#      ----------------------
+#      -----------------------------
+#      initialize_input_file_vars()   # (7/3/20)
 #      open_input_files()
 #      read_input_files()
 #      close_input_files()
@@ -324,6 +325,30 @@ class snow_component( snow_base.snow_component ):
         #  self.enforce_max_meltrate()
         
     #   update_meltrate()
+    #-------------------------------------------------------------------
+    def initialize_input_file_vars(self):     
+    
+        #---------------------------------------------------
+        # Initialize vars to be read from files (11/16/16)
+        #---------------------------------------------------
+        # Need this in order to use "bmi.update_var()".
+        #----------------------------------------------------------
+        # NOTE: read_config_file() sets these to '0.0' if they
+        #       are not type "Scalar", so self has the attribute.
+        #----------------------------------------------------------
+        dtype = 'float64'
+        if (self.c0_type.lower() != 'scalar'):
+            self.c0 = self.initialize_var(self.c0_type, dtype=dtype)
+        if (self.T0_type.lower() != 'scalar'):
+            self.T0 = self.initialize_var(self.T0_type, dtype=dtype)
+        if (self.rho_snow_type.lower() != 'scalar'):
+            self.rho_snow = self.initialize_var(self.rho_snow_type, dtype=dtype)
+        if (self.h0_snow_type.lower() != 'scalar'):
+            self.h0_snow = self.initialize_var(self.h0_snow_type, dtype=dtype)    
+        if (self.h0_swe_type.lower() != 'scalar'):
+            self.h0_swe = self.initialize_var(self.h0_swe_type, dtype=dtype)     
+    
+    #   initialize_input_file_vars()
     #------------------------------------------------------------------- 
     def open_input_files(self):
 
@@ -349,19 +374,24 @@ class snow_component( snow_base.snow_component ):
         # All grids are assumed to have a data type of Float32.
         #-------------------------------------------------------
         c0 = model_input.read_next(self.c0_unit, self.c0_type, rti)
-        if (c0 is not None): self.c0 = c0
+        if (c0 is not None):
+            self.update_var( 'c0', c0 )
 
         T0 = model_input.read_next(self.T0_unit, self.T0_type, rti)
-        if (T0 is not None): self.T0 = T0
+        if (T0 is not None):
+            self.update_var( 'T0', T0 )
 
         rho_snow = model_input.read_next(self.rho_snow_unit, self.rho_snow_type, rti)
-        if (rho_snow is not None): self.rho_snow = rho_snow
+        if (rho_snow is not None):
+            self.update_var( 'rho_snow', rho_snow )
 
         h0_snow = model_input.read_next(self.h0_snow_unit, self.h0_snow_type, rti)
-        if (h0_snow is not None): self.h0_snow = h0_snow
+        if (h0_snow is not None):
+            self.update_var( 'h0_snow', h0_snow )
         
         h0_swe = model_input.read_next(self.h0_swe_unit, self.h0_swe_type, rti)
-        if (h0_swe is not None): self.h0_swe = h0_swe
+        if (h0_swe is not None):
+            self.update_var( 'h0_swe', h0_swe )
         
     #   read_input_files()       
     #-------------------------------------------------------------------  

@@ -11,6 +11,9 @@ in BMI_base.py.
 #
 # Copyright (c) 2001-2020, Scott D. Peckham
 #
+#  Jul 2020.  Separate initialize_input_file_vars().
+#             Updated update_bulk_aero_conductance().
+#             Updated read_input_files().
 #  May 2020.  Separate set_rain_to_zero() method (readability)
 #             Better PRECIP_ONLY support; set_computed_input_vars()
 #             Bug fix: problem with read_input_files() call.
@@ -60,6 +63,7 @@ in BMI_base.py.
 #      set_computed_input_vars()
 #      set_slope_angle()
 #      set_aspect_angle()
+#      initialize_input_file_vars()   # (7/3/20)
 #      initialize_computed_vars()
 #      ----------------------------
 #      update_P_integral()
@@ -628,27 +632,31 @@ class met_component( BMI_base.BMI_component ):
         P_type = self.P_type.lower()
         ## dtype = 'float32'   ## TEST: 2020-05-04
         dtype = 'float64'
-        if (P_type == 'scalar') or (P_type == 'time_series'):
-            #-------------------------------------------------
-            # (5/19/12) This makes P "mutable", which allows
-            # its updated values to be seen by any component
-            # that has a reference to it.
-            #-------------------------------------------------
-            # If P_type is 'scalar', then P was initialized
-            # in initialize_config_vars().
-            #-------------------------------------------------
-            if (P_type != 'scalar'):
-                self.P = self.initialize_scalar(0, dtype=dtype)
-            else:
-                pass
-                # This is done in set_computed_input_vars()
-                ### self.P *= self.mmph_to_mps
-            self.P_rain = self.initialize_scalar(0, dtype=dtype)
-            self.P_snow = self.initialize_scalar(0, dtype=dtype)
-        else:
-            self.P      = self.initialize_grid(0, dtype=dtype)
-            self.P_rain = self.initialize_grid(0, dtype=dtype)
-            self.P_snow = self.initialize_grid(0, dtype=dtype)
+
+        #----------------------------------------------------------        
+        # NOTE: This is now done in initialize_input_file_vars().
+        #----------------------------------------------------------
+#         if (P_type == 'scalar') or (P_type == 'time_series'):
+#             #-------------------------------------------------
+#             # (5/19/12) This makes P "mutable", which allows
+#             # its updated values to be seen by any component
+#             # that has a reference to it.
+#             #-------------------------------------------------
+#             # If P_type is 'scalar', then P was initialized
+#             # in initialize_config_vars().
+#             #-------------------------------------------------
+#             if (P_type == 'time_series'):
+#                 self.P = self.initialize_scalar(0, dtype=dtype)
+#             else:
+#                 pass
+#                 # This is done in set_computed_input_vars()
+#                 ### self.P *= self.mmph_to_mps
+#             self.P_rain = self.initialize_scalar(0, dtype=dtype)
+#             self.P_snow = self.initialize_scalar(0, dtype=dtype)
+#         else:
+#             self.P      = self.initialize_grid(0, dtype=dtype)
+#             self.P_rain = self.initialize_grid(0, dtype=dtype)
+#             self.P_snow = self.initialize_grid(0, dtype=dtype)
                                
         #------------------------------------------------------
         # NB! "Sample steps" must be defined before we return
@@ -668,6 +676,11 @@ class met_component( BMI_base.BMI_component ):
             self.DONE     = True
             self.status   = 'initialized'
             return
+
+        #----------------------------------------
+        # Initialize vars to be read from files
+        #----------------------------------------
+        self.initialize_input_file_vars()
 
         #-----------------------------------------------
         # Read from files as needed to initialize vars 
@@ -960,6 +973,66 @@ class met_component( BMI_base.BMI_component ):
             
     #   set_aspect_angle()
     #-------------------------------------------------------------------
+    def initialize_input_file_vars(self):
+             
+        #----------------------------------------
+        # Initialize vars to be read from files
+        #--------------------------------------------------------
+        # initialize_var() initializes as scalar or grid.
+        # Need this in order to use "update_var()", which makes
+        # variables "mutable", so that its updated values can
+        # be seen by any component that has a reference to it.
+        #--------------------------------------------------------
+        # If a variable's type (called [var]_type) is 'Scalar',
+        # then it is initialized in initialize_config_vars().
+        # For the 'Time_Series', 'Grid', and 'Grid_Sequence'
+        # types, read_config_file() initializes them to '0.0',
+        # so that self has the attribute.
+        #--------------------------------------------------------
+        dtype = 'float64'
+        if (self.P_type.lower() != 'scalar'):
+            self.P = self.initialize_var(self.P_type, dtype=dtype)
+            self.P_rain = self.initialize_var(self.P_type, dtype=dtype)
+            self.P_snow = self.initialize_var(self.P_type, dtype=dtype)
+        #--------------------------------------------------------------------
+        if (self.T_air_type.lower() != 'scalar'):
+            self.T_air = self.initialize_var(self.T_air_type, dtype=dtype)
+        #--------------------------------------------------------------------
+        if (self.T_surf_type.lower() != 'scalar'):
+            self.T_surf = self.initialize_var(self.T_surf_type, dtype=dtype)
+        #--------------------------------------------------------------------
+        if (self.RH_type.lower() != 'scalar'):
+            self.RH = self.initialize_var(self.RH_type, dtype=dtype)
+        #--------------------------------------------------------------------
+        if (self.p0_type.lower() != 'scalar'):
+            self.p0 = self.initialize_var(self.p0_type, dtype=dtype)
+        #--------------------------------------------------------------------
+        if (self.uz_type.lower() != 'scalar'):
+            self.uz = self.initialize_var(self.uz_type, dtype=dtype)
+        #--------------------------------------------------------------------
+        if (self.z_type.lower() != 'scalar'):
+            self.z = self.initialize_var(self.z_type, dtype=dtype)
+        #--------------------------------------------------------------------
+        if (self.z0_air_type.lower() != 'scalar'):
+            self.z0_air = self.initialize_var(self.z0_air_type, dtype=dtype)
+        #--------------------------------------------------------------------
+        if (self.albedo_type.lower() != 'scalar'):
+            self.albedo = self.initialize_var(self.albedo_type, dtype=dtype)
+        #--------------------------------------------------------------------
+        if (self.em_surf_type.lower() != 'scalar'):
+            self.em_surf = self.initialize_var(self.em_surf_type, dtype=dtype)
+        #--------------------------------------------------------------------
+        if (self.dust_atten_type.lower() != 'scalar'):
+            self.dust_atten = self.initialize_var(self.dust_atten_type, dtype=dtype)
+        #--------------------------------------------------------------------
+        if (self.cloud_factor_type.lower() != 'scalar'):
+            self.cloud_factor = self.initialize_var(self.cloud_factor_type, dtype=dtype)
+        #--------------------------------------------------------------------
+        if (self.canopy_factor_type.lower() != 'scalar'):
+            self.canopy_factor = self.initialize_var(self.canopy_factor_type, dtype=dtype)
+            
+    #   initialize_input_file_vars()
+    #-------------------------------------------------------------------
     def initialize_computed_vars(self):
 
         #------------------------------------------------------
@@ -1025,7 +1098,6 @@ class met_component( BMI_base.BMI_component ):
         ## self.P_max = self.P.max()
         self.P_max = self.initialize_scalar( P_max, dtype=dtype)
         self.vol_P = self.initialize_scalar( 0, dtype=dtype)
-
 
         #----------------------------------------------------------
         # For using new framework which embeds references from
@@ -1249,41 +1321,24 @@ class met_component( BMI_base.BMI_component ):
         # using the logarithm "law of the wall".
         #-----------------------------------------------------
         # Note that "arg" = the drag coefficient (unitless).
-        #-----------------------------------------------------        
+        #-----------------------------------------------------
+        # Dn will be a grid if any of the variables:
+        #   z, h_snow, z0_air, or uz is a grid.
+        #-----------------------------------------------------                
         arg = self.kappa / np.log((self.z - h_snow) / self.z0_air)
         Dn  = self.uz * (arg)**2.0
         
-        #-----------------------------------------------
-        # NB! Dn could be a scalar or a grid, so this
-        #     must be written to handle both cases.
-        #     Note that WHERE can be used on a scalar:
-        
-        #     IDL> a = 1
-        #     IDL> print, size(a)
-        #     IDL> w = where(a ge 1, nw)
-        #     IDL> print, nw
-        #     IDL> a[w] = 2
-        #     IDL> print, a
-        #     IDL> print, size(a)
-        #-----------------------------------------------
+        T_AIR_SCALAR  = self.is_scalar('T_air')
+        T_SURF_SCALAR = self.is_scalar('T_surf')
 
-        ###########################################################
-        #  NB!  If T_air and T_surf are both scalars, then next
-        #       few lines won't work because we can't index the
-        #       resulting empty "w" (even if T_air == T_surf).
-        ###########################################################
-##        w  = np.where(self.T_air != self.T_surf)
-##        nw = np.size(w[0])
-##        ## nw = np.size(w,0)  # (doesn't work if 2 equal scalars)
-        #----------------------------------------------------------
-        T_AIR_SCALAR  = (np.ndim( self.T_air )  == 0)
-        T_SURF_SCALAR = (np.ndim( self.T_surf ) == 0)
         if (T_AIR_SCALAR and T_SURF_SCALAR):
-            if (self.T_air == self.T_surf):  nw=1
-            else: nw=0      
+            if (self.T_air == self.T_surf):
+               nw = 0
+            else:
+               nw = 1
         else:
-            w  = np.where(self.T_air != self.T_surf)
-            nw = np.size(w[0])
+            w  = (self.T_air != self.T_surf)   # (boolean array)
+            nw = w.sum()
         
         if (nw == 0):
             #--------------------------------------------
@@ -1332,26 +1387,33 @@ class met_component( BMI_base.BMI_component ):
         # (9/7/14)  Modified so that Dn is saved, but Dh = De.
         #------------------------------------------------------------        
         Dh = Dn.copy()   ### (9/7/14.  Save Dn also.)
-        nD = np.size( Dh )
-        nR = np.size( self.Ri )
+        nD = Dh.size
+        nR = self.Ri.size
         if (nR > 1):    
             #--------------------------
             # Case where RI is a grid
             #--------------------------
-            ws = np.where( self.Ri > 0 )
-            ns = np.size( ws[0] )
-            wu = np.where( np.invert(self.Ri > 0) )
-            nu = np.size( wu[0] )
-            if (nD == 1):    
-                #******************************************
-                # Convert Dn to a grid here or somewhere
-                # Should stop with an error message
-                #******************************************
-                dum = np.int16(0)
-            if (ns != 0):
-                #----------------------------------------------------------
-                # If (Ri > 0), or (T_surf > T_air), then STABLE. (9/6/14)
-                #----------------------------------------------------------   
+            ws = (self.Ri > 0)     # where stable
+            ns = ws.sum()
+            wu = np.invert( ws )   # where unstable
+            nu = wu.sum()
+        
+            if (nD == 1):
+                #-----------------------------------
+                # Convert Dh to a grid, same as Ri
+                #-----------------------------------
+                Dh = Dh + np.zeros( self.Ri.shape, dtype='float64' )
+
+            #----------------------------------------------------------
+            # If (Ri > 0), or (T_surf > T_air), then STABLE. (9/6/14)
+            #---------------------------------------------------------- 
+            # When ws and wu are boolean arrays, don't
+            # need to check whether any are True. 
+            #------------------------------------------- 
+            # Dh[ws] = Dh[ws] / (np.float64(1) + (np.float64(10) * self.Ri[ws]))  
+            # Dh[wu] = Dh[wu] * (np.float64(1) - (np.float64(10) * self.Ri[wu]))
+            #-----------------------------------------------------------------------        
+            if (ns != 0):  
                 Dh[ws] = Dh[ws] / (np.float64(1) + (np.float64(10) * self.Ri[ws]))
             if (nu != 0):    
                 Dh[wu] = Dh[wu] * (np.float64(1) - (np.float64(10) * self.Ri[wu]))
@@ -1940,22 +2002,23 @@ class met_component( BMI_base.BMI_component ):
                     print(' ')
 
         #------------------------------------------------------------
+        # EXPERIMENTAL, NOT FINISHED
         # Read variables from files into scalars or grids while
         # making sure to preserve references (in-place). (11/15/16)
         #------------------------------------------------------------
-        model_input.read_next2(self, 'T_air',   rti)
-        model_input.read_next2(self, 'T_surf',  rti)
-        model_input.read_next2(self, 'RH',      rti)
-        model_input.read_next2(self, 'p0',      rti)
-        model_input.read_next2(self, 'uz',      rti)
-        model_input.read_next2(self, 'z',       rti)
-        model_input.read_next2(self, 'z0_air',  rti)
-        #----------------------------------------------------
-        model_input.read_next2(self, 'albedo',  rti)
-        model_input.read_next2(self, 'em_surf', rti)
-        model_input.read_next2(self, 'dust_atten',    rti)
-        model_input.read_next2(self, 'cloud_factor',  rti)
-        model_input.read_next2(self, 'canopy_factor', rti)
+#         model_input.read_next2(self, 'T_air',   rti)
+#         model_input.read_next2(self, 'T_surf',  rti)
+#         model_input.read_next2(self, 'RH',      rti)
+#         model_input.read_next2(self, 'p0',      rti)
+#         model_input.read_next2(self, 'uz',      rti)
+#         model_input.read_next2(self, 'z',       rti)
+#         model_input.read_next2(self, 'z0_air',  rti)
+#         #----------------------------------------------------
+#         model_input.read_next2(self, 'albedo',  rti)
+#         model_input.read_next2(self, 'em_surf', rti)
+#         model_input.read_next2(self, 'dust_atten',    rti)
+#         model_input.read_next2(self, 'cloud_factor',  rti)
+#         model_input.read_next2(self, 'canopy_factor', rti)
 
         ###############################################################
         # If any of these are scalars (read from a time series file)
@@ -1963,32 +2026,42 @@ class met_component( BMI_base.BMI_component ):
         # the reference to the "mutable scalar". (2/7/13)
         ###############################################################
         T_air = model_input.read_next(self.T_air_unit, self.T_air_type, rti)
-        self.update_var( 'T_air', T_air )
-        # if (T_air is not None): self.T_air = T_air
+        ## print('## T_air_type =', self.T_air_type )
+        if (T_air is not None):
+            # For testing
+            # print('min(T_air) =', T_air.min() )
+            # print('max(T_air) =', T_air.max() )
+            # print('T_air.dtype =', T_air.dtype )
+            # print('T_air.shape =', T_air.shape )
+            # print('Assuming air temperature units are Kelvin.')
+            CONVERT_K_TO_C = True   ######################################
+            if (CONVERT_K_TO_C):
+                T_air -= 273.15
+            self.update_var( 'T_air', T_air )
 
         T_surf = model_input.read_next(self.T_surf_unit, self.T_surf_type, rti)
-        self.update_var( 'T_surf', T_surf )
-        # if (T_surf is not None): self.T_surf = T_surf
+        if (T_surf is not None):
+            self.update_var( 'T_surf', T_surf )
 
         RH = model_input.read_next(self.RH_unit, self.RH_type, rti)
-        self.update_var( 'RH', RH )
-        # if (RH is not None): self.RH = RH
+        if (RH is not None):
+            self.update_var( 'RH', RH )
 
         p0 = model_input.read_next(self.p0_unit, self.p0_type, rti)
-        self.update_var( 'p0', p0 )
-        # if (p0 is not None): self.p0 = p0
+        if (p0 is not None):
+            self.update_var( 'p0', p0 )
 
         uz = model_input.read_next(self.uz_unit, self.uz_type, rti)
-        self.update_var( 'uz', uz )
-        # if (uz is not None): self.uz = uz
+        if (uz is not None):
+            self.update_var( 'uz', uz )
 
         z = model_input.read_next(self.z_unit, self.z_type, rti)
-        self.update_var( 'z', z )
-        # if (z is not None): self.z = z
+        if (z is not None):
+            self.update_var( 'z', z )
 
         z0_air = model_input.read_next(self.z0_air_unit, self.z0_air_type, rti)
-        self.update_var( 'z0_air', z0_air )
-        # if (z0_air is not None): self.z0_air = z0_air
+        if (z0_air is not None):
+            self.update_var( 'z0_air', z0_air )
 
         #----------------------------------------------------------------------------
         # These are needed to compute Qn_SW and Qn_LW.
@@ -1997,19 +2070,29 @@ class met_component( BMI_base.BMI_component ):
         #       and "var_name" as args and that uses "exec()".
         #----------------------------------------------------------------------------
         albedo = model_input.read_next(self.albedo_unit, self.albedo_type, rti)
-        if (albedo is not None): self.albedo = albedo
+        if (albedo is not None):
+            self.update_var( 'albedo', albedo )
+            ## self.albedo = albedo
 
         em_surf = model_input.read_next(self.em_surf_unit, self.em_surf_type, rti)
-        if (em_surf is not None): self.em_surf = em_surf
+        if (em_surf is not None):
+            self.update_var( 'em_surf', em_surf )
+            ## self.em_surf = em_surf
 
         dust_atten = model_input.read_next(self.dust_atten_unit, self.dust_atten_type, rti)
-        if (dust_atten is not None): self.dust_atten = dust_atten
+        if (dust_atten is not None):
+            self.update_var( 'dust_atten', dust_atten )
+            ## self.dust_atten = dust_atten
 
         cloud_factor = model_input.read_next(self.cloud_factor_unit, self.cloud_factor_type, rti)
-        if (cloud_factor is not None): self.cloud_factor = cloud_factor
+        if (cloud_factor is not None):
+            self.update_var( 'cloud_factor', cloud_factor )
+            ## self.cloud_factor = cloud_factor
 
         canopy_factor = model_input.read_next(self.canopy_factor_unit, self.canopy_factor_type, rti)
-        if (canopy_factor is not None): self.canopy_factor = canopy_factor
+        if (canopy_factor is not None):
+            self.update_var( 'canopy_factor', canopy_factor )
+            ## self.canopy_factor = canopy_factor
 
         #-------------------------------------------------------------
         # Compute Qsw_prefactor from cloud_factor and canopy factor.
@@ -2024,10 +2107,14 @@ class met_component( BMI_base.BMI_component ):
         # "update_net_longwave_radiation()", called from update().
         #-------------------------------------------------------------        
 ##        Qn_SW = model_input.read_next(self.Qn_SW_unit, self.Qn_SW_type, rti)
-##        if (Qn_SW is not None): self.Qn_SW = Qn_SW
+##        if (Qn_SW is not None):
+##            self.update_var( 'Qn_SW', Qn_SW )
+##            ## self.Qn_SW = Qn_SW
 ##
 ##        Qn_LW = model_input.read_next(self.Qn_LW_unit, self.Qn_LW_type, rti)
-##        if (Qn_LW is not None): self.Qn_LW = Qn_LW
+##        if (Qn_LW is not None):
+##            self.update_var( 'Qn_LW', Qn_LW )
+##            ## self.Qn_LW = Qn_LW
          
     #   read_input_files()
     #-------------------------------------------------------------------  
