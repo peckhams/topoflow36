@@ -1402,7 +1402,10 @@ class channels_component( BMI_base.BMI_component ):
         #      But can't evaporate water if not present.
         #---------------------------------------------------
         w = (self.vol < (ET * self.dt))
-        ET[w] = 0.0
+        if (ET.ndim == self.vol.ndim):
+            ET[w] = 0.0
+        else:
+            ET = 0.0
 
         #--------------
         # For testing
