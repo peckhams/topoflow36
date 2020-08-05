@@ -1387,12 +1387,22 @@ class channels_component( BMI_base.BMI_component ):
         SM = self.SM
         GW = self.GW
         ### GW = self.GW_init
-        ET = self.ET
+        ET = self.ET   # (This is potential vs. actual ET.)
         IN = self.IN
         MR = self.MR
         
 ##        if (self.DEBUG):
 ##            print 'At time:', self.time_min, ', P =', P, '[m/s]'
+
+        #--------------------------------------
+        # Compute actual ET from potential ET
+        #---------------------------------------------------
+        # NB!  R can be negative and will result in a loss
+        #      of water volume in update_volume().
+        #      But can't evaporate water if not present.
+        #---------------------------------------------------
+        w = (self.vol < (ET * self.dt))
+        ET[w] = 0.0
 
         #--------------
         # For testing

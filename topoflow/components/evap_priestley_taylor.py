@@ -96,6 +96,7 @@ class evap_component( evap_base.evap_component ):
     #----------------------------------------------------------------
     _input_var_names = [
         'atmosphere_bottom_air__temperature',                # (meteorology)
+        'channel_water__volume',                             # (channels, 8/3/20)
         'land_surface_net-longwave-radiation__energy_flux',  # (meteorology)
         'land_surface_net-shortwave-radiation__energy_flux', # (meteorology)
         'land_surface__temperature' ]                        # (meteorology)
@@ -122,7 +123,7 @@ class evap_component( evap_base.evap_component ):
         # These could be added in the future; not used yet.
         #----------------------------------------------------
 ##        'soil_model_top_layer__saturated_water_content', # (satzone comp)
-##        'land_surface_water_potential_evaporation_rate':'PET' }
+##        'land_surface_water__potential_evaporation_rate':'PET' }
 
     _output_var_names = [
         'land_surface_soil__conduction_heat_flux',     # (Qc)
@@ -149,6 +150,7 @@ class evap_component( evap_base.evap_component ):
     #----------------------------------------------------------------   
     _var_name_map = {   
         'atmosphere_bottom_air__temperature' :               'T_air',
+        'channel_water__volume':                             'vol',    #######
         'land_surface__temperature':                         'T_surf',
         'land_surface_net-longwave-radiation__energy_flux':  'Qn_LW',
         'land_surface_net-shortwave-radiation__energy_flux': 'Qn_SW',
@@ -179,6 +181,7 @@ class evap_component( evap_base.evap_component ):
     #------------------------------------------------
     _var_units_map = {
         'atmosphere_bottom_air__temperature' :               'deg_C',
+        'channel_water__volume':                             'm3',    #####
         'land_surface__temperature':                         'deg_C',      
         'land_surface_net-longwave-radiation__energy_flux':  'W m-2',
         'land_surface_net-shortwave-radiation__energy_flux': 'W m-2',
