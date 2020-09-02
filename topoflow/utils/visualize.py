@@ -225,7 +225,7 @@ def read_grid_from_nc_file( nc_file, time_index=1, REPORT=True ):
 def read_and_show_rtg( rtg_filename, long_name, VERBOSE=True,
                        cmap='jet', BLACK_ZERO=False,
                        stretch='hist_equal',
-                       a=1, b=2, p=0.5,
+                       a=1, b=2, p=0.5, im_file=None,
                        xsize=8, ysize=8, dpi=None ):
     
     rtg = rtg_files.rtg_file()
@@ -249,7 +249,7 @@ def read_and_show_rtg( rtg_filename, long_name, VERBOSE=True,
 
     show_grid_as_image( grid, long_name, extent=extent, cmap=cmap,
                         BLACK_ZERO=BLACK_ZERO, stretch=stretch,
-                        a=a, b=b, p=p,
+                        a=a, b=b, p=p, im_file=im_file,
                         xsize=xsize, ysize=ysize, dpi=dpi)
                               
 #   read_and_show_rtg()
@@ -330,8 +330,13 @@ def show_grid_as_image( grid, long_name, extent=None,
     #--------------------------------------------------------
     if (im_file is not None):  
         plt.savefig( im_file )
-    if not(NO_SHOW):
-        plt.show()
+    else:
+        plt.show()   # Ignore NO_SHOW arg for now.   
+    #-----------------------------------------------
+#     if (im_file is not None):  
+#         plt.savefig( im_file )
+#     if not(NO_SHOW):
+#         plt.show()
  
     plt.close()
         
@@ -495,7 +500,8 @@ def save_rts_as_images( rts_file, png_dir, extent=None,
 #   save_rts_as_images()
 #--------------------------------------------------------------------
 def plot_time_series(nc_file, output_dir=None, var_index=1,
-                     marker=',', REPORT=True, xsize=11, ysize=6):
+                     marker=',', REPORT=True, xsize=11, ysize=6,
+                     im_file=None):
 
     # Example nc_files:
     # nc_file = case_prefix + '_0D-Q.nc'
@@ -564,7 +570,16 @@ def plot_time_series(nc_file, output_dir=None, var_index=1,
     plt.ylabel( y_name + ' [' + v_units + ']' )
     plt.ylim( np.array(ymin, ymax) )
 
-    plt.show()
+    #--------------------------------------------------------        
+    # NOTE!  Must save before "showing" or get blank image.
+    #        File format is inferred from extension.
+    #        e.g. TMP_Image.png, TMP_Image.jpg.
+    #--------------------------------------------------------
+    if (im_file is not None):  
+        plt.savefig( im_file )
+    else:
+        plt.show()
+    plt.close()        
 
     ncts.close_file()
     
