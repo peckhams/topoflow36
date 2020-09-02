@@ -23,21 +23,21 @@ output_dir:   (path to the TopoFlow output files)
 # Import required packages
 #---------------------------
 from topoflow.utils import visualize as tfvis
-import os, os.path
+import os, os.path, sys
 
 #---------------------------
 # Check required arguments
 #---------------------------
-if (output_dir is None):
-    print('Output directory argument is required.')
-    ## output_dir = os.getcwd()    ## Could do this instead.
+if (len(sys.argv) < 3):
+    print('Sorry, this script requires 3 arguments:')
+    print('output_dir, site_prefix, and case_prefix.')
     return
+output_dir  = sys.argv[1]   # (name of script is sys.argv[0])
+site_prefix = sys.argv[2]   # e.g. 'Baro-Gam_60sec'
+case_prefix = sys.argv[3]   # e.g. 'Test1'
+#---------------------------------------------
 if (output_dir[-1] != os.sep):
     output_dir += os.sep
-if (site_prefix is None):
-    site_prefix = 'Baro-Gam_60sec'
-if (case_prefix is None):
-    case_prefix = 'Test1'
    
 #------------------------------- 
 # Get names of all directories
