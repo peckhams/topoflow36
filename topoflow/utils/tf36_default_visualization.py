@@ -247,22 +247,6 @@ if (DEM_IMAGE):
                              im_file=im_file,
                              stretch=stretch, VERBOSE=True,
                              xsize=6, ysize=6, dpi=None)
-                         
-#----------------------------------
-# Create image for the Slope grid
-#----------------------------------
-DEM_IMAGE = True
-if (DEM_IMAGE):
-    os.chdir(output_dir)
-    long_name = 'Land Surface Slope'
-    rtg_file  = topo_dir + site_prefix + '_slope.rtg'
-    im_file   = topo_dir + site_prefix + '_slope.png'
-    stretch   = 'hist_equal'
-    tfvis.read_and_show_rtg( rtg_file, long_name, cmap='jet',
-                             ### BLACK_ZERO=False,
-                             im_file=im_file,
-                             stretch=stretch, VERBOSE=True,
-                             xsize=6, ysize=6, dpi=None)
                                                
 #-------------------------------------
 # Create image for the D8 Slope grid
