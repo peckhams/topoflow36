@@ -124,6 +124,20 @@ class calibrator:
                 #-------------------------------------
                 exec( "self." + key + " = value", {}, locals() )
 
+        #-----------------------------------------
+        # Expand [home_dir] and [examples_dir] ?
+        #-----------------------------------------
+        if ('[examples_dir]' in self.basin_dir):
+            self.basin_dir = self.basin_dir.replace('[examples_dir]/', self.examples_dir)
+        if ('[examples_dir]' in self.topo_dir):
+            self.topo_dir = self.topo_dir.replace('[examples_dir]/', self.examples_dir)
+        if ('[examples_dir]' in self.obs_dir):
+            self.obs_dir = self.obs_dir.replace('[examples_dir]/', self.examples_dir)
+        if ('[examples_dir]' in self.cfg_dir):
+            self.cfg_dir = self.cfg_dir.replace('[examples_dir]/', self.examples_dir)
+        if ('[home_dir]' in self.output_dir):
+            self.output_dir = self.output_dir.replace('[home_dir]/', self.home_dir)
+
         #--------------------------------------------        
         # Add a path separator at end of dir names?
         #--------------------------------------------
@@ -154,7 +168,7 @@ class calibrator:
     #---------------------------------------------------------------------
     def set_info(self):
  
-        self.home_dir     = os.path.expanduser("~")
+        self.home_dir     = os.path.expanduser('~') + os.sep
         self.examples_dir = emeli.paths['examples']
         
         if (self.cfg_file is not None):
@@ -179,7 +193,7 @@ class calibrator:
         self.basin_dir    = self.examples_dir  + 'Treynor_Iowa_30m/'
         self.topo_dir     = self.basin_dir + '__topo/'
         self.cfg_dir      = self.basin_dir + '__No_Infil_June_20_67_rain/'
-        self.output_dir   = self.home_dir + '/TF_Output/Treynor/'
+        self.output_dir   = self.home_dir + 'TF_Output/Treynor/'
 
         #---------------------------------------
         # Attributes of the observed data file
@@ -381,12 +395,19 @@ class calibrator:
         #----------------------------------------------------------
         # The read_time_series() method saves a copy of the
         # original times and values, as:
-        #    self.obs_orig_times and self.obs_orig_values
+        #    self.obs_times_orig and self.obs_values_orig
         # since we may apply conversion or interpolate.
         #----------------------------------------------------------        
         times  = self.obs_times
         values = self.obs_values
 
+#         print('In interpolate_obs_time_series():')
+#         print('BEFORE INTERPOLATION...')
+#         print('self.obs_times =', self.obs_times)
+#         print()
+#         print('self.obs_values =', self.obs_values)
+#         print()
+        
         #----------------------------------------------             
         # First, define an interpolation function, f1
         #----------------------------------------------
@@ -420,6 +441,13 @@ class calibrator:
         self.obs_times  = self.sim_times 
         self.obs_values = f1( self.sim_times )
     
+#         print('In interpolate_obs_time_series():')
+#         print('AFTER INTERPOLATION...')
+#         print('self.obs_times =', self.obs_times)
+#         print()
+#         print('self.obs_values =', self.obs_values)
+#         print()
+
         if not(SILENT):
             print('In interpolate_obs_time_series():')
             print('   Orig number of times =', n_old_times )
@@ -479,6 +507,10 @@ class calibrator:
         if (otf == 'hhmm'):
             times_hhmm = self.obs_times
             self.obs_times = tu.convert_times_from_hhmm_to_minutes( times_hhmm )
+            #-------------------------------------
+            # Next line fixes a bug:  2020-09-02
+            #-------------------------------------
+            self.obs_times -= self.obs_times[0]
         elif (otf == 'date'):
             #---------------------------------------------------
             # Note: This gets a little complicated due to the
@@ -786,15 +818,17 @@ class calibrator:
     
     #   compute_cost()
     #---------------------------------------------------------------------
-    def get_parameter_values(self, range=[0.1, 1.0], n=10 ): 
+    def get_parameter_values(self, var_range=[0.1, 1.0], n=10 ): 
         
-        vmin = np.float32( range[0] )
-        vmax = np.float32( range[1] )
-        ramp = np.arange(n, dtype='float32')/(n - 1) # in [0,1]
+        vmin = np.float32( var_range[0] )
+        vmax = np.float32( var_range[1] )
+        ramp = np.arange(n, dtype='float32')/(n-1) # in [0,1]
         p_values = (vmax - vmin)*ramp + vmin
         
-        return p_values
-
+        ## p_values = np.linspace(vmin, vmax, n)   # (same result)
+        
+        return p_values 
+        
     #   get_parameter_values()
     #---------------------------------------------------------------------
     def calibrate(self, PLOT=True, NORMALIZE_PLOT=False, SILENT=True,
@@ -859,7 +893,7 @@ class calibrator:
             print('Warning: var_range is not set.')
             print('  Using default:', var_range )
 
-        p_values = self.get_parameter_values( range=var_range, n=n_values)
+        p_values = self.get_parameter_values( var_range=var_range, n=n_values)
         costs = np.zeros( n_values )
         cal_start_time = time.time()   # [seconds]
         
