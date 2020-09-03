@@ -703,16 +703,14 @@ class calibrator:
         #        be overwritten during the calibration process.
         #        It is called by the calibrate() method.
         #----------------------------------------------------------
-        topo_dir     = self.topo_dir
-        site_prefix  = self.site_prefix
-        cfg_dir      = self.cfg_dir
+        prefix = (self.topo_dir + self.site_prefix)
         
         if (file_type == 'manning'):
-            input_file  = topo_dir + site_prefix + '_chan-n.rtg'
-            backup_file = topo_dir + site_prefix + '_chan-n.ORIG'
+            input_file  = prefix + '_chan-n.rtg'
+            backup_file = prefix + '_chan-n_ORIG.rtg'
         elif (file_type == 'width'):
-            input_file  = topo_dir + site_prefix + '_chan-w.rtg'   
-            backup_file = topo_dir + site_prefix + '_chan-w.ORIG'
+            input_file  = prefix + '_chan-w.rtg'   
+            backup_file = prefix + '_chan-w_ORIG.rtg'
                              
         shutil.copyfile( input_file, backup_file)
 
@@ -725,16 +723,14 @@ class calibrator:
         #        during the calibration process with a backup.
         #        It is called by the calibrate() method.
         #----------------------------------------------------------
-        topo_dir     = self.topo_dir
-        site_prefix  = self.site_prefix
-        cfg_dir      = self.cfg_dir
+        prefix = (self.topo_dir + self.site_prefix)
         
         if (file_type == 'manning'):
-            input_file  = topo_dir + site_prefix + '_chan-n.rtg'
-            backup_file = topo_dir + site_prefix + '_chan-n.ORIG'
+            input_file  = prefix + '_chan-n.rtg'
+            backup_file = prefix + '_chan-n_ORIG.rtg'
         elif (file_type == 'width'):
-            input_file  = topo_dir + site_prefix + '_chan-w.rtg'   
-            backup_file = topo_dir + site_prefix + '_chan-w.ORIG'
+            input_file  = prefix + '_chan-w.rtg'   
+            backup_file = prefix + '_chan-w_ORIG.rtg'
                              
         shutil.copyfile( backup_file, input_file)
 
@@ -853,10 +849,14 @@ class calibrator:
         #---------------------------------------
         # Create backup of grid to be modified
         #---------------------------------------
-        if ('width' in cal_var):
+        file_type = None
+        if (cal_var in ['channel_width_max', 'channel_width_power']):
             file_type = 'width'
-        elif ('manning' in cal_var):
+        if (cal_var in ['manning_n_min', 'manning_n_max']):
             file_type = 'manning'
+        if (file_type is None):
+            print('ERROR:  file_type is not set.')
+            return
         self.backup_input_file( file_type=file_type )
  
         #---------------------------   
