@@ -657,6 +657,19 @@ class met_component( BMI_base.BMI_component ):
 #             self.P      = self.initialize_grid(0, dtype=dtype)
 #             self.P_rain = self.initialize_grid(0, dtype=dtype)
 #             self.P_snow = self.initialize_grid(0, dtype=dtype)
+
+        if (P_type == 'scalar'):
+            #-------------------------------------------------
+            # (5/19/12) This makes P "mutable", which allows
+            # its updated values to be seen by any component
+            # that has a reference to it.
+            #-------------------------------------------------
+            # If P_type is 'scalar', then P was initialized
+            # in initialize_config_vars().  But we still
+            # need to initialize P_rain and P_snow here.
+            #-------------------------------------------------
+            self.P_rain = self.initialize_scalar(0, dtype=dtype)
+            self.P_snow = self.initialize_scalar(0, dtype=dtype)
                                
         #------------------------------------------------------
         # NB! "Sample steps" must be defined before we return
