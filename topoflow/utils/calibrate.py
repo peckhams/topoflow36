@@ -816,12 +816,17 @@ class calibrator:
     #---------------------------------------------------------------------
     def get_parameter_values(self, var_range=[0.1, 1.0], n=10 ): 
         
+
         vmin = np.float32( var_range[0] )
         vmax = np.float32( var_range[1] )
-        ramp = np.arange(n, dtype='float32')/(n-1) # in [0,1]
-        p_values = (vmax - vmin)*ramp + vmin
         
-        ## p_values = np.linspace(vmin, vmax, n)   # (same result)
+        if (n == 1) or (vmin == vmax):       
+            p_values = np.zeros(1)
+            p_values[0] = vmin
+        else:
+            ramp = np.arange(n, dtype='float32')/(n-1) # in [0,1]
+            p_values = (vmax - vmin)*ramp + vmin
+            ## p_values = np.linspace(vmin, vmax, n)   # (same result)
         
         return p_values 
         
