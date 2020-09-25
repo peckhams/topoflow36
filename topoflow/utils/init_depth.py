@@ -1,9 +1,11 @@
 #------------------------------------------------------------------------
-#  Copyright (c) 2019, Scott D. Peckham
+#  Copyright (c) 2019-2020, Scott D. Peckham
 #
+#  Sep 2020.  Global replace:  cfg_dir with topo_dir.
+#  Nov 2019.  Added get_baseflow_volume_flux().  Edited test2().
 #  Sep 2019.  First version to put in topoflow utils folder.
 #             Started from IDL version:  init_depth.pro.
-#  Nov 2019.  Added get_baseflow_volume_flux().  Edited test2().
+
 
 #------------------------------------------------------------------------
 
@@ -34,8 +36,8 @@ def test1():
 def test2():
 
     site_prefix = 'Baro_Gam_1min'
-    cfg_dir = '/Users/peckhams/Desktop/TopoFlow_2019/__Regions/'
-    cfg_dir += 'Ethiopia/DEMs/MERIT/Baro_Gam_1min/'
+    topo_dir = '/Users/peckhams/Desktop/TopoFlow_2019/__Regions/'
+    topo_dir += 'Ethiopia/DEMs/MERIT/Baro_Gam_1min/'
     #--------------------------------------------------------
     area_file    = (site_prefix + '_area.rtg')
     slope_file   = (site_prefix + '_slope.rtg')
@@ -70,7 +72,7 @@ def test2():
     #----------------------------------------------     
     # Compute the initial channel flow depth grid
     #----------------------------------------------                                          
-    compute_initial_depth( site_prefix=site_prefix, cfg_dir=cfg_dir,
+    compute_initial_depth( site_prefix=site_prefix, topo_dir=topo_dir,
             baseflow_rate=B_mps, tol=None, SILENT=False,
             #--------------------------------------------
             area_file=area_file, slope_file=slope_file,
@@ -187,7 +189,7 @@ def get_baseflow_volume_flux( A_out_km2, Qb_out, REPORT=True,
 
 #   get_baseflow_volume_flux()
 #------------------------------------------------------------------------
-def compute_initial_depth( site_prefix=None, cfg_dir=None,
+def compute_initial_depth( site_prefix=None, topo_dir=None,
                            baseflow_rate=None, bank_angle=None,
                            tol=None, SILENT=False,
                            #-----------------------------------
@@ -258,7 +260,7 @@ def compute_initial_depth( site_prefix=None, cfg_dir=None,
     #         angle_file, manning_file
     # output:  d0_file (and optional v0_file)
     #----------------------------------------------
-    header_file = (cfg_dir + site_prefix + '.rti')
+    header_file = (topo_dir + site_prefix + '.rti')
     grid_info   = rti_files.read_info( header_file, REPORT=False)
     byte_order  = grid_info.byte_order
     ncols       = grid_info.ncols
@@ -267,10 +269,10 @@ def compute_initial_depth( site_prefix=None, cfg_dir=None,
     #----------------------------
     # Read the input grid files
     #----------------------------
-    A_file = cfg_dir + area_file
-    S_file = cfg_dir + slope_file
-    w_file = cfg_dir + width_file
-    n_file = cfg_dir + manning_file
+    A_file = topo_dir + area_file
+    S_file = topo_dir + slope_file
+    w_file = topo_dir + width_file
+    n_file = topo_dir + manning_file
     #---------------------------------------------------------------
     # Note: S, w and n may have NaNs on edges.  A has zeros.
     #---------------------------------------------------------------    
@@ -280,7 +282,7 @@ def compute_initial_depth( site_prefix=None, cfg_dir=None,
     n = rtg_files.read_grid( n_file, grid_info, RTG_type='FLOAT' )
     #------------------------------------------------------------------------   
     if (angle_file is not None):
-        q_file = cfg_dir + angle_file    # q = theta = bank_angle
+        q_file = topo_dir + angle_file    # q = theta = bank_angle
         theta = rtg_files.read_grid( q_file, grid_info, RTG_type='FLOAT' )
     else:
         if (bank_angle is None):
@@ -289,7 +291,7 @@ def compute_initial_depth( site_prefix=None, cfg_dir=None,
             theta = bank_angle
     #------------------------------------------------------------------------  
     if (sinu_file is not None):
-        sinu_file = cfg_dir + sinu_file  
+        sinu_file = topo_dir + sinu_file  
         sinu = rtg_files.read_grid( sinu_file, grid_info, RTG_type='FLOAT' )
         sinu[ sinu == 0 ] = 1.0  # (starts with zeros on edges)
     else:
@@ -430,7 +432,7 @@ def compute_initial_depth( site_prefix=None, cfg_dir=None,
     # Byte swapping may occur in write_grid() based
     # on byte order recorded in grid_info object.
     #------------------------------------------------
-    d0_file2 = (cfg_dir + d0_file)
+    d0_file2 = (topo_dir + d0_file)
     rtg_files.write_grid( d, d0_file2, grid_info, RTG_type='FLOAT')
     print( 'Finished writing file: ')
     print( d0_file2 )
@@ -455,7 +457,7 @@ def compute_initial_depth( site_prefix=None, cfg_dir=None,
         # Byte swapping may occur in write_grid() based
         # on byte order recorded in grid_info object.
         #------------------------------------------------
-        v0_file2 = (cfg_dir + v0_file)
+        v0_file2 = (topo_dir + v0_file)
         rtg_files.write_grid( v0, v0_file2, grid_info, RTG_type='FLOAT')
         print( 'Finished writing file: ')
         print( v0_file2 )

@@ -12,8 +12,9 @@
 #  get_d8_slope_grid()
 
 #  get_new_slope_grid()
+#  get_new_slope_grid0()   # doesn't work
 
-#  smooth_dem()
+#  smooth_dem()     # experimental
 
 #  remove_bad_slopes()    (old approach)
 
@@ -31,8 +32,8 @@ def test1():
 
     site_prefix = 'Baro_Gam_1min'
     case_prefix = 'Test1'
-    cfg_dir = '/Users/peckhams/Desktop/TopoFlow_2019/__Regions/'
-    cfg_dir += 'Ethiopia/DEMs/MERIT/Baro_Gam_1min/'
+    cfg_dir = '/Users/peckhams/TF_Tests3/Baro-Gam_60sec/'
+    cfg_dir += 'Test1_2015-10_to_2018-10_CHIRPS_Bilinear_cfg'
     #----------------------------------------------------
     old_slope_file = (site_prefix + '_old-slope.rtg')
     new_slope_file = (site_prefix + '_new-slope.rtg')
@@ -99,7 +100,7 @@ def get_d8_object(site_prefix=None, case_prefix=None,
     # Note that D8 area is also computed as d8.A.     
     #---------------------------------------------------
     time = 0
-    d8.update(time, SILENT=SILENT, REPORT=REPORT)
+    d8.update(time, REPORT=REPORT)
 
     #----------------------------------------------------------- 
     # Note: This is also needed, but is not done by default in
@@ -112,11 +113,12 @@ def get_d8_object(site_prefix=None, case_prefix=None,
 #   get_d8_object()
 #---------------------------------------------------------------------------
 def get_d8_slope_grid(site_prefix=None, case_prefix=None,
-                    cfg_dir=None, slope_file=None):
+                      cfg_dir=None, slope_file=None):
 
     d8 = get_d8_object(site_prefix=site_prefix,
                        case_prefix=case_prefix,
                        cfg_dir=cfg_dir)
+    topo_dir = d8.topo_directory
 
     slope = np.zeros([d8.ny, d8.nx], dtype='float64')
      
@@ -152,187 +154,122 @@ def get_d8_slope_grid(site_prefix=None, case_prefix=None,
     #---------------------------------------
     # Read header_file info for slope_file
     #---------------------------------------
-    header_file = (cfg_dir + site_prefix + '.rti')
+    header_file = (topo_dir + site_prefix + '.rti')
     grid_info = rti_files.read_info( header_file, REPORT=False)
     
     #------------------------------------
     # Save new slope grid to slope_file
     #------------------------------------             
-    slope_file2 = (cfg_dir + slope_file)
+    slope_file2 = (topo_dir + slope_file)
     rtg_files.write_grid( slope, slope_file2, grid_info, RTG_type='FLOAT')
     print( 'Finished writing D8 slope grid to file: ')
     print( slope_file2 )
     print()
 
-#   get_d8_slope_grid()                             
+#   get_d8_slope_grid()
 #---------------------------------------------------------------------------
 def get_new_slope_grid(site_prefix=None, case_prefix=None,
-                       cfg_dir=None, slope_file=None):
+                       cfg_dir=None, slope_file='TEST_newslope.rtg'):
 
+    #---------------------------------------------------------
+    # NB!  New idea:  2020-09-24.
     #---------------------------------------------------------
     # NB!  The iteration of D8 parent IDs will only terminate
     #      if we have pID[0]=0.   See d8_global.py.
     #---------------------------------------------------------
-    # Idea2: If your D8 parent cell (downstream) has S=0,
-    #        then iterate to parent of parent until you
-    #        reach a cell whose D8 parent has S > 0.
-    #        This cell can now be assigned a slope based
-    #        on start z and stop z and distance.
-    #        Connected cells upstream with S=0 should be
-    #        assigned this same slope.
+    # Idea: If your D8 parent cell (downstream) has the same
+    #       elevation as you do, then iterate to parent of
+    #       parent until you reach a cell with a lower
+    #       elevation.
+    #       This cell can now be assigned a slope based
+    #       on start z and stop z and distance.
     #---------------------------------------------------------
     d8 = get_d8_object(site_prefix=site_prefix,
                        case_prefix=case_prefix,
                        cfg_dir=cfg_dir)
-
-    slope = np.zeros([d8.ny, d8.nx], dtype='float64')
-     
-    z2   = d8.DEM
-    pIDs = d8.parent_IDs
-    z1   = d8.DEM[ pIDs ]  
-    dz   = (z2 - z1)
-    wg   = (dz > 0)   # (array of True or False)
-    ng   = wg.sum()   # (number of cells with True)
-    wb   = np.invert( wg )
-    nb   = wb.sum()  # (number of cells with True)
-    if (ng > 0):
-        slope[ wg ] = (dz[wg] / d8.ds[wg])
-
-    print('Computing slope grid...')
-    Spmin = slope[ slope > 0 ].min()
-    print('   initial min slope     = ' + str(slope.min()) )
-    print('   initial min pos slope = ' + str(Spmin) )
-    print('   initial max slope     = ' + str(slope.max()) )
+    topo_dir = d8.topo_directory
     
+    print('Computing slope grid...')
+    print('dtype(d8.ds) =', d8.ds.dtype)  # (float32) 
+
     #-----------------------------------------------------
     # Get a grid which for each grid cell contains the
     # calendar-style index (or ID) of the grid cell that
     # its D8 code says it flows to.
     #-----------------------------------------------------
     ### pID_grid = d8.parent_ID_grid.copy()
+    z2       = d8.DEM
+    pIDs     = d8.parent_IDs
     pID_grid = d8.parent_ID_grid
     ID_grid  = d8.ID_grid
-
-    #------------------------------------           
-    # Get slopes of the D8 parent cells
-    #------------------------------------
-    S0 = slope.copy()
-    p_slope = slope[ pIDs ]
-    w1 = np.logical_and( slope > 0, p_slope == 0 )
-    start_ID_vals  = ID_grid[ w1 ]          ##################
-    pID_vals       = pID_grid[ w1 ]
-    n1 = start_ID_vals.size
-    print('Number of initial IDs = ' + str(n1) )
-    start_IDs = divmod( start_ID_vals, d8.nx)
-    pIDs      = divmod( pID_vals, d8.nx)
-    start_z   = d8.DEM[ start_IDs ]
-    L         = d8.ds[ start_IDs ]  # (cumulative stream length)
-    #----------------------------------
-    ### max_reps = 500  #######
-    ### n_reps = 0 
-    n_left = n1 
-    if (n1 > 0):
-        # Next line gives no error even if n1==0.
-        unfinished = np.zeros( n1 ) + 1     
-    DONE = (n1 == 0)
-    while not(DONE):
-        #------------------------------------- 
-        # Fist, get parents of pIDs (not IDs)
-        #----------------------------------------------------
-        # Here, IDs & pIDs are tuples, like from np.where,
-        # while ID_vals & pID_vals are long-integer indices.
-        #----------------------------------------------------
-        # Note: Number of unique pIDs <= number of IDs
-        #----------------------------------------------------
-        ## IDs = pIDs.copy()          # (not an option)
-        ## IDs = copy.copy( pIDs )    # (maybe needed)    
-        IDs = pIDs
-        ID_vals = ID_grid[ IDs ]
-        pID_vals = pID_grid[ IDs ]
-        pIDs = divmod( pID_vals, d8.nx )  # (tuple, like WHERE)
-        L  += d8.ds[ IDs ]
-
-        #---------------------------------------------------
-        # Allow use of recently assigned slopes
-        # This should prevent overwriting resolved values.
-        #---------------------------------------------------
-        k_slope = slope[ IDs ]
-        p_slope = slope[ pIDs ]
-        ## k_slope = S0[ IDs ]
-        ## p_slope = S0[ pIDs ]
-        
-        test1 = np.logical_and( p_slope > 0, k_slope == 0)
-        wg = np.logical_and( test1, unfinished == 1)
-        ## wg = np.logical_and( p_slope > 0, k_slope == 0 )
-        ## wg = np.logical_and( p_slope > 0, unfinished == 1 )
-        ng = wg.sum()
-        if (ng > 0):
-            ready_ID_vals = ID_vals[ wg ]
-            ready_IDs = divmod( ready_ID_vals, d8.nx )
-            dz = (start_z - d8.DEM[ pIDs ])    # (drop from start to parent)
-            slope[ ready_IDs ] = dz[ wg ] / L[ wg ]
-            unfinished[ wg ] = 0
-            n_left = unfinished.sum()
-            print('n_left = ' + str(n_left) )
-        #---------------------------------------------------
-        if (n_left == 0):
-            print('Step 1 finished: n_left = 0.')
-        #---------------------------------------------------
-        pv_max = pID_vals.max()
-        if (pv_max == 0):
-            print('Step 1 finished: Reached edge of DEM.')
-        
-        DONE = (n_left == 0) or (pv_max == 0) 
-               
-#         n_reps += 1
-#         if (n_reps == max_reps):
-#             print('Aborting after ' + str(max_reps) + ' reps.') 
-        ### DONE = (n_reps == max_reps) or (pID_vals.max() == 0)   ########            
- 
-    #--------------------------------------------------------------    
-    # Step 2.  Assign slope to the in-between grid cells with S=0
-    #--------------------------------------------------------------
-    # If D8 parent was assigned a slope in Step 1, then any of
-    # its D8 kids with S=0 should be assigned the same slope.
-    # Iterate until all cells with S=0 are assigned a slope.
-    #--------------------------------------------------------------
-    pIDs = d8.parent_IDs
-    # DONE = (n1 == 0)
+    # Change from float32 to float64 to avoid overflow.
+    distance = np.float64( d8.ds )   # (initialize distance grid)
+    slope    = np.zeros([d8.ny, d8.nx], dtype='float64')
+    START    = True
+    n_reps   = 0
+       
     DONE = False
-    while not(DONE):
-        #----------------------------------------------
-        # pIDs is not changing but slope is changing.
-        # We're working upstream with the whole grid.
-        #----------------------------------------------------
-        # Note: Since 2 grid cells can have same D8 parent,
-        # all upstream cells with S=0 connected to a given
-        # parent (perhaps along different streams) will be
-        # assigned the same slope.  And the parent itself
-        # may have been assigned 2 or more different slopes
-        # in Step 1 (one overwriting the other).
-        #----------------------------------------------------        
-        pslope = slope[ pIDs ]
-        w2 = np.logical_and( slope == 0, pslope > 0 )
-        n2 = w2.sum()
-        if (n2 > 0):
-            slope[ w2 ] = pslope[ w2 ]
-        DONE = (n2 == 0)
+    while not(DONE):   
+        z1 = d8.DEM[pIDs]
+        dz = (z2 - z1)
+        
+        wg = np.logical_and(slope == 0, dz > 0)   # (array of True or False) 
+        ng = wg.sum()   # (number of cells with True)
+        wb = np.invert( wg )
+        nb = wb.sum()   # (number of cells with True)
+        if (ng > 0):
+            slope[ wg ] = (dz[wg] / distance[wg])
 
+        #-----------------------------
+        # Print initial slope values
+        #-----------------------------
+        if (START):
+            Sp_min = slope[ slope > 0 ].min()
+            print('   Initial min slope     = ' + str(slope.min()) )
+            print('   Initial min pos slope = ' + str(Sp_min) )
+            print('   Initial max slope     = ' + str(slope.max()) )
+            print()
+            START = False
+
+        #-------------------------------------------  
+        # Update downstream distance (before pIDs)
+        #-------------------------------------------
+        distance += d8.ds[ pIDs ]
+ 
+        #--------------------------------------        
+        # Update pIDs (D8 parents of parents)
+        #--------------------------------------
+        pID_vals = pID_grid[ pIDs ]
+        pIDs     = divmod( pID_vals, d8.nx)
+        pv_max   = pID_vals.max()
+        n_reps += 1
+
+        DONE = (nb == 0) or (pv_max == 0)
+
+    #--------------------------
+    # Print final slope values
+    #--------------------------
+    Sp_min = slope[ slope > 0 ].min()
+    print('   Final min slope     = ' + str(slope.min()) )
+    print('   Final min pos slope = ' + str(Sp_min) )
+    print('   Final max slope     = ' + str(slope.max()) )
+                
     #-----------------------------------------------------------
     # Set slope to NaN at all "noflow_IDs" (D8 flow code of 0)
     #-----------------------------------------------------------
-    slope[ d8.noflow_IDs ] = np.nan
+    # slope[ d8.noflow_IDs ] = np.nan
+    # slope[ d8.noflow_IDs ] = 0.0    ### Can change min or max slope
     
     #---------------------------------------
     # Read header_file info for slope_file
     #---------------------------------------
-    header_file = (cfg_dir + site_prefix + '.rti')
+    header_file = (topo_dir + site_prefix + '.rti')
     grid_info = rti_files.read_info( header_file, REPORT=False)
     
     #------------------------------------
     # Save new slope grid to slope_file
     #------------------------------------             
-    slope_file2 = (cfg_dir + slope_file)
+    slope_file2 = (topo_dir + slope_file)
     rtg_files.write_grid( slope, slope_file2, grid_info, RTG_type='FLOAT')
     print( 'Finished writing new slope grid to file: ')
     print( slope_file2 )
@@ -345,35 +282,221 @@ def get_new_slope_grid(site_prefix=None, case_prefix=None,
     print('   max slope     = ' + str(np.nanmax(slope)) )
     print(' ')
           
-#   get_new_slope_grid() 
+#   get_new_slope_grid()                              
+#---------------------------------------------------------------------------
+# def get_new_slope_grid0(site_prefix=None, case_prefix=None,
+#                        cfg_dir=None, slope_file=None):
+# 
+#     #---------------------------------------------------------
+#     # NB!  This algorithm doesn't work as intended.
+#     #---------------------------------------------------------
+#     # NB!  The iteration of D8 parent IDs will only terminate
+#     #      if we have pID[0]=0.   See d8_global.py.
+#     #---------------------------------------------------------
+#     # Idea2: If your D8 parent cell (downstream) has S=0,
+#     #        then iterate to parent of parent until you
+#     #        reach a cell whose D8 parent has S > 0.
+#     #        This cell can now be assigned a slope based
+#     #        on start z and stop z and distance.
+#     #        Connected cells upstream with S=0 should be
+#     #        assigned this same slope.
+#     #---------------------------------------------------------
+#     d8 = get_d8_object(site_prefix=site_prefix,
+#                        case_prefix=case_prefix,
+#                        cfg_dir=cfg_dir)
+# 
+#     slope = np.zeros([d8.ny, d8.nx], dtype='float64')
+#      
+#     z2   = d8.DEM
+#     pIDs = d8.parent_IDs
+#     z1   = d8.DEM[ pIDs ]  
+#     dz   = (z2 - z1)
+#     wg   = (dz > 0)   # (array of True or False)
+#     ng   = wg.sum()   # (number of cells with True)
+#     wb   = np.invert( wg )
+#     nb   = wb.sum()  # (number of cells with True)
+#     if (ng > 0):
+#         slope[ wg ] = (dz[wg] / d8.ds[wg])
+# 
+#     print('Computing slope grid...')
+#     Spmin = slope[ slope > 0 ].min()
+#     print('   initial min slope     = ' + str(slope.min()) )
+#     print('   initial min pos slope = ' + str(Spmin) )
+#     print('   initial max slope     = ' + str(slope.max()) )
+#     
+#     #-----------------------------------------------------
+#     # Get a grid which for each grid cell contains the
+#     # calendar-style index (or ID) of the grid cell that
+#     # its D8 code says it flows to.
+#     #-----------------------------------------------------
+#     ### pID_grid = d8.parent_ID_grid.copy()
+#     pID_grid = d8.parent_ID_grid
+#     ID_grid  = d8.ID_grid
+# 
+#     #------------------------------------           
+#     # Get slopes of the D8 parent cells
+#     #------------------------------------
+#     S0 = slope.copy()
+#     p_slope = slope[ pIDs ]
+#     w1 = np.logical_and( slope > 0, p_slope == 0 )
+#     start_ID_vals  = ID_grid[ w1 ]          ##################
+#     pID_vals       = pID_grid[ w1 ]
+#     n1 = start_ID_vals.size
+#     print('Number of initial IDs = ' + str(n1) )
+#     start_IDs = divmod( start_ID_vals, d8.nx)
+#     pIDs      = divmod( pID_vals, d8.nx)
+#     start_z   = d8.DEM[ start_IDs ]
+#     L         = d8.ds[ start_IDs ]  # (cumulative stream length)
+#     #----------------------------------
+#     ### max_reps = 500  #######
+#     ### n_reps = 0 
+#     n_left = n1 
+#     if (n1 > 0):
+#         # Next line gives no error even if n1==0.
+#         unfinished = np.zeros( n1 ) + 1     
+#     DONE = (n1 == 0)
+#     while not(DONE):
+#         #------------------------------------- 
+#         # Fist, get parents of pIDs (not IDs)
+#         #----------------------------------------------------
+#         # Here, IDs & pIDs are tuples, like from np.where,
+#         # while ID_vals & pID_vals are long-integer indices.
+#         #----------------------------------------------------
+#         # Note: Number of unique pIDs <= number of IDs
+#         #----------------------------------------------------
+#         ## IDs = pIDs.copy()          # (not an option)
+#         ## IDs = copy.copy( pIDs )    # (maybe needed)    
+#         IDs = pIDs
+#         ID_vals = ID_grid[ IDs ]
+#         pID_vals = pID_grid[ IDs ]
+#         pIDs = divmod( pID_vals, d8.nx )  # (tuple, like WHERE)
+#         L  += d8.ds[ IDs ]
+# 
+#         #---------------------------------------------------
+#         # Allow use of recently assigned slopes
+#         # This should prevent overwriting resolved values.
+#         #---------------------------------------------------
+#         k_slope = slope[ IDs ]
+#         p_slope = slope[ pIDs ]
+#         ## k_slope = S0[ IDs ]
+#         ## p_slope = S0[ pIDs ]
+#         
+#         test1 = np.logical_and( p_slope > 0, k_slope == 0)
+#         wg = np.logical_and( test1, unfinished == 1)
+#         ## wg = np.logical_and( p_slope > 0, k_slope == 0 )
+#         ## wg = np.logical_and( p_slope > 0, unfinished == 1 )
+#         ng = wg.sum()
+#         if (ng > 0):
+#             ready_ID_vals = ID_vals[ wg ]
+#             ready_IDs = divmod( ready_ID_vals, d8.nx )
+#             dz = (start_z - d8.DEM[ pIDs ])    # (drop from start to parent)
+#             slope[ ready_IDs ] = dz[ wg ] / L[ wg ]
+#             unfinished[ wg ] = 0
+#             n_left = unfinished.sum()
+#             print('n_left = ' + str(n_left) )
+#         #---------------------------------------------------
+#         if (n_left == 0):
+#             print('Step 1 finished: n_left = 0.')
+#         #---------------------------------------------------
+#         pv_max = pID_vals.max()
+#         if (pv_max == 0):
+#             print('Step 1 finished: Reached edge of DEM.')
+#         
+#         DONE = (n_left == 0) or (pv_max == 0) 
+#                
+# #         n_reps += 1
+# #         if (n_reps == max_reps):
+# #             print('Aborting after ' + str(max_reps) + ' reps.') 
+#         ### DONE = (n_reps == max_reps) or (pID_vals.max() == 0)   ########            
+#  
+#     #--------------------------------------------------------------    
+#     # Step 2.  Assign slope to the in-between grid cells with S=0
+#     #--------------------------------------------------------------
+#     # If D8 parent was assigned a slope in Step 1, then any of
+#     # its D8 kids with S=0 should be assigned the same slope.
+#     # Iterate until all cells with S=0 are assigned a slope.
+#     #--------------------------------------------------------------
+#     pIDs = d8.parent_IDs
+#     # DONE = (n1 == 0)
+#     DONE = False
+#     while not(DONE):
+#         #----------------------------------------------
+#         # pIDs is not changing but slope is changing.
+#         # We're working upstream with the whole grid.
+#         #----------------------------------------------------
+#         # Note: Since 2 grid cells can have same D8 parent,
+#         # all upstream cells with S=0 connected to a given
+#         # parent (perhaps along different streams) will be
+#         # assigned the same slope.  And the parent itself
+#         # may have been assigned 2 or more different slopes
+#         # in Step 1 (one overwriting the other).
+#         #----------------------------------------------------        
+#         pslope = slope[ pIDs ]
+#         w2 = np.logical_and( slope == 0, pslope > 0 )
+#         n2 = w2.sum()
+#         if (n2 > 0):
+#             slope[ w2 ] = pslope[ w2 ]
+#         DONE = (n2 == 0)
+# 
+#     #-----------------------------------------------------------
+#     # Set slope to NaN at all "noflow_IDs" (D8 flow code of 0)
+#     #-----------------------------------------------------------
+#     slope[ d8.noflow_IDs ] = np.nan
+#     
+#     #---------------------------------------
+#     # Read header_file info for slope_file
+#     #---------------------------------------
+#     header_file = (cfg_dir + site_prefix + '.rti')
+#     grid_info = rti_files.read_info( header_file, REPORT=False)
+#     
+#     #------------------------------------
+#     # Save new slope grid to slope_file
+#     #------------------------------------             
+#     slope_file2 = (cfg_dir + slope_file)
+#     rtg_files.write_grid( slope, slope_file2, grid_info, RTG_type='FLOAT')
+#     print( 'Finished writing new slope grid to file: ')
+#     print( slope_file2 )
+#     print()
+#     ### print('Finished computing slope grid.')
+#     Spmin = slope[ slope > 0 ].min()
+#     print('   n_reps        = ' + str(n_reps) )
+#     print('   min slope     = ' + str(np.nanmin(slope)) )
+#     print('   min pos slope = ' + str(Spmin) )
+#     print('   max slope     = ' + str(np.nanmax(slope)) )
+#     print(' ')
+#           
+# #   get_new_slope_grid0() 
 #---------------------------------------------------------------------------
 def smooth_dem(site_prefix=None, case_prefix=None,
                cfg_dir=None, dem_file=None,
                nsteps=100, ncells=3):
 
+    #-------------------------------------------------  
+    # Idea:  Use 1D FTCS scheme along D8 flow paths 
+    #-------------------------------------------------    
+    # For numerical stability, FTCS scheme requires:
+    # r = (a * dt / dx^2) < 1/2.
+    #-------------------------------------------------
+    
     if (dem_file is None):
         dem_file = site_prefix + '_smooth_DEM.rtg'
 
     d8 = get_d8_object(site_prefix=site_prefix,
                        case_prefix=case_prefix,
                        cfg_dir=cfg_dir)
+    topo_dir = d8.topo_directory
     
     z = d8.DEM.copy()
     pIDs = d8.parent_IDs
     ## ID_grid  = d8.ID_grid
     pID_grid = d8.parent_ID_grid
     gpID_grid = pID_grid[ pIDs ]
-    gpIDs = divmod( gpID_grid, d8.nx )  # (tuple, like WHERE)
+    gpIDs = divmod( gpID_grid, d8.nx )  # (tuple, like np.where)
     #--------------------------------------
 #     d82 = copy.copy(d8)
 #     slope = np.zeros([d8.ny, d8.nx], dtype='float64')
     
-    #-------------------------------------------------  
-    # Use 1D FTCS scheme along D8 flow paths 
-    #-------------------------------------------------    
-    # For numerical stability, FTCS scheme requires:
-    # r = (a * dt / dx^2) < 1/2.
-    #-------------------------------------------------
+
     # a  = 1
     # dt = 10
     # dx = 1800.0 
@@ -435,7 +558,7 @@ def smooth_dem(site_prefix=None, case_prefix=None,
     #-------------------------------------
     # Read header_file info for dem_file
     #-------------------------------------
-    header_file = (cfg_dir + site_prefix + '.rti')
+    header_file = (topo_dir + site_prefix + '.rti')
     grid_info = rti_files.read_info( header_file, REPORT=False)
 
     #---------------------------
@@ -447,7 +570,7 @@ def smooth_dem(site_prefix=None, case_prefix=None,
     #---------------------------
     # Save new DEM to dem_file
     #---------------------------            
-    dem_file2 = (cfg_dir + dem_file)
+    dem_file2 = (topo_dir + dem_file)
     rtg_files.write_grid( z, dem_file2, grid_info, RTG_type='FLOAT')
     print( 'Finished writing new DEM to file: ')
     print( dem_file2 )

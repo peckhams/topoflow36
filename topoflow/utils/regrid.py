@@ -968,6 +968,8 @@ def create_rts_from_nc_files( rts_file='TEST.rts', NC4=False,
         if (var_name is None):
             var_name = 'Rainf_tavg'   ## [kg m-2 s-1]
         GLDAS_RAIN = (var_name == 'Rainf_tavg')
+    else:
+        GLDAS_RAIN = False
     #------------------------------------------------     
     if (var_name is None):
         print('ERROR: var_name is required.')
@@ -1208,7 +1210,8 @@ def create_rts_from_nc_files( rts_file='TEST.rts', NC4=False,
     
 #   create_rts_from_nc_files()
 #-------------------------------------------------------------------    
-def create_rts_from_chirps_files( rts_file='TEST.rts', 
+def create_rts_from_chirps_files( rts_file='TEST.rts',
+           time_interval_hours=6.0,   ################### 
            resample_algo='bilinear', BARO_60=False, 
            DEM_bounds=None, DEM_xres_sec=None, DEM_yres_sec=None,
            DEM_ncols=None, DEM_nrows=None,
@@ -1321,7 +1324,12 @@ def create_rts_from_chirps_files( rts_file='TEST.rts',
         # Byteswap from MSB to LSB
         #---------------------------
         grid = grid.byteswap()
-    
+
+        #------------------------------------------------------    
+        # Convert units from mm/interval to mmph (2020-09-24)
+        #------------------------------------------------------
+        grid /= time_interval_hours
+
         #-------------------------------------        
         # Re-save grid as geotiff (for GDAL)
         #-------------------------------------
