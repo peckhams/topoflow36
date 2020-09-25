@@ -863,8 +863,11 @@ class infil_component( BMI_base.BMI_component):
                if (dz_size == 1):
                    # Convert dz to a 1D array
                    dz = self.dz * np.ones( self.nz )
+               else:
+                   dz = self.dz
                # Yes, this really works.
-               Vc = self.da[None,:,:] * self.dz[:,None,None]
+               Vc = self.da[None,:,:] * dz[:,None,None]
+               #### Vc = self.da[None,:,:] * self.dz[:,None,None]
                #----------------------------------------------
                # This also works.  Need dz as first arg.
                # Vc = np.outer(self.dz, self.da)
