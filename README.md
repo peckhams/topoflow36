@@ -1,5 +1,5 @@
 # topoflow36
-TopoFlow version 3.6 is an update to version 3.5 that runs in Python 3.7 and contains over 82,500 lines of Python code.
+TopoFlow version 3.6 is an update to version 3.5 that runs in Python 3.7 and contains over 98,000 lines of Python code.
 TopoFlow 3.5 is in the "topoflow" repository and runs in Python 2.7. (Over 75,000 lines of code.)
 
 The best way to learn about TopoFlow --- including its history, capabilities, input data preparation and an example application --- is to read the paper in the "docs" folder called:  "Peckham_et_al_2017_GPF.pdf", along with its appendices "Peckham_et_al_2017_GPF_Appendices.pdf".  One of the appendices explains how to install the Python package and run a test.  It is convenient to first install the Anaconda Python distribution, create a conda environment like "tf36", and then install the netCDF4 package dependency in that environment.
