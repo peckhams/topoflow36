@@ -1150,7 +1150,8 @@ class infil_component( BMI_base.BMI_component):
         #----------------------------------------
         if (self.SAVE_V0_GRIDS):
             model_output.open_new_gs_file( self, self.v0_gs_file, self.rti,
-                                           var_name='IN',
+                                           ###### var_name='IN',
+                                           var_name='v0',
                                            long_name='infiltration_rate_at_surface',
                                            units_name='m/s')
 
@@ -1181,7 +1182,8 @@ class infil_component( BMI_base.BMI_component):
         IDs = self.outlet_IDs
         if (self.SAVE_V0_PIXELS):
             model_output.open_new_ts_file( self, self.v0_ts_file, IDs,
-                                           var_name='IN',
+                                           ###### var_name='IN',
+                                           var_name='v0',
                                            long_name='infiltration_rate_at_surface',
                                            units_name='m/s')
 
