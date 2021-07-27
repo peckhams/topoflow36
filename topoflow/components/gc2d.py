@@ -104,7 +104,7 @@ def run_model(t_max=10.0, DEM_file='Animas_200.mat', SILENT=False):
     #------------------
     t           = numpy.float64(0)
     conserveIce = numpy.float64(0)  # (total ice mass ??)
-    meltrate    = numpy.zeros( (ny, nx), dtype='Float64' )
+    meltrate    = numpy.zeros( (ny, nx), dtype='float64' )
   
 ##    fd_watch = {}
 ##    fd_watch['thick']  = open( 'thickness_py.bin' , 'wb' )
@@ -526,7 +526,7 @@ def iceflow( taubX , taubY , HX , HY , xcmpnt , ycmpnt ,
         #        such as: lapseRate (added above), eHs, eTs, eTm, To,
         #        H_ext, Ts_ext and Tm_ext. (SDP, 9/21/09)
         ##################################################################        
-        A_ext = numpy.zeros(H_ext.shape , dtype='Float64' )
+        A_ext = numpy.zeros(H_ext.shape , dtype='float64' )
         ind   = numpy.nonzero( numpy.ravel(H_ext) >= MinGlacThick )
 
         Ts_ext = To + lapseRate*( Zi_ext - Elev0 )
@@ -612,14 +612,14 @@ def avalanche( H , angleOfRepose=Parameters.angleOfRepose ):
     Ho       = numpy.maximum( H, 0 )
       
     while True:
-        dZidx_down        = numpy.zeros( (ny,nx) , dtype='Float64' )
-        dZidx_up          = numpy.zeros( (ny,nx) , dtype='Float64' )
+        dZidx_down        = numpy.zeros( (ny,nx) , dtype='float64' )
+        dZidx_up          = numpy.zeros( (ny,nx) , dtype='float64' )
         dZidx_down[:,1:]  = numpy.choose( Zi[:,1:]  < Zi[:,:-1] , ( Zi[:,1:]  - Zi[:,:-1] , 0 ) )
         dZidx_up  [:,:-1] = numpy.choose( Zi[:,:-1] < Zi[:,1:]  , ( Zi[:,:-1] - Zi[:,1:]  , 0 ) )
         dZidx             = numpy.choose( dZidx_up > dZidx_down , ( dZidx_down , dZidx_up ) )
 
-        dZidy_left         = numpy.zeros( (ny,nx) , dtype='Float64' )
-        dZidy_right        = numpy.zeros( (ny,nx) , dtype='Float64' )
+        dZidy_left         = numpy.zeros( (ny,nx) , dtype='float64' )
+        dZidy_right        = numpy.zeros( (ny,nx) , dtype='float64' )
         dZidy_left [1:,:]  = numpy.choose( Zi[1:,:] < Zi[:-1,:] , ( Zi[1:,:] - Zi[:-1,:] , 0 ) )
         dZidy_right[:-1,:] = numpy.choose( Zi[:-1,:] < Zi[1:,:] , ( Zi[:-1,:] - Zi[1:,:] , 0 ) )
         dZidy              = numpy.choose( dZidy_left > dZidy_right , ( dZidy_right , dZidy_left ) )
@@ -640,10 +640,10 @@ def avalanche( H , angleOfRepose=Parameters.angleOfRepose ):
         Ho   = numpy.choose( Htmp<delH , ( Htmp-delH , 0 ) )
         delH = Htmp - Ho
 
-        delHdn = numpy.zeros( (ny,nx) , dtype='Float64' )
-        delHup = numpy.zeros( (ny,nx) , dtype='Float64' )
-        delHlt = numpy.zeros( (ny,nx) , dtype='Float64' )
-        delHrt = numpy.zeros( (ny,nx) , dtype='Float64' )
+        delHdn = numpy.zeros( (ny,nx) , dtype='float64' )
+        delHup = numpy.zeros( (ny,nx) , dtype='float64' )
+        delHlt = numpy.zeros( (ny,nx) , dtype='float64' )
+        delHrt = numpy.zeros( (ny,nx) , dtype='float64' )
 
         delHup[:,1:  ] = delH[:, :-1] * dZidx_up  [:, :-1]  / gradT[:, :-1]
         delHdn[:, :-1] = delH[:,1:  ] * dZidx_down[:,1:  ]  / gradT[:,1:  ]
@@ -686,7 +686,7 @@ def calve( H , dt , CALVING_TOGGLE=True ):
         # Find the calving front, aka the wet glacier margin
         G = H > 1
         W = numpy.logical_and( G==0 , Zb <= seaLevel )
-        filt = numpy.array( [[0,1,0],[1,1,1],[0,1,0]] , dtype='Float64' )
+        filt = numpy.array( [[0,1,0],[1,1,1],[0,1,0]] , dtype='float64' )
         Wfilt = filter2d( filt , W )
         Wfilt[:,(0,-1)] = Wfilt[:,(2,-3)]
         Wfilt[(0,-1),:] = Wfilt[(2,-3),:]
@@ -855,7 +855,7 @@ def mass_balance( Zi, t,
 
     elif (MASS_BALANCE_TOGGLE == MassBalance.ZERO_BALANCE):
         ELA = 0
-        Bxy = numpy.zeros( Zb.shape , dtype='Float64' )
+        Bxy = numpy.zeros( Zb.shape , dtype='float64' )
                 
     else:
         logging.error( "Unrecognized Mass Balance" )
@@ -981,7 +981,7 @@ def get_timestep( H, Zi_ext, Zi , dHdt, Bxy,
     adHdt   = numpy.abs(dHdtTot)
             
     # something like standard deviation of 3x3 cell areas around each cell
-    filt   = numpy.ones( (3,3) , dtype='Float64' ) / 9.
+    filt   = numpy.ones( (3,3) , dtype='float64' ) / 9.
     ZiMean = filter2d( filt , Zi_ext , 'valid' )
     dHmax  = numpy.sqrt( filter2d( filt, (ZiMean - Zi)**2 ) )
             
@@ -1210,8 +1210,8 @@ def update( t , H , Zb , dx , dy , meltrate, conserveIce,
     if (ICEFLOW_TOGGLE):
         ( UdxX , UdyY ) = iceflow( taubX , taubY , HX , HY , xcmpnt , ycmpnt )
     else:
-        UdxX = numpy.zeros( xcmpnt.shape , dtype='Float64' )    #### INEFFICIENT TO HAVE INSIDE LOOP
-        UdyY = numpy.zeros( ycmpnt.shape , dtype='Float64' )
+        UdxX = numpy.zeros( xcmpnt.shape , dtype='float64' )    #### INEFFICIENT TO HAVE INSIDE LOOP
+        UdyY = numpy.zeros( ycmpnt.shape , dtype='float64' )
 
     #-----------------------------------------------------------
     # CALCULATE SLIDING VELOCITY
@@ -1219,8 +1219,8 @@ def update( t , H , Zb , dx , dy , meltrate, conserveIce,
     if (ICESLIDE_TOGGLE):
         ( UsxX , UsyY ) = ice_sliding( taubX , taubY , xcmpnt , ycmpnt )
     else:
-        UsxX = numpy.zeros( xcmpnt.shape , dtype='Float64' )     #### INEFFICIENT TO HAVE INSIDE LOOP
-        UsyY = numpy.zeros( ycmpnt.shape , dtype='Float64' )
+        UsxX = numpy.zeros( xcmpnt.shape , dtype='float64' )     #### INEFFICIENT TO HAVE INSIDE LOOP
+        UsyY = numpy.zeros( ycmpnt.shape , dtype='float64' )
 
     #-----------------------------------------------------------
     # Sum all contributions to ice motion
@@ -1295,7 +1295,7 @@ def init_valley_glacier( DEM_file='Animas_200.mat', dx_sim=200 ): #, mask_file=N
 ##        watershed_mask = load_mask( mask_file )     ########  There is no "load_mask()" function here.  #########
 ##    except:
 ##        # Use the whole grid if no watershed mask is available
-##        watershed_mask = numpy.ones( topo.shape , dtype='Float64' )
+##        watershed_mask = numpy.ones( topo.shape , dtype='float64' )
 ##    
 ##       ## logging.warning( 'No watershed mask found; using the whole grid for AAR and eroded flux calculations.' )
 ##    
@@ -1435,7 +1435,7 @@ def init_ice_surface(Zb, ZiBound, Hbound, dx):
     # Need to check code; better to rotate DEM prior to use.
     #---------------------------------------------------------   
     ZiBound  = numpy.mean(Zb[:,0]) + Hbound
-    H        = numpy.zeros(Zb.shape, dtype='Float64' )
+    H        = numpy.zeros(Zb.shape, dtype='float64' )
     ny, nx = Zb.shape
     #----------------------------------
     taub      = 200000
@@ -1464,7 +1464,7 @@ def init_ice_surface(Zb, ZiBound, Hbound, dx):
             #------------------------        
             # Backwater calculation
             #------------------------
-            mH = numpy.zeros(mZb.shape, dtype='Float64' )
+            mH = numpy.zeros(mZb.shape, dtype='float64' )
             for j in range(jterm-1,-1,-1):
                 term1  = ( -slope[j]/2. - (mH[j+1]/dx) )**2
                 term2  = -(2./dx) * ( slope[j] * mH[j+1] - beta )
@@ -1495,8 +1495,8 @@ def init_ice_surface(Zb, ZiBound, Hbound, dx):
     Zi = Zb + H
                    
     ny, nx = Zb.shape
-    filt    = numpy.ones( (3,3) , dtype='Float64' ) / 9
-    ZiBig   = numpy.zeros( (ny+2,nx+2) , dtype='Float64' )
+    filt    = numpy.ones( (3,3) , dtype='float64' ) / 9
+    ZiBig   = numpy.zeros( (ny+2,nx+2) , dtype='float64' )
     ZiBig[1:-1,1:-1] = Zi
     
     for i in range(10):
@@ -1622,7 +1622,7 @@ def load_state( DEM_file='Animas_200.mat',
     #--------------------------------------
     #if !exist('H'): H = numpy.zeros(Zb.shape)
     try: H
-    except NameError: H = numpy.zeros( Zb.shape , dtype='Float64' )
+    except NameError: H = numpy.zeros( Zb.shape , dtype='float64' )
 
     #--------------------------------------
     # Free surface = bed elev + ice depth
@@ -1749,7 +1749,7 @@ def load_state( DEM_file='Animas_200.mat',
 ##           #load( mask_file );
 ##           watershed_mask = load_mask( mask_file )
 ##        except:
-##           watershed_mask = numpy.ones( topo.shape , dtype='Float64' )
+##           watershed_mask = numpy.ones( topo.shape , dtype='float64' )
 ##           # Use the whole grid if no watershed mask is available
 ##           msg  = 'No watershed mask found; using the whole grid '
 ##           msg += 'for AAR and eroded flux calculations.'
@@ -1870,7 +1870,7 @@ def load_state( DEM_file='Animas_200.mat',
 ##
 ##     #if !exist('H'): H = numpy.zeros(Zb.shape)
 ##     try: H
-##     except NameError: H = numpy.zeros( Zb.shape , dtype='Float64' )
+##     except NameError: H = numpy.zeros( Zb.shape , dtype='float64' )
 ##
 ##     Zi     = H + Zb
 ##     #clear topo
@@ -1889,7 +1889,7 @@ def load_state( DEM_file='Animas_200.mat',
 ##            
 ##        ZiBound = numpy.mean(Zb[:,0]) + Hbound
 ##        taub    = 200000
-##        H       = numpy.zeros(Zb.shape, dtype='Float64' )
+##        H       = numpy.zeros(Zb.shape, dtype='float64' )
 ##        ny, nx = Zb.shape
 ##        beta    = taub/(rhoI*g)
 ##        jtermlast = nx-2
@@ -1910,7 +1910,7 @@ def load_state( DEM_file='Animas_200.mat',
 ##           while jterm > 0:
 ##            
 ##              # backwater calculation
-##              mH = numpy.zeros(mZb.shape, dtype='Float64' )
+##              mH = numpy.zeros(mZb.shape, dtype='float64' )
 ##              for j in range(jterm-1,-1,-1):
 ##        
 ##                 term1  = ( -slope[j]/2. - (mH[j+1]/dx) )**2
@@ -1939,8 +1939,8 @@ def load_state( DEM_file='Animas_200.mat',
 ##        Zi = Zb + H
 ##                       
 ##        ny,nx = Zb.shape
-##        filt    = numpy.ones( (3,3) , dtype='Float64' ) / 9
-##        ZiBig   = numpy.zeros( (ny+2,nx+2) , dtype='Float64' )
+##        filt    = numpy.ones( (3,3) , dtype='float64' ) / 9
+##        ZiBig   = numpy.zeros( (ny+2,nx+2) , dtype='float64' )
 ##        ZiBig[1:-1,1:-1] = Zi
 ##        
 ##        for i in range(10):
@@ -2000,8 +2000,8 @@ def load_state( DEM_file='Animas_200.mat',
 ##        if ICEFLOW_TOGGLE:
 ##            ( UdxX , UdyY ) = iceflow( taubX , taubY , HX , HY , xcmpnt , ycmpnt )
 ##        else:
-##            UdxX = numpy.zeros( xcmpnt.shape , dtype='Float64' )
-##            UdyY = numpy.zeros( ycmpnt.shape , dtype='Float64' )
+##            UdxX = numpy.zeros( xcmpnt.shape , dtype='float64' )
+##            UdyY = numpy.zeros( ycmpnt.shape , dtype='float64' )
 ##
 ##        #-----------------------------------------------------------
 ##        # CALCULATE SLIDING VELOCITY
@@ -2009,8 +2009,8 @@ def load_state( DEM_file='Animas_200.mat',
 ##        if ICESLIDE_TOGGLE:
 ##            ( UsxX , UsyY ) = ice_sliding( taubX , taubY , xcmpnt , ycmpnt )
 ##        else:
-##            UsxX = numpy.zeros( xcmpnt.shape , dtype='Float64' )
-##            UsyY = numpy.zeros( ycmpnt.shape , dtype='Float64' )
+##            UsxX = numpy.zeros( xcmpnt.shape , dtype='float64' )
+##            UsyY = numpy.zeros( ycmpnt.shape , dtype='float64' )
 ##
 ##        #-----------------------------------------------------------
 ##        # Sum all contributions to ice motion

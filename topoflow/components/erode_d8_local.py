@@ -425,9 +425,9 @@ class erosion_component( erode_base.erosion_component ):
         # in erode_base.py to "float64". (2/14/12)
         #------------------------------------------------
         if (DOUBLE):
-            dtype = 'Float64'
+            dtype = 'float64'
         else:
-            dtype = 'Float32'
+            dtype = 'float32'
 
         #-----------------------
         # Initialize some vars
@@ -473,7 +473,7 @@ class erosion_component( erode_base.erosion_component ):
         
         self.flux_cap_grid = np.zeros([self.ny, self.nx], dtype=dtype)
 
-        self.update_count = np.zeros([self.ny, self.nx], dtype='Int32')
+        self.update_count = np.zeros([self.ny, self.nx], dtype='int32')
 
         #------------------------------------
         # (3/7/12) Save grids for debugging
@@ -1461,7 +1461,7 @@ class erosion_component( erode_base.erosion_component ):
         if not(SILENT):
             print('Initializing T_last grid...')
 
-        self.T_last = np.zeros([self.ny, self.nx], dtype='Float64')
+        self.T_last = np.zeros([self.ny, self.nx], dtype='float64')
         
     #   initialize_T_last_grid()
     #-------------------------------------------------------------------

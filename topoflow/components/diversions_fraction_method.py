@@ -279,17 +279,17 @@ class diversions_component( diversions_base.diversions_component ):
         # Read number of sources, max number of timesteps
         # for any source and the common timestep, source_dt
         #----------------------------------------------------
-        n_sources = cfg.read_value(file_unit, dtype='Int32')
-        nt_max    = cfg.read_value(file_unit, dtype='Int32')
-        source_dt = cfg.read_value(file_unit, dtype='Float64')
+        n_sources = cfg.read_value(file_unit, dtype='int32')
+        nt_max    = cfg.read_value(file_unit, dtype='int32')
+        source_dt = cfg.read_value(file_unit, dtype='float64')
         self.source_dt =source_dt
         
         #--------------------
         # Initialize arrays
         #--------------------
-        self.source_IDs     = np.zeros([n_sources], dtype='Int32')
-        self.nt_sources     = np.zeros([n_sources], dtype='Int32')
-        self.Q_sources_all  = np.zeros([n_sources, nt_max], dtype='Float64')
+        self.source_IDs     = np.zeros([n_sources], dtype='int32')
+        self.nt_sources     = np.zeros([n_sources], dtype='int32')
+        self.Q_sources_all  = np.zeros([n_sources, nt_max], dtype='float64')
         self.n_sources      = n_sources
         self.nt_max_sources = nt_max
         
@@ -297,9 +297,9 @@ class diversions_component( diversions_base.diversions_component ):
         # Read information for each source
         #-----------------------------------
         for k in range(n_sources):
-            source_ID = cfg.read_value(file_unit, dtype='Int32')
-            nt        = cfg.read_value(file_unit, dtype='Int32')
-            Q_values  = cfg.read_list_after_key(file_unit, dtype='Float64')
+            source_ID = cfg.read_value(file_unit, dtype='int32')
+            nt        = cfg.read_value(file_unit, dtype='int32')
+            Q_values  = cfg.read_list_after_key(file_unit, dtype='float64')
             #---------------------------------------------------------------
             nQ        = np.size(Q_values)
             print('Diversions component: Read', nQ, 'Q_values for source.')
@@ -354,17 +354,17 @@ class diversions_component( diversions_base.diversions_component ):
         # Read number of sinks, max number of timesteps
         # for any sink and the common timestep, dt
         #------------------------------------------------
-        n_sinks = cfg.read_value(file_unit, dtype='Int32')
-        nt_max  = cfg.read_value(file_unit, dtype='Int32')
-        sink_dt = cfg.read_value(file_unit, dtype='Float64')
+        n_sinks = cfg.read_value(file_unit, dtype='int32')
+        nt_max  = cfg.read_value(file_unit, dtype='int32')
+        sink_dt = cfg.read_value(file_unit, dtype='float64')
         self.sink_dt = sink_dt
         
         #--------------------
         # Initialize arrays
         #--------------------
-        self.sink_IDs     = np.zeros([n_sinks], dtype='Int32')
-        self.nt_sinks     = np.zeros([n_sinks], dtype='Int32')
-        self.Q_sinks_all  = np.zeros([n_sinks, nt_max], dtype='Float64')
+        self.sink_IDs     = np.zeros([n_sinks], dtype='int32')
+        self.nt_sinks     = np.zeros([n_sinks], dtype='int32')
+        self.Q_sinks_all  = np.zeros([n_sinks, nt_max], dtype='float64')
         self.n_sinks      = n_sinks
         self.nt_max_sinks = nt_max
         
@@ -372,9 +372,9 @@ class diversions_component( diversions_base.diversions_component ):
         # Read information for each sink
         #---------------------------------
         for k in range(n_sinks):
-            sink_ID  = cfg.read_value(file_unit, dtype='Int32')
-            nt       = cfg.read_value(file_unit, dtype='Int32')
-            Q_values = cfg.read_list_after_key(file_unit, dtype='Float64')
+            sink_ID  = cfg.read_value(file_unit, dtype='int32')
+            nt       = cfg.read_value(file_unit, dtype='int32')
+            Q_values = cfg.read_list_after_key(file_unit, dtype='float64')
             #---------------------------------------------------------------
             nQ        = size(Q_values)
             print('Diversions component: Read', nQ, 'Q_values for sink.')
@@ -442,25 +442,25 @@ class diversions_component( diversions_base.diversions_component ):
         #------------------------
         # Read number of canals
         #------------------------
-        n_canals      = cfg.read_value(file_unit, dtype='Int32')
+        n_canals      = cfg.read_value(file_unit, dtype='int32')
         self.n_canals = n_canals
 
         #--------------------
         # Initialize arrays
         #--------------------
-        self.canal_in_IDs      = np.zeros([n_canals], dtype='Int32')
-        self.canal_out_IDs     = np.zeros([n_canals], dtype='Int32')
-        self.canal_Q_fractions = np.zeros([n_canals], dtype='Float64')
-        self.canal_times       = np.zeros([n_canals], dtype='Float64')
+        self.canal_in_IDs      = np.zeros([n_canals], dtype='int32')
+        self.canal_out_IDs     = np.zeros([n_canals], dtype='int32')
+        self.canal_Q_fractions = np.zeros([n_canals], dtype='float64')
+        self.canal_times       = np.zeros([n_canals], dtype='float64')
         
         #----------------------------------
         # Read information for each canal
         #----------------------------------
         for k in range(n_canals):
-            canal_in_ID  = cfg.read_value(file_unit, dtype='Int32')
-            canal_out_ID = cfg.read_value(file_unit, dtype='Int32')
-            Q_fraction   = cfg.read_value(file_unit, dtype='Float64')
-            travel_time  = cfg.read_value(file_unit, dtype='Float64')
+            canal_in_ID  = cfg.read_value(file_unit, dtype='int32')
+            canal_out_ID = cfg.read_value(file_unit, dtype='int32')
+            Q_fraction   = cfg.read_value(file_unit, dtype='float64')
+            travel_time  = cfg.read_value(file_unit, dtype='float64')
             #----------------------------------------------------------
             self.canal_in_IDs[k]      = canal_in_ID
             self.canal_out_IDs[k]     = canal_out_ID
@@ -503,7 +503,7 @@ class diversions_component( diversions_base.diversions_component ):
         #-----------------------------------------------------
         nt_max       = np.int(self.nt_canals.max())
         nt_min       = np.int(self.nt_canals.min())
-        self.canal_Q = np.zeros([n_canals, nt_max], dtype='Float64')
+        self.canal_Q = np.zeros([n_canals, nt_max], dtype='float64')
         self.nt_max  = nt_max
         print('Diversions component: Min steps per canal =', nt_min)
         print('Diversions component: Max steps per canal =', nt_max)
@@ -677,12 +677,12 @@ class diversions_component( diversions_base.diversions_component ):
         #     Channels component.
         #-------------------------------------------------------
         # Note that canal_Q is defined as:
-        # canal_Q = zeros([n_canals, nt_max], dtype='Float64')
+        # canal_Q = zeros([n_canals, nt_max], dtype='float64')
         #-------------------------------------------------------
         # print '#### update_canals(), for loop...'
         nc  = self.n_canals
-        ## Q_canals_out = np.empty(nc, dtype='Float32')
-        self.Q_canals_out[:] = np.empty(nc, dtype='Float32')
+        ## Q_canals_out = np.empty(nc, dtype='float32')
+        self.Q_canals_out[:] = np.empty(nc, dtype='float32')
         for k in range(nc):
             nt_k  = self.nt_canals[k]
             self.Q_canals_out[k] = self.canal_Q[k, nt_k-1]

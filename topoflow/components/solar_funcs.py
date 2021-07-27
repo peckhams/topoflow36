@@ -945,7 +945,7 @@ def Earth_Perihelion( year=None ):
     # Use published values from a table
     # for the years 1992 to 2020.
     #------------------------------------
-    Tp_years = np.arange(29, dtype='Int16') + 1992
+    Tp_years = np.arange(29, dtype='int16') + 1992
     
     Tp_days  = np.array([3, 4, 2, 4, 4, 2, 4, 3, 3, 4, 2, 4, 4, 2, 4, 3, \
                       3, 4, 3, 3, 5, 2, 4, 4, 2, 4, 3, 3, 5])
@@ -1153,9 +1153,9 @@ def Latitude_Grid( info ):
         # Compute lats for pixel centers.
         #----------------------------------------
         dy = (info.yres / np.float64(3600))  #[arcsecs -> degrees]
-        lats = (np.arange(info.nrows, dtype='Float64') * dy) + info.y_south_edge + (dy/2)
+        lats = (np.arange(info.nrows, dtype='float64') * dy) + info.y_south_edge + (dy/2)
         lats = np.flipud(lats)  ## Need FLIPUD vs. ROT90 to reverse 1D arrays.
-        ones = np.ones([info.ncols], dtype='Float64')
+        ones = np.ones([info.ncols], dtype='float64')
         lat_deg = np.outer( lats, ones )
         ## lat_deg = (transpose(matrixmultiply(transpose(ones), transpose(lats))))
         
@@ -1198,8 +1198,8 @@ def Longitude_Grid( info ):
         # Compute lons for pixel centers.
         #----------------------------------------
         dx = (info.xres / np.float64(3600))  #[arcsecs -> degrees]
-        lons = (np.arange(info.ncols, dtype='Float64') * dx) + info.x_west_edge + (dx/2)
-        ones = np.ones([info.nrows], dtype='Float64')
+        lons = (np.arange(info.ncols, dtype='float64') * dx) + info.x_west_edge + (dx/2)
+        ones = np.ones([info.nrows], dtype='float64')
         lon_deg = np.outer( ones, lons )
         ## lon_deg = (transpose(matrixmultiply(transpose(lons), transpose(ones))))
         

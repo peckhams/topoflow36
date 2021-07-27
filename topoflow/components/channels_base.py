@@ -17,8 +17,10 @@ flag in their CFG file.
 # See "(5/13/10)" for a temporary fix.
 #
 #------------------------------------------------------------------------
-#  Copyright (c) 2001-2020, Scott D. Peckham
+#  Copyright (c) 2001-2021, Scott D. Peckham
 #
+#  Jul 2021.  Added ATTENUATE option for flashy hydrographs.
+#             Added min_baseflow_flux cfg parameter.
 #  Jul 2020.  Separate initialize_input_file_vars().
 #  Apr 2020.  Added set_new_defaults(), disable_all_output().
 #  Oct 2019.  Added FLOOD_OPTION and CHECK_STABILITY flags.
@@ -512,15 +514,16 @@ class channels_component( BMI_base.BMI_component ):
         #------------------------
         # Define some constants
         #------------------------
-        self.g          = np.float64(9.81)    # (gravitation const.)
-        self.aval       = np.float64(0.476)   # (integration const.)
-        self.kappa      = np.float64(0.408)   # (von Karman's const.)
-        self.law_const  = np.sqrt(self.g) / self.kappa
-        self.one_third  = np.float64(1.0) / 3.0        
-        self.two_thirds = np.float64(2.0) / 3.0
-        self.deg_to_rad = np.pi / np.float64( 180 )
-        self.rad_to_deg = np.float64(180) / np.pi
-    
+        self.g           = np.float64(9.81)    # (gravitation const.)
+        self.aval        = np.float64(0.476)   # (integration const.)
+        self.kappa       = np.float64(0.408)   # (von Karman's const.)
+        self.law_const   = np.sqrt(self.g) / self.kappa
+        self.one_third   = np.float64(1.0) / 3.0        
+        self.two_thirds  = np.float64(2.0) / 3.0
+        self.deg_to_rad  = np.pi / np.float64( 180 )
+        self.rad_to_deg  = np.float64(180) / np.pi
+        self.mmph_to_mps = 1.0 / (3600.0 * 1000.0)
+        
     #   set_constants()
     #-------------------------------------------------------------------
     def set_missing_cfg_options(self):    
@@ -544,6 +547,20 @@ class channels_component( BMI_base.BMI_component ):
             self.SAVE_DF_PIXELS  = False
             ## self.d_flood_gs_file = ''
             ## self.d_flood_ts_file = ''
+            
+        #-------------------------------------------------       
+        # (2021-07-23) Added ATTENUATE flag to CFG file.
+        #------------------------------------------------- 
+        if not(hasattr(self, 'ATTENUATE')):
+            self.ATTENUATE = False
+
+        #-----------------------------------------------       
+        # (2021-07-24) Added baseflow_min to CFG file.
+        #----------------------------------------------- 
+        if not(hasattr(self, 'min_baseflow_flux')):
+            self.min_baseflow_flux = 0.0  # [mmph]
+        self.min_baseflow_flux_mps = self.min_baseflow_flux * self.mmph_to_mps
+        self.vol_GW = 0.0   # [m3]
 
         #--------------------------------------------- 
         # Also new in 2019, not in older CFG files
@@ -842,7 +859,7 @@ class channels_component( BMI_base.BMI_component ):
         self.update_mins_and_maxes( REPORT=False )  ## (2/6/13)
         if not(self.SILENT):
             self.print_final_report(comp_name='Channels component')
-        
+
         self.status = 'finalizing'  # (OpenMI)
         self.close_input_files()    # TopoFlow input "data streams"
         self.close_output_files()
@@ -875,6 +892,20 @@ class channels_component( BMI_base.BMI_component ):
         # results more often than they change.
         # Issue a message to this effect if any are smaller ??
         #---------------------------------------------------------
+        if (self.save_grid_dt < self.dt):
+            print('--------------------------------------------------')
+            print('NOTE:  save_grid_dt read from CFG file is less')
+            print('       than the channel component timestep, dt.')
+            print('       Will write grids at interval dt instead.')
+            print('--------------------------------------------------')
+            print()
+        if (self.save_pixels_dt < self.dt):
+            print('--------------------------------------------------')
+            print('NOTE:  save_pixels_dt read from CFG file is less')
+            print('       than the channel component timestep, dt.')
+            print('       Will write values at interval dt instead.')
+            print('--------------------------------------------------')
+            print()            
         self.save_grid_dt   = np.maximum(self.save_grid_dt,   self.dt)
         self.save_pixels_dt = np.maximum(self.save_pixels_dt, self.dt)
         
@@ -1187,7 +1218,17 @@ class channels_component( BMI_base.BMI_component ):
         self.A_wet = self.d * (self.width + L2)
         self.P_wet = self.width + (np.float64(2) * self.d / np.cos(self.angle) )
         self.vol   = self.A_wet * self.d8.ds   # [m3]
-
+ 
+        #----------------------------------------------       
+        # (2010-11-08) For new overland flow feature
+        # to reduce flashiness of hydrograph.
+        #----------------------------------------------
+        self.vol_cell = self.initialize_grid(0, dtype=dtype)
+        ## self.u_overland = 0.0001  # (m/s)
+        ## self.u_overland = 0.001  # (m/s)
+        self.u_overland = 0.01  # (m/s)
+        ## self.u_overland = 0.1  # (m/s)
+                
         #-----------------------------------------
         # Total initial water volume in channels
         #-----------------------------------------
@@ -1380,16 +1421,47 @@ class channels_component( BMI_base.BMI_component ):
         # IN = infil rate    [m/s]
         # MR = icemelt rate  [m/s]
 
-        #------------------------------------------------------------
-        # Use refs to other comp vars from new framework. (5/18/12)
-        #------------------------------------------------------------         
+        #-------------------------------------------------------------
+        # NB!  Don't do this here, because vol_GW won't get to the
+        #      TopoFlow driver component for mass balance check.
+        #      Try to achieve this with a new satzone component.
+        #-------------------------------------------------------------
+        # Enforce min_baseflow_flux for GW ? (2021-07-24) (in-place)
+        # Note: min_baseflow_flux is a uniform volume_flux.
+        # Note: min_baseflow discharge = min_baseflow_flux * area
+        #-------------------------------------------------------------
+#         if (self.min_baseflow_flux > 0):
+#             np.maximum( self.GW, self.min_baseflow_flux_mps, self.GW)
+# 
+#             #------------------------------------------------
+#             # Update mass total for GW, sum over all pixels
+#             #------------------------------------------------   
+#             volume = np.double(self.GW * self.da * self.dt)  # [m^3]
+#             if (np.size( volume ) == 1):
+#                 self.vol_GW += (volume * self.rti.n_pixels)
+#             else:
+#                 self.vol_GW += np.sum(volume)
+
+        #------------------------------------------------------
+        # Option for a fixed fraction of P_rain to infiltrate
+        # and get used as Rg in satzone_attenuate.py
+        #------------------------------------------------------
+        self.ATTENUATE = False   # Add flag to CFG file
+        imin = self.IN.min()
+        if (imin == 0) and (self.ATTENUATE):
+            fraction = 0.9
+            self.IN  = self.P_rain * fraction 
+   
+        #------------------------------------------------------
+        # Volume fluxes from different processes are obtained
+        # via BMI from other process model components.
+        #------------------------------------------------------     
         P  = self.P_rain  # (This is now liquid-only precip. 9/14/14)
-        SM = self.SM
-        GW = self.GW
-        ### GW = self.GW_init
-        ET = self.ET   # (This is potential vs. actual ET.)
-        IN = self.IN
-        MR = self.MR
+        SM = self.SM   # (snowmelt_volume_flux)
+        GW = self.GW   # (baseflow_volume_flux or seepage_rate)
+        ET = self.ET   # (ET_volume_flux;  potential vs. actual)
+        IN = self.IN   # (surface_infiltration_volume_flux)
+        MR = self.MR   # (icemelt_volume_flux)
         
 ##        if (self.DEBUG):
 ##            print 'At time:', self.time_min, ', P =', P, '[m/s]'
@@ -1724,8 +1796,96 @@ class channels_component( BMI_base.BMI_component ):
         # into the channel within the grid cell.
         # Note that R is allowed to be negative.
         #----------------------------------------------------        
-        self.vol += (self.R * self.da) * dt   # (in place)
-    
+        # self.vol += (self.R * self.da) * dt   # (in place)
+
+        #----------------------------------------------------------
+        # (2020-11-08) This new approach is an effort to add
+        # realism and prevent flashiness in the hydrograph.
+        # Rain water must flow across cell to reach channel.
+        # u_overland is taken to be constant.
+        # t_drain is time for all water in cell to reach channel.
+        #---------------------------------------------------------- 
+#         self.vol_cell += (self.R * self.da) * dt  # (in place)
+#         dy = self.rti.yres * (92.6/3)   # (m = arcsec * (m/arcsec))
+#         t_drain   = dy / (2 * self.u_overland)
+#         Q_sides   = self.vol_cell / t_drain
+#         ## Q_sides   = np.sqrt( self.vol_cell) / 2000.0
+#         vol_sides = Q_sides * dt
+#         self.vol += vol_sides
+#         self.vol_cell -= vol_sides
+#         np.maximum( self.vol_cell, 0.0, self.vol_cell )  # (in place)
+
+        #----------------------------------------------------------
+        # (2020-11-09) This new approach is an effort to add
+        # realism and prevent flashiness in the hydrograph.
+        # Rain water must flow across cell to reach channel.
+        #---------------------------------------------------------- 
+#         self.vol_cell += (self.R * self.da) * dt  # (in place)
+#         Q_sides = 3.0  # (m3/s)
+#         vol_sides = np.minimum( Q_sides * dt, self.vol_cell)
+#         self.vol += vol_sides
+#         self.vol_cell -= vol_sides
+#         np.maximum( self.vol_cell, 0.0, self.vol_cell )  # (in place)
+
+        #----------------------------------------------------------
+        # (2020-03-08) This new approach is an effort to add
+        # realism and prevent flashiness in the hydrograph.
+        # Rain water must flow across cell to reach channel.
+        # It is derived from the water tank model, using the
+        # outlet velocity formula, v_out(t)=sqrt[2 g h(t)]
+        # and eliminating h(t) in favor of V(t), the volume.
+        # Also A_out is taken to be c * sqrt(A_top), where c
+        # is either 1 or sqrt(2).
+        # Q_sides(t) = c * sqrt[2 g V(t)]
+        #----------------------------------------------------------
+#         self.vol_cell += (self.R * self.da) * dt  # (in place)
+#         c = 1.0
+#         depth_cell = (self.vol_cell / self.da)
+#         ## depth_cell = 0.001   # (THIS REDUCES FLASHINESS A BIT)
+#         ## depth_cell = 0.0001   # (THIS REDUCES FLASHINESS MORE)
+#         c2 = c * depth_cell
+#         g = self.g  # [m/s2]
+#         Q_sides = c2 * np.sqrt(2 * g * self.vol_cell)  # [m3/s]
+#         vol_sides = np.minimum( Q_sides * dt, self.vol_cell)
+#         #----------------
+#         # For debugging
+#         #----------------
+#         # print('Cell = (row,col) = (1:3,1)')
+#         # print('Q_sides      =', Q_sides[1:3,1])
+#         # print('Q_sides * dt =', Q_sides[1:3,1] * dt )
+#         # print('vol_cell     =', self.vol_cell[1:3,1])
+#         # print('vol_sides    =', vol_sides[1:3,1])
+#         # print('=======================================================')
+#         
+#         self.vol += vol_sides
+#         self.vol_cell -= vol_sides
+#         np.maximum( self.vol_cell, 0.0, self.vol_cell )  # (in place)
+#         tank_depth = (self.vol_cell / self.da)
+#         if (tank_depth.max() > 1.0):
+#             print('### WARNING:  Tank depth exceeds 1 meter.')
+#             print()
+
+        #----------------------------------------------------------
+        # (2021-05-10) This new approach is an effort to add
+        # realism and prevent flashiness in the hydrograph.
+        # Rain water must flow across cell to reach channel.
+        # Assume that all water will reach channel in n days.
+        # Q_sides is always a fraction of vol_cell.
+        # Increase n_days to close the time lag and smooth.
+        #----------------------------------------------------------
+        if (self.ATTENUATE):
+            self.vol_cell += (self.R * self.da) * dt  # (in place)
+            ## n_days  = 20.0  # Getting closer to observed
+            n_days  = 50.0
+            t_drain = 3600.0 * 24.0 * n_days  # (seconds)
+            Q_sides = (self.vol_cell / t_drain)   # (m3/s)
+            vol_sides = np.minimum( Q_sides * dt, self.vol_cell)
+            self.vol += vol_sides
+            self.vol_cell -= vol_sides
+            np.maximum( self.vol_cell, 0.0, self.vol_cell )  # (in place)
+        else:
+            self.vol += (self.R * self.da) * dt  # (in place)
+
         #-----------------------------------------
         # Add contributions from neighbor pixels
         #-------------------------------------------------------------
@@ -2338,8 +2498,18 @@ class channels_component( BMI_base.BMI_component ):
         # This makes f=0 and du=0 where (d <= 0)
         #-----------------------------------------
         if (self.MANNING):
-            n2 = self.nval ** np.float64(2)  
-            self.f[ wg ] = self.g * (n2[wg] / (self.d[wg] ** self.one_third))
+            #---------------------------------------------
+            # (2020-11-05)  Allow nval to be Scalar.
+            #---------------------------------------------
+            if (self.nval.size > 1):
+                n2 = self.nval[wg] ** np.float64(2)
+            else:
+                n2 = self.nval ** np.float64(2)
+            #---------------------------------------------
+            ### n2 = self.nval ** np.float64(2)
+            ### self.f[ wg ] = self.g * (n2[wg] / (self.d[wg] ** self.one_third))
+            #---------------------------------------------
+            self.f[ wg ] = self.g * (n2 / (self.d[wg] ** self.one_third))            
             self.f[ wb ] = np.float64(0)
  
         #---------------------------------
@@ -3076,7 +3246,7 @@ class channels_component( BMI_base.BMI_component ):
         rti = self.rti
  
         #-------------------------------------------------------
-        # All grids are assumed to have a data type of Float32
+        # All grids are assumed to have a data type of float32
         # as stored in their binary grid file.
         #-------------------------------------------------------
         # If EOF is reached, model_input.read_next() does not
@@ -3140,7 +3310,7 @@ class channels_component( BMI_base.BMI_component ):
 # ##        print ' '
 #         
 #         #-------------------------------------------------------
-#         # All grids are assumed to have a data type of Float32.
+#         # All grids are assumed to have a data type of float32.
 #         #-------------------------------------------------------
 #         slope = model_input.read_next(self.slope_unit, self.slope_type, rti)
 #         if (slope is not None):
@@ -3209,41 +3379,31 @@ class channels_component( BMI_base.BMI_component ):
 #             print '    max(d0) =', d0.max()
 # 
 #         ## code = model_input.read_grid(self.code_unit, \
-#         ##                            self.code_type, rti, dtype='UInt8')
+#         ##                            self.code_type, rti, dtype='uint8')
 #         ## if (code is not None): self.code = code
 # 
 #     #   read_input_files_last()     
     #-------------------------------------------------------------------  
     def close_input_files(self):
 
-        # if not(self.slope_unit.closed):
-        # if (self.slope_unit is not None):
+        if (self.comp_status.lower() == 'disabled'):
+            return  # (2021-07-27)
 
         #-------------------------------------------------
         # NB!  self.code_unit was never defined as read.
         #-------------------------------------------------
-        # if (self.code_type != 'scalar'): self.code_unit.close()
+        # if (self.code_type.lower() != 'scalar'): self.code_unit.close()
 
-        if (self.slope_type != 'Scalar'): self.slope_unit.close()
+        if (self.slope_type.lower() != 'scalar'): self.slope_unit.close()
         if (self.MANNING):
-            if (self.nval_type != 'Scalar'): self.nval_unit.close()
+            if (self.nval_type.lower() != 'scalar'): self.nval_unit.close()
         if (self.LAW_OF_WALL):
-           if (self.z0val_type != 'Scalar'): self.z0val_unit.close()
-        if (self.width_type != 'Scalar'): self.width_unit.close()
-        if (self.angle_type != 'Scalar'): self.angle_unit.close()
-        if (self.sinu_type  != 'Scalar'): self.sinu_unit.close()
-        if (self.d0_type    != 'Scalar'): self.d0_unit.close()
-        if (self.d_bankfull_type != 'Scalar'): self.d_bankfull_unit.close()
-            
-##        if (self.slope_file != ''): self.slope_unit.close()
-##        if (self.MANNING):
-##            if (self.nval_file  != ''): self.nval_unit.close()
-##        if (self.LAW_OF_WALL):
-##           if (self.z0val_file != ''): self.z0val_unit.close()
-##        if (self.width_file != ''): self.width_unit.close()
-##        if (self.angle_file != ''): self.angle_unit.close()
-##        if (self.sinu_file  != ''): self.sinu_unit.close()
-##        if (self.d0_file    != ''): self.d0_unit.close()
+           if (self.z0val_type.lower() != 'scalar'): self.z0val_unit.close()
+        if (self.width_type.lower() != 'scalar'): self.width_unit.close()
+        if (self.angle_type.lower() != 'scalar'): self.angle_unit.close()
+        if (self.sinu_type.lower()  != 'scalar'): self.sinu_unit.close()
+        if (self.d0_type.lower()    != 'scalar'): self.d0_unit.close()
+        if (self.d_bankfull_type.lower() != 'scalar'): self.d_bankfull_unit.close()
 
     #   close_input_files()       
     #-------------------------------------------------------------------  
@@ -3266,47 +3426,47 @@ class channels_component( BMI_base.BMI_component ):
         
     #   update_outfile_names()
     #-------------------------------------------------------------------  
-    def bundle_output_files(self):    
-
-        ###################################################
-        # NOT READY YET. Need "get_long_name()" and a new
-        # version of "get_var_units".  (9/21/14)
-        ###################################################
-                
-        #-------------------------------------------------------------       
-        # Bundle the output file info into an array for convenience.
-        # Then we just need one open_output_files(), in BMI_base.py,
-        # and one close_output_files().  Less to maintain. (9/21/14)
-        #-------------------------------------------------------------        
-        # gs = grid stack, ts = time series, ps = profile series.
-        #-------------------------------------------------------------
-        self.out_files = [
-        {var_name:'Q', 
-        save_gs:self.SAVE_Q_GRIDS,  gs_file:self.Q_gs_file,
-        save_ts:self.SAVE_Q_PIXELS, ts_file:self.Q_ts_file, 
-        long_name:get_long_name('Q'), units_name:get_var_units('Q')}, 
-        #-----------------------------------------------------------------
-        {var_name:'u',
-        save_gs:self.SAVE_U_GRIDS,  gs_file:self.u_gs_file,
-        save_ts:self.SAVE_U_PIXELS, ts_file:self.u_ts_file,
-        long_name:get_long_name('u'), units_name:get_var_units('u')},
-        #-----------------------------------------------------------------
-        {var_name:'d',
-        save_gs:self.SAVE_D_GRIDS,  gs_file:self.d_gs_file,
-        save_ts:self.SAVE_D_PIXELS, ts_file:self.d_ts_file,
-        long_name:get_long_name('d'), units_name:get_var_units('d')}, 
-        #-----------------------------------------------------------------
-        {var_name:'f',
-        save_gs:self.SAVE_F_GRIDS,  gs_file:self.f_gs_file,
-        save_ts:self.SAVE_F_PIXELS, ts_file:self.f_ts_file,
-        long_name:get_long_name('f'), units_name:get_var_units('f')},
-        #-----------------------------------------------------------------
-        {var_name:'d_flood',
-        save_gs:self.SAVE_DF_GRIDS,  gs_file:self.d_flood_gs_file,
-        save_ts:self.SAVE_DF_PIXELS, ts_file:self.d_flood_ts_file,
-        long_name:get_long_name('d_flood'), units_name:get_var_units('d_flood')} ]
-                                
-    #   bundle_output_files
+#     def bundle_output_files(self):    
+# 
+#         ###################################################
+#         # NOT READY YET. Need "get_long_name()" and a new
+#         # version of "get_var_units".  (9/21/14)
+#         ###################################################
+#                 
+#         #-------------------------------------------------------------       
+#         # Bundle the output file info into an array for convenience.
+#         # Then we just need one open_output_files(), in BMI_base.py,
+#         # and one close_output_files().  Less to maintain. (9/21/14)
+#         #-------------------------------------------------------------        
+#         # gs = grid stack, ts = time series, ps = profile series.
+#         #-------------------------------------------------------------
+#         self.out_files = [
+#         {var_name:'Q', 
+#         save_gs:self.SAVE_Q_GRIDS,  gs_file:self.Q_gs_file,
+#         save_ts:self.SAVE_Q_PIXELS, ts_file:self.Q_ts_file, 
+#         long_name:get_long_name('Q'), units_name:get_var_units('Q')}, 
+#         #-----------------------------------------------------------------
+#         {var_name:'u',
+#         save_gs:self.SAVE_U_GRIDS,  gs_file:self.u_gs_file,
+#         save_ts:self.SAVE_U_PIXELS, ts_file:self.u_ts_file,
+#         long_name:get_long_name('u'), units_name:get_var_units('u')},
+#         #-----------------------------------------------------------------
+#         {var_name:'d',
+#         save_gs:self.SAVE_D_GRIDS,  gs_file:self.d_gs_file,
+#         save_ts:self.SAVE_D_PIXELS, ts_file:self.d_ts_file,
+#         long_name:get_long_name('d'), units_name:get_var_units('d')}, 
+#         #-----------------------------------------------------------------
+#         {var_name:'f',
+#         save_gs:self.SAVE_F_GRIDS,  gs_file:self.f_gs_file,
+#         save_ts:self.SAVE_F_PIXELS, ts_file:self.f_ts_file,
+#         long_name:get_long_name('f'), units_name:get_var_units('f')},
+#         #-----------------------------------------------------------------
+#         {var_name:'d_flood',
+#         save_gs:self.SAVE_DF_GRIDS,  gs_file:self.d_flood_gs_file,
+#         save_ts:self.SAVE_DF_PIXELS, ts_file:self.d_flood_ts_file,
+#         long_name:get_long_name('d_flood'), units_name:get_var_units('d_flood')} ]
+#                                 
+#     #   bundle_output_files
     #------------------------------------------------------------------- 
     def disable_all_output(self):
     
@@ -3386,11 +3546,12 @@ class channels_component( BMI_base.BMI_component ):
                                            var_name='d_flood',
                                            long_name='land_surface_water__depth',
                                            units_name='m')
-                                                      
+                                                                          
         #--------------------------------------
         # Open new files to write time series
         #--------------------------------------
         IDs = self.outlet_IDs
+        ## print('##################### Outlet IDs =', IDs)
         if (self.SAVE_Q_PIXELS):  
             model_output.open_new_ts_file( self, self.Q_ts_file, IDs,
                                            var_name='Q',
@@ -3519,7 +3680,7 @@ class channels_component( BMI_base.BMI_component ):
         #-------------
         if (self.SAVE_Q_PIXELS):
             model_output.add_values_at_IDs( self, time, self.Q, 'Q', IDs )
-                    
+                                              
         if (self.SAVE_U_PIXELS):
             model_output.add_values_at_IDs( self, time, self.u, 'u', IDs )
             
@@ -3563,7 +3724,7 @@ class channels_component( BMI_base.BMI_component ):
         #--------------------------------------------------------
           
         return u
-    
+        
     #   manning_formula()
     #-------------------------------------------------------------------
     def law_of_the_wall(self):

@@ -374,6 +374,19 @@ class evap_component( evap_base.evap_component ):
         #-------------------------------------
         ET = (Qet / np.float64(2.5E+9))  #[m/s]  (A loss, but returned as positive.)
 
+        #--------------------------------------
+        # Compute actual ET from potential ET
+        #----------------------------------------------------
+        # NB!  In channels_base.py, in update_R(), R can be
+        #      negative and will result in a loss of water
+        #      volume in update_volume().  Channel water
+        #      volume is passed to this component, and used
+        #      to check if sufficient water is available.
+        #----------------------------------------------------
+        # chan_dt = self.dt   ##### (incorrect)
+        # w = (self.vol < (ET * chan_dt))    # (8/3/20, boolean array)
+        # ET[w] = 0.0
+        
         #------------------------------- 
         # Save new ET values, in-place
         #-------------------------------
@@ -422,7 +435,7 @@ class evap_component( evap_base.evap_component ):
         rti = self.rti
         
         #-------------------------------------------------------
-        # All grids are assumed to have a data type of Float32.
+        # All grids are assumed to have a data type of float32.
         #-------------------------------------------------------
         alpha = model_input.read_next(self.alpha_unit, self.alpha_type, rti)
         if (alpha is not None): 
@@ -445,7 +458,7 @@ class evap_component( evap_base.evap_component ):
             ## self.T_soil_x = T_soil_x
 
         #-------------------------------------------------------
-        # All grids are assumed to have a data type of Float32.
+        # All grids are assumed to have a data type of float32.
         #-------------------------------------------------------
 #         alpha = model_input.read_next(self.alpha_unit, self.alpha_type, rti)
 #         if (alpha is not None): self.alpha = alpha

@@ -270,7 +270,7 @@ class ice_component( BMI_base.BMI_component ):
         # to allow restarting from a previous run, etc.
         #-----------------------------------------------------
         if (self.H0_file.upper() == "NONE"):
-            self.H  = np.zeros((self.ny, self.nx), dtype='Float32')
+            self.H  = np.zeros((self.ny, self.nx), dtype='float32')
         else:
             H0_file = (self.in_directory + self.H0_file)
             self.H  = rtg_files.read_grid(H0_file, self.rti,
@@ -294,7 +294,7 @@ class ice_component( BMI_base.BMI_component ):
         #-----------------------        
         # Initialize more vars
         #-----------------------
-        self.MR          = np.zeros((self.ny, self.nx), dtype='Float64')
+        self.MR          = np.zeros((self.ny, self.nx), dtype='float64')
         self.vol_MR      = self.initialize_scalar(0, dtype='float64')
         self.meltrate    = self.MR   # (useful synonym ref)
         self.dt_min      = np.float64(99999.0)

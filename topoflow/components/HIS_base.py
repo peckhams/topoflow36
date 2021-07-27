@@ -676,7 +676,7 @@ class HIS_component(BMI_base.BMI_component):
 ##        rti = self.rti
 ##
 ##        #-------------------------------------------------------
-##        # All grids are assumed to have data type of Float32.
+##        # All grids are assumed to have data type of float32.
 ##        #-------------------------------------------------------
 ##        # This method works for Green-Ampt and Smith-Parlange
 ##        # but must be overridden for Richards 1D.

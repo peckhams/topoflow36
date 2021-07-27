@@ -2428,7 +2428,7 @@ def compare_em_air_methods():
     #-------------------------------------------------------------
     import matplotlib.pyplot
     
-    T_air = np.arange(80, dtype='Float32') - np.float64(40)   #[Celsius]  (-40 to 40)
+    T_air = np.arange(80, dtype='float32') - np.float64(40)   #[Celsius]  (-40 to 40)
     RH  = np.float64(1.0)
     C2K = np.float64(273.15)
     

@@ -53,7 +53,6 @@ import glob
 import os
 
 from topoflow.utils import BMI_base
-from topoflow.utils import cfg_files as cfg
 from topoflow.utils import idl_func  # (still needed for idl.readf...)
 
 #---------------------------------------------------------------------
@@ -271,10 +270,10 @@ class diversions_component( BMI_base.BMI_component ):
         #--------------------
         # Initialize arrays
         #--------------------
-        self.source_IDs  = np.zeros([n_IDs], dtype='Int32')
-        self.nd_vals     = np.zeros([n_IDs], dtype='Int32')   #*****
-        self.dur_sources = np.zeros([nd_max, n_IDs], dtype='Float32')
-        self.Q_sources   = np.zeros([nd_max, n_IDs], dtype='Float32')
+        self.source_IDs  = np.zeros([n_IDs], dtype='int32')
+        self.nd_vals     = np.zeros([n_IDs], dtype='int32')   #*****
+        self.dur_sources = np.zeros([nd_max, n_IDs], dtype='float32')
+        self.Q_sources   = np.zeros([nd_max, n_IDs], dtype='float32')
         
         #--------------------
         # Open file to read
@@ -294,11 +293,11 @@ class diversions_component( BMI_base.BMI_component ):
             nd = idl_func.readf(file_unit, nd)
             self.nd_vals[k] = nd
             #----------------------------------
-            durs = np.zeros([nd], dtype='Float32')
+            durs = np.zeros([nd], dtype='float32')
             durs = idl_func.readf(file_unit, durs)
             self.dur_sources[np.int32(0):((nd - np.int32(1)))+1,k] = durs
             #----------------------------------
-            Q = np.zeros([nd], dtype='Float32')
+            Q = np.zeros([nd], dtype='float32')
             Q = idl_func.readf(file_unit, Q)
             self.Q_sources[np.int32(0):((nd - np.int32(1)))+1,k] = Q
             #----------------------------------
@@ -312,7 +311,7 @@ class diversions_component( BMI_base.BMI_component ):
         #------------------------------------
         # Compute partial sums of durations
         #------------------------------------
-        dur_sum_sources = np.zeros([nd_max + np.int32(1), n_IDs], dtype='Float32')
+        dur_sum_sources = np.zeros([nd_max + np.int32(1), n_IDs], dtype='float32')
         for k in range(n_IDs):
             for i in range(nd_max):
                 dur_sum_sources[i + 1,k] = dur_sum_sources[i,k] + dur_sources[i,k]
@@ -378,10 +377,10 @@ class diversions_component( BMI_base.BMI_component ):
         #--------------------
         # Initialize arrays
         #--------------------
-        self.sink_IDs  = np.zeros([n_IDs], dtype='Int32')
-        self.nd_vals   = np.zeros([n_IDs], dtype='Int32')   #*****
-        self.dur_sinks = np.zeros([nd_max, n_IDs], dtype='Float32')
-        self.Q_sinks   = np.zeros([nd_max, n_IDs], dtype='Float32')
+        self.sink_IDs  = np.zeros([n_IDs], dtype='int32')
+        self.nd_vals   = np.zeros([n_IDs], dtype='int32')   #*****
+        self.dur_sinks = np.zeros([nd_max, n_IDs], dtype='float32')
+        self.Q_sinks   = np.zeros([nd_max, n_IDs], dtype='float32')
         
         #--------------------
         # Open file to read
@@ -401,11 +400,11 @@ class diversions_component( BMI_base.BMI_component ):
             nd = idl_func.readf(file_unit, nd)
             self.nd_vals[k] = nd
             #----------------------------------
-            durs = np.zeros([nd], dtype='Float32')
+            durs = np.zeros([nd], dtype='float32')
             durs = idl_func.readf(file_unit, durs)
             self.dur_sinks[np.int32(0):((nd - np.int32(1)))+1,k] = durs
             #----------------------------------
-            Q = zeros([nd], dtype='Float32')
+            Q = zeros([nd], dtype='float32')
             Q = idl_func.readf(file_unit, Q)
             self.Q_sinks[np.int32(0):((nd - np.int32(1)))+1,k] = Q
             #----------------------------------
@@ -419,7 +418,7 @@ class diversions_component( BMI_base.BMI_component ):
         #------------------------------------
         # Compute partial sums of durations
         #------------------------------------
-        dur_sum_sinks = zeros([nd_max + np.int32(1), n_IDs], dtype='Float32')
+        dur_sum_sinks = zeros([nd_max + np.int32(1), n_IDs], dtype='float32')
         for k in range(n_IDs):
             for i in range(nd_max):
                 dur_sum_sinks[i + 1,k] = dur_sum_sinks[i,k] + dur_sinks[i,k]
@@ -495,12 +494,12 @@ class diversions_component( BMI_base.BMI_component ):
         #--------------------
         # Initialize arrays
         #--------------------
-        self.canal_in_IDs  = np.zeros([n_IDs], dtype='Int32')
-        self.canal_out_IDs = np.zeros([n_IDs], dtype='Int32')
-        self.canal_t_vals  = np.zeros([n_IDs], dtype='Int32')
-        self.nd_vals       = np.zeros([n_IDs], dtype='Int32')   #*****
-        self.dur_canals    = np.zeros([nd_max, n_IDs], dtype='Float32')
-        self.Q_canals_in   = np.zeros([nd_max, n_IDs], dtype='Float32')
+        self.canal_in_IDs  = np.zeros([n_IDs], dtype='int32')
+        self.canal_out_IDs = np.zeros([n_IDs], dtype='int32')
+        self.canal_t_vals  = np.zeros([n_IDs], dtype='int32')
+        self.nd_vals       = np.zeros([n_IDs], dtype='int32')   #*****
+        self.dur_canals    = np.zeros([nd_max, n_IDs], dtype='float32')
+        self.Q_canals_in   = np.zeros([nd_max, n_IDs], dtype='float32')
         
         #--------------------
         # Open file to read
@@ -527,11 +526,11 @@ class diversions_component( BMI_base.BMI_component ):
             nd = idl_func.readf(file_unit, nd)
             self.nd_vals[k] = nd
             #-----------------------------------
-            durs = np.zeros([nd], dtype='Float32')
+            durs = np.zeros([nd], dtype='float32')
             durs = idl_func.readf(file_unit, durs)
             self.dur_canals[np.int32(0):((nd - np.int32(1)))+1,k] = durs
             #-----------------------------------
-            Q = np.zeros([nd], dtype='Float32')
+            Q = np.zeros([nd], dtype='float32')
             Q = idl_func.readf(file_unit, Q)
             self.Q_canals_in[np.int32(0):((nd - np.int32(1)))+1,k] = Q
             #-----------------------------------
@@ -545,7 +544,7 @@ class diversions_component( BMI_base.BMI_component ):
         #------------------------------------
         # Compute partial sums of durations
         #------------------------------------
-        dur_sum_canals_in = np.zeros([nd_max + np.int32(1), n_IDs], dtype='Float32')
+        dur_sum_canals_in = np.zeros([nd_max + np.int32(1), n_IDs], dtype='float32')
         for k in range(n_IDs):
             for i in range(nd_max):
                 dur_sum_canals_in[i + 1,k] = dur_sum_canals_in[i,k] + dur_canals[i,k]

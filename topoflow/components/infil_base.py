@@ -38,7 +38,6 @@ infil_richards_1D.py.
 #      set_new_defaults()    # (2020-04-29)
 #      initialize()
 #      update()
-#      update_nondrivers()          ####### (OBSOLETE ??)
 #      finalize()
 #      initialize_layer_vars()      # (5/11/10)
 #      build_layered_var()
@@ -84,17 +83,6 @@ import os, sys
 from topoflow.utils import BMI_base
 from topoflow.utils import model_input
 from topoflow.utils import model_output
-
-#-----------------------------------------------------
-# Moved these imports to: "embed_child_components()"
-# because first one tries to "import infil_base" and
-# this leads to a problem.
-#-----------------------------------------------------
-## from topoflow.components import channels_kinematic_wave
-## from topoflow.components import snow_degree_day
-## from topoflow.components import evap_priestley_taylor
-## from topoflow.components import satzone_darcy_layers
-## from topoflow.components import met_base
 
 #-----------------------------------------------------------------------
 class infil_component( BMI_base.BMI_component):
@@ -1032,7 +1020,7 @@ class infil_component( BMI_base.BMI_component):
         rti = self.rti
 
         #-------------------------------------------------------
-        # All grids are assumed to have data type of Float32.
+        # All grids are assumed to have data type of float32.
         #-------------------------------------------------------
         # This method works for Green-Ampt and Smith-Parlange
         # but must be overridden for Richards 1D.
@@ -1069,21 +1057,17 @@ class infil_component( BMI_base.BMI_component):
         #-------------------------------------------------------
         # NB! Green-Ampt and Smith-Parlange currently only
         #     support ONE layer (n_layers == 1).
-        #-------------------------------------------------------        
+        #-------------------------------------------------------
+        if (self.comp_status.lower() == 'disabled'):
+            return  # (2021-07-27)
+
         for k in range(self.n_layers):
-            if (self.Ks_type[k]  != 'Scalar'): self.Ks_unit[k].close()        
-            if (self.Ki_type[k]  != 'Scalar'): self.Ki_unit[k].close()
-            if (self.qs_type[k]  != 'Scalar'): self.qs_unit[k].close()
-            if (self.qi_type[k]  != 'Scalar'): self.qi_unit[k].close()
-            if (self.G_type[k]   != 'Scalar'): self.G_unit[k].close()
-            if (self.gam_type[k] != 'Scalar'): self.gam_unit[k].close()
-            #------------------------------------------------------------
-##            if (self.Ks_file[k]  != ''): self.Ks_unit[k].close()        
-##            if (self.Ki_file[k]  != ''): self.Ki_unit[k].close()
-##            if (self.qs_file[k]  != ''): self.qs_unit[k].close()
-##            if (self.qi_file[k]  != ''): self.qi_unit[k].close()
-##            if (self.G_file[k]   != ''): self.G_unit[k].close()
-##            if (self.gam_file[k] != ''): self.gam_unit[k].close()
+            if (self.Ks_type[k].lower()  != 'scalar'): self.Ks_unit[k].close()        
+            if (self.Ki_type[k].lower()  != 'scalar'): self.Ki_unit[k].close()
+            if (self.qs_type[k].lower()  != 'scalar'): self.qs_unit[k].close()
+            if (self.qi_type[k].lower()  != 'scalar'): self.qi_unit[k].close()
+            if (self.G_type[k].lower()   != 'scalar'): self.G_unit[k].close()
+            if (self.gam_type[k].lower() != 'scalar'): self.gam_unit[k].close()
           
     #   close_input_files()
     #-------------------------------------------------------------------  
@@ -1113,27 +1097,6 @@ class infil_component( BMI_base.BMI_component):
         self.p_cs_file  = (self.out_directory + self.p_cs_file)
         self.K_cs_file  = (self.out_directory + self.K_cs_file)
         self.v_cs_file  = (self.out_directory + self.v_cs_file)
-
-  
-##        self.v0_gs_file = (self.case_prefix + '_2D-v0.rts')
-##        self.q0_gs_file = (self.case_prefix + '_2D-q0.rts')
-##        self.I_gs_file  = (self.case_prefix + '_2D-I.rts')
-##        self.Zw_gs_file = (self.case_prefix + '_2D-Zw.rts')
-##        #---------------------------------------------------------
-##        self.v0_ts_file = (self.case_prefix + '_0D-v0.txt')
-##        self.q0_ts_file = (self.case_prefix + '_0D-q0.txt')
-##        self.I_ts_file  = (self.case_prefix + '_0D-I.txt')
-##        self.Zw_ts_file = (self.case_prefix + '_0D-Zw.txt')
-##        #---------------------------------------------------------
-##        self.q_cs_file = (self.case_prefix + '_3D-q.rt3')
-##        self.p_cs_file = (self.case_prefix + '_3D-p.rt3')
-##        self.K_cs_file = (self.case_prefix + '_3D-K.rt3')
-##        self.v_cs_file = (self.case_prefix + '_3D-v.rt3')
-##        #---------------------------------------------------------
-##        self.q_ps_file = (self.case_prefix + '_1D-q.txt')
-##        self.p_ps_file = (self.case_prefix + '_1D_p.txt')
-##        self.K_ps_file = (self.case_prefix + '_1D_K.txt')
-##        self.v_ps_file = (self.case_prefix + '_1D_v.txt')
 
     #   update_outfile_names()
     #-------------------------------------------------------------------
@@ -1286,12 +1249,14 @@ class infil_component( BMI_base.BMI_component):
         #---------------------------------------------
         if (self.SAVE_Q_CUBES):
             model_output.open_new_cs_file( self, self.q_cs_file, self.rti,
+                                           z_values=self.z, z_units='m',
                                            var_name='q',
                                            long_name='soil_water_content',
                                            units_name='none')
 
         if (self.SAVE_P_CUBES):    
             model_output.open_new_cs_file( self, self.p_cs_file, self.rti,
+                                           z_values=self.z, z_units='m',
                                            var_name='p',
                                            long_name='pressure_head',
                                            units_name='m')
@@ -1301,12 +1266,14 @@ class infil_component( BMI_base.BMI_component):
         #################################################################
         if (self.SAVE_K_CUBES):    
             model_output.open_new_cs_file( self, self.K_cs_file, self.rti,
+                                           z_values=self.z, z_units='m',
                                            var_name='K',
                                            long_name='hydraulic_conductivity',
                                            units_name='m/s')
 
         if (self.SAVE_V_CUBES):    
             model_output.open_new_cs_file( self, self.v_cs_file, self.rti,
+                                           z_values=self.z, z_units='m',
                                            var_name='v',
                                            long_name='vertical_flow_rate',
                                            units_name='m/s')

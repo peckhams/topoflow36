@@ -1,59 +1,38 @@
 
-# SEARCH FOR THIS!  It doesn't work for Python lists! (2/19/13)
-# self.qs_layer_0 = self.qs[0]
-##########################################
+# 1.  Add "disable_all_output" like infil_base.py.      DONE
+# 2.  Add GW to output vars (so we can check closely).  DONE
+# 3.  Move all notes about WHERE to end, with pointer at top.   DONE
+# 4.  Check initialize_wetted_thicknesses.    DONE
+# 5.  Check update_water_table() and add comments.  DONE
 
-
-## Copyright (c) 2001-2016, Scott D. Peckham
-## January 2009   (converted from IDL)
-## May, July, August 2009
-## May 2010 (changes to initialize() and read_cfg_file()
-
-###########################################################################
-
-## Clean up initialize() for case where method=0 ??
-
-## NB!  "adjust_flow_depths()" has a "conceptual bug".  See notes there.
-
-## NB!  There is a fair amount of IDL "where subscripting" used here in
-##      update_water_table().  I2PY does not handle this correctly yet,
-##      so it was fixed by hand using ".flat", etc.  CHECK MORE.
-
-###########################################################################
-
+# 6.  How should we set Rg for this ??
+# 7.  Remove old comments.
+# 8.  Check if this has similar effect as ATTENUATE in channels_base.py 
+# 9.  Implement a "uniform baseflow_volume_flux" component?
+# 10. Fix problem with adjust_flow_depths(), if still needed.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2001-2021, Scott D. Peckham
+# July 2021.  New version of initialize_wetted_thicknesses().
+#             Added update_water_volume_change();
+#             removed code from update_water_table.
+#             New version of update_water_table().
+#             Added disable_all_output().
+#             Added GW to output variables.
+# May  2010.  Changes to initialize() and read_cfg_file().
+# Aug. 2009.
+# July 2009.
+# May  2009.
+# Jan. 2009.  Converted from IDL to Python.
+#
 #-----------------------------------------------------------------------
 #  Notes:  This file defines a "base class" for groundwater
 #          components as well as functions used by most or
 #          all groundwater methods.  The methods of this class
 #          should be over-ridden as necessary for different
 #          methods of modeling groundwater flow.
-#-----------------------------------------------------------------------
-
-# (5/7/09)  "Nested WHERE calls" work differently
-# in numpy than in IDL. For a 1D array called "a":
 #
-#     >>> a = np.arange(11)-5
-#     >>> w = np.where(a < 0)
-#     >>> w2 = np.where(a[w] > -3)
-#     >>> print a[w[w2]]  # (this gives an error)
-#     >>> print a[w2]     # (this works)
-#     >>> print a[w][w2]  # (this works, too)
-
-# For a 2D array called "a":
-#
-#     >>> a = np.arange(9) - 4
-#     >>> a = a.reshape(3,3)
-#     >>> w = np.where(a < 0)
-#     >>> w2 = np.where(a[w] > -3)
-#     >>> print a[w[w2]]    # TypeError: tuple indices must be integers
-#     >>> print a[w2]       # IndexError: index (3) out of range (0<=index<=2) in dimension 0
-#     >>> a[w][w2] = 99     # No error, but this doesn't work.
-#     >>> print a[w][w2]    # (this works)
-#     >>> print a.flat[w2]  # (this works, same result as last line)
-#     >>> a.flat[w2] = 99   # (this works)
-#     >>> a.flat[w2] = [-2,-1]  # (this works)
-#     >>> np.put(a, w2, 99)  # (this works)
-               
+#          See Notes at the end regarding NESTED WHERE in Numpy.            
 #-----------------------------------------------------------------------
 #
 #  class satzone_component
@@ -63,7 +42,7 @@
 #      update()
 #      finalize()
 #      ---------------------------
-#      check_input_types()           ## (not written; needed?)
+#      check_input_types()           # (not written; needed?)
 #      set_computed_input_vars()
 #      --------------------------
 #      initialize_layer_vars()        # (5/11/10)
@@ -71,40 +50,36 @@
 #      initialize_water_table()
 #      initialize_wetted_thicknesses()
 #      initialize_d8_vars()
-#      adjust_flow_depths()                   ## (has a bug)
+#      adjust_flow_depths()            # (has a bug)
 #      ----------------------------------
 #      update_Sh()
 #      update_Q_gw()
 #      update_top_layer_for_ET()     # (9/25/14)
-#      update_water_table()
+#      update_water_volume_change()  # (2021-07-25)
+#      update_water_table()          # (2021-07-25)
+#      update_water_table_OLD()
 #      update_seep_rate()
-#      update_GW_integral()          # (GW = seeprate)
+#      update_GW_integral()          # (GW = seepage rate)
 #      ------------------------
 #      open_input_files()
 #      read_input_files()
 #      close_input_files()
 #      ------------------------
 #      update_outfile_names()
+#      disable_all_output()       # (2021-07-24)
 #      open_output_files()
 #      write_output_files()
 #      close_output_files()
 #      save_grids()
 #      save_pixel_values()
 #
-#      get_total_darcy_layer_flow()   # (OBSOLETE NOW ??)
-#
-#  Functions:
-#      Darcy_Flow()
-#
 #-----------------------------------------------------------------------
 
 import numpy as np
 import os
 
-from topoflow.utils import cfg_files as cfg
 from topoflow.utils import model_input
 from topoflow.utils import model_output
-from topoflow.utils import tf_utils
 from topoflow.utils import rti_files
 
 ## from topoflow.utils import BMI_base
@@ -170,6 +145,7 @@ class satzone_component( infil_base.infil_component ):
         self.set_constants()  
         ## self.initialize_layer_vars()  # (5/11/10)
         self.initialize_config_vars() 
+         
         # self.read_grid_info()    # NOW IN initialize_config_vars()
         self.initialize_basin_vars()  # (5/14/10)
         #-----------------------------------------
@@ -177,15 +153,16 @@ class satzone_component( infil_base.infil_component ):
         #-----------------------------------------
         self.initialize_time_vars()
         
-        if (self.comp_status == 'Disabled'):
+        if (self.comp_status.lower() == 'disabled'):
             if not(self.SILENT):
                 print('Groundwater component: Disabled in CFG file.')
-            
+            self.disable_all_output()
+                        
             #-------------------------------------------------------
             # Other processes, such as evap, may still need DEM.
             #-------------------------------------------------------
             # The default data type for model_input.read_next() is
-            # Float32, but the DEM may have another type.
+            # float32, but the DEM may have another type.
             #-------------------------------------------------------
             self.elev_file = self.topo_directory + self.elev_file
             self.elev_unit = model_input.open_file(self.elev_type,
@@ -195,12 +172,17 @@ class satzone_component( infil_base.infil_component ):
                                          self.rti, dtype=DEM_dtype)
             model_input.close_file(self.elev_unit)
             if (elev is not None): self.elev = elev
-
-            #---------------------------------------------------
-            # Initialize GW, vol_GW, h_table, h_last, y, etc.
-            #--------------------------------------------------
-            self.initialize_computed_vars()  # (2/19/13)
-            ##################################################
+            #---------------------------------------
+            # GW      = baseflow volume flux [m/s]
+            # h_table = water table elevation [m]
+            #---------------------------------------
+            self.h_table   = self.initialize_scalar(0, dtype='float64')
+            self.GW      = self.initialize_scalar(0, dtype='float64')
+            self.vol_GW  = self.initialize_scalar(0, dtype='float64') # [m3]
+            #---------------------            
+            # Don't do this here
+            #---------------------
+            ### self.initialize_computed_vars()
       
             self.DONE = True
             self.status = 'initialized'  # (OpenMI 2.0 convention)
@@ -244,6 +226,10 @@ class satzone_component( infil_base.infil_component ):
         #-------------------------------------------------
         # Note: self.GW already set to 0 by initialize()
         #-------------------------------------------------
+        # (2021-07-26) EMELI now only calls bmi.update()
+        # in emeli.run_model() if 'Enabled'.
+        # But doesn't hurt to leave next line here.
+        #-------------------------------------------------        
         if (self.comp_status == 'Disabled'): return
         self.status = 'updating'  # (OpenMI)
 
@@ -264,10 +250,12 @@ class satzone_component( infil_base.infil_component ):
         self.update_Q_gw()
         # print 'CALLING update_top_layer_for_ET()...'
         self.update_top_layer_for_ET()
+        # print 'CALLING update_water_volume_change()...'
+        self.update_water_volume_change()
         # print 'CALLING update_water_table()...'
         self.update_water_table()
         # print 'CALLING update_seep_rate()...'
-        self.update_seep_rate()
+        self.update_seep_rate()                  # seep_rate = GW
         # print 'CALLING update_GW_integral()...'
         self.update_GW_integral()
 
@@ -291,14 +279,14 @@ class satzone_component( infil_base.infil_component ):
     #-------------------------------------------------------------------
     def finalize(self):
 
+        if not(self.SILENT):
+            self.print_final_report(comp_name='Groundwater component')
+            
         self.status = 'finalizing'  # (OpenMI 2.0 convention)
         self.close_input_files()   ##  TopoFlow input "data streams"
         self.close_output_files()
         self.status = 'finalized'  # (OpenMI 2.0 convention)
 
-        if not(self.SILENT):
-            self.print_final_report(comp_name='Groundwater component')
-    
     #   finalize()
     #-------------------------------------------------------------------
     def set_computed_input_vars(self):
@@ -324,7 +312,6 @@ class satzone_component( infil_base.infil_component ):
         #        subscript in the CFG file - can be read directly
         #        into a list or array.
         #----------------------------------------------------------
-        ## n_layers = 6    # (before 11/16/16)
         n_layers = self.n_layers
         
         #---------------------------------------
@@ -361,17 +348,6 @@ class satzone_component( infil_base.infil_component ):
         #----------------------------------------------------------------
         #       This doesn't work for Python lists, however! (2/19/13)
         #----------------------------------------------------------------
-
-        #--------------------------------------------------
-        # These are not used anywhere;  for illustration?
-        #--------------------------------------------------
-#         self.qs_layer_0 = self.qs[0]
-#         self.qs_layer_1 = self.qs[1]
-#         self.qs_layer_2 = self.qs[2]
-#         #-----------------------------
-#         self.th_layer_0 = self.th[0]
-#         self.th_layer_1 = self.th[1]
-#         self.th_layer_2 = self.th[2]
         
     #   initialize_layer_vars()
     #-------------------------------------------------------------------
@@ -420,49 +396,28 @@ class satzone_component( infil_base.infil_component ):
 
         #----------------------------------------
         # Convert h_table from scalar to grid ?
-        #----------------------------------------
-        nh = np.size( self.h0_table )
-        if (nh == 1):
-            h0_scalar = self.h0_table.copy() 
+        #--------------------------------------------
+        # h0_table is initialize water table, so it
+        # must be type "Scalar" or "Grid"
+        #--------------------------------------------
+        if (self.h0_table_type.lower() == 'scalar'):
+            h0_scalar = np.float64( self.h0_table )
+            h0_scalar = h0_scalar.copy() 
             self.h_table = self.initialize_grid(h0_scalar, dtype='float64')   
-        else:    
+        else: 
             self.h_table = self.h0_table.copy()
 
     #   initialize_water_table()
     #-------------------------------------------------------------------
     def initialize_wetted_thicknesses(self):
 
-        #-----------------------------------------------------------
-        # Notes: z    = elevation of land surface [m]
-        #        h    = elevation of water table [m]
+        #-----------------------------------------------------
+        # Notes: z     = elevation of land surface [m]
+        #        h     = elevation of water table [m]
         #        (z-h) = depth to water table [m]
-        #        diff = (partial sum of soil thicknesses -
-        #               depth to water table)
-
-        #        Let ti be the thickness of the ith soil layer,
-        #        starting from the surface, and yi the wetted
-        #        thickness of this layer, which must be between
-        #        0 and ti.  If (z gt h), then we have:
-        #        sum_{i=1}^n yi = [sum_{i=1}^n ti] ?? (z-h)
-
-        #        e.g.
-        #        y1 = (t1 ?? (z-h)) > 0 < t1
-        #        y2 = ((t1+t2) ?? y1 - (z-h)) > 0 < t2
-        #        y3 = ((t1+t2+t3) ?? (y1+y2) ?? (z-h)) > 0 < t3
-
-        #        This function was tested by defining some vars
-        #        as follows, and both methods seemed to work.
-
-        #        IDL> gv = {n_layers:5, soil_thick:(findgen(5)+1)*0.1}
-        #        IDL> z  = fltarr(3,3) + 2.0
-        #        IDL> h  = fltarr(3.3) + 1.85
-        #        IDL> y  = Wetted_Thicknesses(gv, z, h)
-        #        IDL> print, y[*,*,0]
-        #        IDL> print, y[*,*,1]  ;(etc.)
-
-        #        If (h gt z), then testing shows that (yk eq tk)
-        #        for all layers, as it should.
-        #-----------------------------------------------------------
+        #        y[k]  = wetted thickness of layer k [m]
+        #        th[k] = thickness of layer k (>= y[k]) [m]
+        #------------------------------------------------------
         nx = self.nx
         ny = self.ny
         self.y = np.zeros([self.n_layers, ny, nx], dtype='float64')
@@ -473,47 +428,59 @@ class satzone_component( infil_base.infil_component ):
         #       qs_top = qs[0], or y_top = y[0,:,:], then they will
         #       also change whenever the main ndarray changes. (2/19/13)
         #----------------------------------------------------------------    
-        self.y_layer_0 = self.y[0,:,:]
-        self.y_layer_1 = self.y[1,:,:]
-        self.y_layer_2 = self.y[2,:,:]
-        
-        #--------------------------------
-        # Original way: Prior to 3/1/04
-        # Seems to agree with new way?
-        #--------------------------------
-        # Compute wetted thickness, y,
-        # for each soil layer
-        #-------------------------------
-        tsum = (self.h_table - self.elev)
+        self.y_layer_0 = self.y[0,:,:]  # only here as output vars ??
+        # self.y_layer_1 = self.y[1,:,:]
+        # self.y_layer_2 = self.y[2,:,:]
+
+        #----------------------------------------------------  
+        # Clear, but also fast min/max method (2021-07-24)
+        #----------------------------------------------------
+        # If (ht <= bottom_z), assign 0.0.
+        # If (ht >  bottom_z), assign min(ht-bot_z, th[k])
+        #----------------------------------------------------
+        ht       = self.h_table
+        bottom_z = self.elev
         for k in range(self.n_layers):
-            #-------------------------------
-            # Before 7/7/06. (tk = scalar)
-            #-------------------------------
-            # tk   = gv.soil_thick[k]
-            # tsum = (tsum + tk)
-            # y[*,*,k] = (tsum > 0.0) < tk)
-            
-            #--------------------------------
-            # 7/7/06.  Allow scalar or grid
-            #--------------------------------
-            tsum  += self.th[k]
-            grid_k = np.maximum(tsum, np.float64(0))
+            bottom_z -= self.th[k]
+            grid_k = np.maximum(ht - bottom_z, np.float64(0))
             self.y[k,:,:] = np.minimum(grid_k, self.th[k])
-        
-        #-------------------------------
-        # Compute wetted thickness, y,
-        # for each soil layer
-        #-------------------------------
-        # Slightly more costly method.
-        #-------------------------------
-        #ysum = zeros([ny, nx], dtype='Float32')
-        #tsum = (self.h_table - self.elev)            ;(negative, if z > h)
-        #for k in xrange(self.n_layers):
-        #    tk = self.th[k]            ;(is now a scalar)
-        #    tsum += tk
-        #    self.y[k,:,:] = np.minimum(np.maximum(tsum - ysum,  0.0), tk)
-        #    ysum += y[k,:,:]
-    
+     
+        #-------------------------------------------------------  
+        # Confusing, but fast prior method (2006-07-07)
+        #-------------------------------------------------------
+#         tsum = (self.h_table - self.elev)
+#         for k in range(self.n_layers):
+#             tsum  += self.th[k]
+#             grid_k = np.maximum(tsum, np.float64(0))
+#             self.y[k,:,:] = np.minimum(grid_k, self.th[k])
+
+        #-------------------------------------------  
+        # Clear algorithm, but slower (2021-07-24)
+        #-------------------------------------------
+#         top_z = self.elev
+#         ht    = self.h_table       
+#         for k in range(self.n_layers):
+#             yk     = self.y[k,:,:]
+#             bot_z  = (top_z - self.th[k])
+#             #-----------------------------------------------
+#             # Where water table is below bottom of layer k
+#             #-----------------------------------------------
+#             w1     = (ht < bot_z)
+#             yk[w1] = 0.0            # fully "dry"
+#             #---------------------------------------------------------
+#             # Where water table is between top and bottom of layer k
+#             #---------------------------------------------------------
+#             w2     = np.logical_and( bot_z < ht, ht < top_z)
+#             yk[w2] = (ht - bot_z)
+#             #-----------------------------------------------
+#             # Where water table is above top of layer k
+#             #-----------------------------------------------
+#             w3     = (ht > top_z)
+#             yk[w3] = self.th[k]     # fully wetted
+#             #--------------------  
+#             top_z  -= self.th[k]
+
+  
     #   initialize_wetted_thicknesses()
     #-------------------------------------------------------------------
     def initialize_d8_vars(self):
@@ -538,18 +505,18 @@ class satzone_component( infil_base.infil_component ):
         cfg_file = (self.cfg_directory + cfg_file)
         self.d8.initialize( cfg_file=cfg_file, SILENT=self.SILENT, \
                             REPORT=self.REPORT )
-        #---------------------------------------------------------     
-#         self.d8.site_prefix  = self.site_prefix
-#         self.d8.in_directory = self.in_directory
-#         self.d8.initialize( cfg_file=None, SILENT=self.SILENT, \
-#                             REPORT=self.REPORT )
-
+ 
+        #------------------------------------------------------------       
+        # Note: Added "DEM_nodata" to Test1_d8_global.cfg
+        #       It should be set to 0 for DEMs that drain to ocean.
+        #------------------------------------------------------------
+    
         #---------------------------------------------------
         # The next 2 "update" calls are needed when we use
         # the new "d8_base.py", but are not needed when
         # using the older "tf_d8_base.py".      
         #---------------------------------------------------
-        self.d8.update(self.time, SILENT=False, REPORT=True)
+        self.d8.update(self.time, REPORT=True)
 
         #----------------------------------------------------------- 
         # Note: This is also needed, but is not done by default in
@@ -559,41 +526,41 @@ class satzone_component( infil_base.infil_component ):
 
     #   initialize_d8_vars()
     #-------------------------------------------------------------------
-    def adjust_flow_depths(self):
-
-        #---------------------------------------------------------        
-        # Note: This is meant to be called from the method
-        #       initialize_computed_vars(), but isn't called yet
-        #       because it is not implemented correctly.
-        #       It is only needed if there are places where the
-        #       water table is above the land surface.
-        #---------------------------------------------------------
-        
-        #------------------------------------------------------------
-        # If water table > land surface, increment flow depth grid.
-        #------------------------------------------------------------
-        diff = (self.h_table - self.elev)
-        ### w = np.where(diff > 0)
-        w    = np.where(np.logical_and(np.logical_and((diff > 0), \
-                                           (self.elev > self.nodata)), \
-                                           (np.isfinite(self.elev))))
-        nw = np.size(w[0])
-        if (nw != 0):
-            d = self.d   ## (2/3/13, new framework)
-            #######################################
-            #  THIS IS NOT CORRECT FOR CHANNELS
-            #######################################            
-            d[w] = d[w] + diff[w]
-            self.cp.set_grid_double('d', d)  ###########
-            
-        #--------------------------
-        # For debugging & testing
-        #--------------------------
-        dmin = d.min()
-        dmax = d.max()
-        dstr = str(dmin) + ', ' + str(dmax) + ')'
-        print('Initial depths due to water table: (dmin, dmax) = (' + dstr)
-
+#     def adjust_flow_depths(self):
+# 
+#         #---------------------------------------------------------        
+#         # Note: This is meant to be called from the method
+#         #       initialize_computed_vars(), but isn't called yet
+#         #       because it is not implemented correctly.
+#         #       It is only needed if there are places where the
+#         #       water table is above the land surface.
+#         #---------------------------------------------------------
+#         
+#         #------------------------------------------------------------
+#         # If water table > land surface, increment flow depth grid.
+#         #------------------------------------------------------------
+#         diff = (self.h_table - self.elev)
+#         ### w = np.where(diff > 0)
+#         w    = np.where(np.logical_and(np.logical_and((diff > 0), \
+#                                            (self.elev > self.nodata)), \
+#                                            (np.isfinite(self.elev))))
+#         nw = np.size(w[0])
+#         if (nw != 0):
+#             d = self.d   ## (2/3/13, new framework)
+#             #######################################
+#             #  THIS IS NOT CORRECT FOR CHANNELS
+#             #######################################            
+#             d[w] = d[w] + diff[w]
+#             self.cp.set_grid_double('d', d)  ###########   VERY OLD
+#             
+#         #--------------------------
+#         # For debugging & testing
+#         #--------------------------
+#         dmin = d.min()
+#         dmax = d.max()
+#         dstr = str(dmin) + ', ' + str(dmax) + ')'
+#         print('Initial depths due to water table: (dmin, dmax) = (' + dstr)
+# 
     #   adjust_flow_depths()
     #-------------------------------------------------------------------
     def update_Sh(self):
@@ -624,13 +591,17 @@ class satzone_component( infil_base.infil_component ):
     #-------------------------------------------------------------------
     def update_Q_gw(self):
 
-        #-----------------------------------------
-        # NB!  initialize_water_table makes sure
-        #      that h_table is a grid.
-        #-----------------------------------------
-        # self.Q_gw = np.zeros([self.ny, self.nx], dtype='Float64')
+        #----------------------------------------------------------
+        # NB! initialize_water_table() ensures h_table is a grid.
+        #----------------------------------------------------------
+        # self.Q_gw = np.zeros([self.ny, self.nx], dtype='float64')
         self.Q_gw = np.minimum(self.Q_gw, 0)  # (zero out Q_gw ??)
-        
+
+        #--------------------------------------------------------- 
+        # Note:  It is now assumed that all soil layers have the
+        #        same D8 flow direction, determined from the DEM
+        #        instead of the water table surface, h_table.
+        #---------------------------------------------------------
         for k in range(self.n_layers):
             #--------------------------------------
             # Add Q for this layer, via Darcy law
@@ -678,12 +649,15 @@ class satzone_component( infil_base.infil_component ):
         # the water table has risen over a time step.
         # Allow sign to be positive or negative?
         #-----------------------------------------------
-        # Is this independent of method ?
-        # If not, don't do it here.
-        #-----------------------------------
-        dh_dt   = (self.h_table - self.h_last) / self.dt       # [m/s]
+        dh_dt   = (self.h_table - self.h_last) / self.dt  # [m/s]
         self.GW = (self.h_table > self.elev) * dh_dt
-        ## np.maximum(self.GW, 0.0, self.GW)    ;(force to be positive)
+ 
+        #-----------------------------------------------------       
+        # (2021-07-27) We need to exclude values where the
+        # D8 flow code is zero.  Should we allow values < 0?
+        #-----------------------------------------------------
+        self.GW[ self.d8.noflow_IDs ] = 0.0   # (2021-07-27)
+        np.maximum(self.GW, 0.0, self.GW)  # (force to nonnegative)
         
         #--------------------------------
         # Redefine h_last for next time
@@ -813,7 +787,7 @@ class satzone_component( infil_base.infil_component ):
             nwwG = np.size( wwG[0] )
 
             #####################################################
-            # See Notes at top regarding "nested WHERE calls".
+            # See Notes at bottom regarding "nested WHERE calls".
             #####################################################
 
             #---------------------------------------------
@@ -875,21 +849,84 @@ class satzone_component( infil_base.infil_component ):
     
     #   update_top_layer_for_ET()
     #-------------------------------------------------------------------
-    def update_water_table(self):
+    def update_water_volume_change(self):
 
-        #----------------------------------------------------
-        # Notes: h  = elevation of water table [m]
-        #        h2 = temp version of h
-        #        Q_gw = total subsurface flux [m^3/s]
+        #-----------------------------------------------------------
+        # Notes: Q_gw = total subsurface flux [m^3/s] (horizontal)
         #        Rg = rate at which water from the surface
         #             arrives at the water table [m/s]
         #        da = pixel area [m^2]
         #        dt = GW timestep [sec]
         #        w1 = IDs of pixels that flow in direction 1
-        #        p1 = IDs of parent pixels for "w1 pixels"
+        #        p1 = IDs of parent pixels for "w1 pixels" 
+        #-----------------------------------------------------------
 
-        # Note:  h and wetted-depths, y, are updated
+        #-------------------------------------------------------
+        # Compute dV = total amount of water to be added to or
+        # removed from the soil column during the subsurface
+        # flow timestep.  Initialize with vertical recharge.
+        #-------------------------------------------------------
+        dt  = self.dt
+        self.dV = (self.Rg * self.da) * dt
+    
+        #-----------------------------------------
+        # Add contributions from neighbor pixels
         #-------------------------------------------------------------
+        # Each grid cell passes flow to *one* downstream neighbor.
+        # Note that multiple grid cells can flow toward a given grid
+        # cell, so a grid cell ID may occur in d8.p1 and d8.p2, etc.
+        #-------------------------------------------------------------
+        if (self.d8.p1_OK):    
+            self.dV[ self.d8.p1 ] += (dt * self.Q_gw[self.d8.w1])
+        if (self.d8.p2_OK):    
+            self.dV[ self.d8.p2 ] += (dt * self.Q_gw[self.d8.w2])
+        if (self.d8.p3_OK):    
+            self.dV[ self.d8.p3 ] += (dt * self.Q_gw[self.d8.w3])
+        if (self.d8.p4_OK):    
+            self.dV[ self.d8.p4 ] += (dt * self.Q_gw[self.d8.w4])
+        if (self.d8.p5_OK):    
+            self.dV[ self.d8.p5 ] += (dt * self.Q_gw[self.d8.w5])
+        if (self.d8.p6_OK):    
+            self.dV[ self.d8.p6 ] += (dt * self.Q_gw[self.d8.w6])
+        if (self.d8.p7_OK):    
+            self.dV[ self.d8.p7 ] += (dt * self.Q_gw[self.d8.w7])
+        if (self.d8.p8_OK):    
+            self.dV[ self.d8.p8 ] += (dt * self.Q_gw[self.d8.w8])
+
+        #----------------------------------------------------
+        # Subtract the amount that flows out to D8 neighbor
+        #----------------------------------------------------
+        self.dV -= (self.Q_gw * dt)  # (in place)
+
+        #------------------------------
+        # Convert dV to a water depth
+        #------------------------------
+        self.dzw = ( self.dV / self.da)
+
+        #----------------
+        # For debugging
+        #----------------          
+#         dzw_min = self.dzw.min()
+#         dzw_max = self.dzw.max()
+#         print('   dzw_min = ' + str(dzw_min))
+#         print('   dzw_max = ' + str(dzw_max))
+#         print ' '
+                
+    #   update_water_volume_change()
+    #-------------------------------------------------------------------
+    def update_water_table(self):
+    
+        #------------------------------------------------------------------
+        # Notes: h    = elevation of water table [m]
+        #        h2   = temp version of h
+        #        Q_gw = total subsurface flux [m^3/s]
+        #        Rg   = rate at which water from the surface
+        #               arrives at the water table [m/s]
+        #        da   = pixel area [m^2]
+        #        dt   = GW timestep [sec]
+
+        # Note:  h and wetted-depths, y, are both updated
+        #---------------------------------------------------------------
         # Notes: There seems to be an implicit assumption here
         #        that Ks is nondecreasing towards the surface.
         #        Once an element is saturated there is no internal
@@ -904,22 +941,202 @@ class satzone_component( infil_base.infil_component ):
         #        upper face. But all that enters in a given time step
         #        can only flow through the upper face if Ks in the
         #        element above is high enough to accommodate it.
-        #-------------------------------------------------------------
+        #---------------------------------------------------------------
+        
+        #--------------------------------------------------
+        # Find pixels where water table will rise or fall
+        # Note: R = Rising, F = Falling
+        #--------------------------------------------------
+#         wR = (self.dV > 0)    # boolean array
+#         wF = np.invert(wR)    # boolean array
+#         n_rising  = wR.sum()
+#         n_falling = wF.sum()
+#         print('   n_rising  = ' + str(n_rising))
+#         print('   n_falling = ' + str(n_falling))
+        
+        #-----------------------------------------
+        # For debugging: save initial value of h
+        #-----------------------------------------
+        # start_h = self.h_table.copy()       
+
+        #-----------------------------------------
+        # Process cells where dzw > 0.
+        # Compute unused capacity of each layer,
+        # working from the bottom layer upward.
+        #-------------------------------------------
+        # Assume porosity = saturated water content
+        #-----------------------------------------------
+        # The amount of water, as a depth, that can
+        # be present in a layer (if soil were removed)
+        # is (tk - yk)*pk.
+        # Since pk in (0,1), this is < (tk - yk).
+        # dz_k        = (tk - yk) >= 0.
+        # dzw_avail_k = dz_k * pk >= 0.
+        #-----------------------------------------------
+        # Note: range(start, stop, step), and last
+        #       value is 0 if stop == -1. # CONFIRMED
+        #-----------------------------------------------   
+        dzw_pos = self.dzw.copy()
+        dzw_pos[ dzw_pos < 0 ] = 0.0
+        for k in range((self.n_layers - 1), -1, -1):
+            yk = self.y[k,:,:]
+            tk = self.th[k]     # (thickness of layer)
+            pk = self.qs[k]     # (porosity of layer)
+            SCALAR_THICKNESS = (tk.size == 1)
+            SCALAR_POROSITY  = (pk.size == 1)
+            dz_k = (tk - yk)  # (becomes grid due to y)
+            dzw_avail_k = dz_k * pk  # (becomes grid due to y)
+            dzw_avail_k = np.minimum( dzw_avail_k, 0)  # (shouldn't be needed)
+        
+            #------------------------------------------------------
+            # Where the increase in dzw exceeds layer capacity,
+            # raise water table, set yk = tk, consume some of dzw
+            #------------------------------------------------------
+            # w1 works even if w1.sum() = 0
+            #------------------------------------------------------
+            w1 = (dzw_pos > dzw_avail_k)   # (boolean array)
+            self.h_table[w1] += dz_k[w1]
+            if (SCALAR_THICKNESS):
+                yk[w1] = tk
+            else:
+                yk[w1] = tk[w1]  # (filled)
+            dzw_pos[w1] -= dzw_avail_k[w1]
+
+            #---------------------------------------------------------
+            # Where the increase in dzw is less than layer capacity,
+            # raise water table, increase yk, consume all of dzw.
+            #---------------------------------------------------------
+            w2 = np.invert(w1)
+            if (SCALAR_POROSITY):    
+                dh = dzw_pos[w2] / pk
+            else:    
+                dh = dzw_pos[w2] / pk[w2]
+            self.h_table[w2] += dh
+            yk[w2] += dh                    
+            dzw_pos[w2] = 0   #### np.float64(0)
+            #-------------------------------------
+            self.y[k,:,:] = yk   # (replace a layer in y)            
+    
+        #------------------------------------------------
+        # Where dzw is still gt 0, we must add it to h
+        # since we have exhausted the capacity of the
+        # soil layers.  This will bring h above the DEM
+        # surface, z.  The increase in h will result in
+        # surface runoff via a positive seepage rate.
+        #------------------------------------------------
+        # self.h_table += dzw_pos  # (should work?)
+        w3 = (dzw_pos > 0)
+        self.h_table[w3] += dzw_pos[w3]
+        dzw_pos[w3] = 0
+        n3 = w3.sum()                                              
+        if (n3 > 0):
+            print('Baseflow at:', n3, 'grid cells.')
+ 
+        #-------------------------------
+        # Process cells where dzw < 0, 
+        # working from top layer down
+        #-------------------------------
+        dzw_neg = self.dzw.copy()
+        dzw_neg[ dzw_neg > 0 ] = 0.0
+        for k in range(self.n_layers):
+            yk = self.y[k,:,:]
+            tk = self.th[k]     # (thickness of layer)
+            pk = self.qs[k]     # (porosity of layer)
+            SCALAR_THICKNESS = (tk.size == 1)
+            SCALAR_POROSITY  = (pk.size == 1)    
+            dzw_avail_k = yk * pk  # (becomes grid due to y)
+            
+            #------------------------------------------------------
+            # Where the decrease in dzw exceeds water in layer,
+            # lower water table, set yk = 0, consume some of dzw
+            #------------------------------------------------------
+            w1 = (np.absolute(dzw_neg) > dzw_avail_k)  # (boolean array)
+            self.h_table[w1] -= yk[w1]
+            yk[w1] = 0.0
+            dzw_neg[w1] += dzw_avail_k[w1]   #(neg + pos)
+
+            #---------------------------------------------------------
+            # Where the decrease in dzw is less than water in layer,
+            # lower water table, decrease yk, consume all of dzw.
+            #---------------------------------------------------------
+            # NB!  pk=0 => dzw_avail_k=0, so OK to divide by pk
+            #----------------------------------------------------
+            w2 = np.invert(w1)
+            if (SCALAR_POROSITY):
+                dh = dzw_neg[w2] / pk
+            else:    
+                dh = dzw_neg[w2] / pk[w2]
+            self.h_table[w2] += dh
+            yk[w2] += dh
+            dzw_neg[w2] = 0.0
+            #------------------------------------------------                               
+            self.y[k,:,:] = yk    # (replace a layer in y)            
+
+        #------------------------------------------------
+        # Where dzw is still lt 0, we must subtract it
+        # from h;  all soil layers are now empty.  This
+        # will bring h below the depth of the lowest
+        # soil layer.  Should we assume that porosity
+        # is the same as for the lowest layer or should
+        # bottom of bottom layer be impermeable?
+        #------------------------------------------------
+        # This is where we should use depth to bedrock.
+        #------------------------------------------------
+        w3 = (dzw_neg < 0)
+        if (SCALAR_POROSITY):    
+            dh = dzw_neg[w3] / pk
+        else:    
+            dh = dzw_neg[w3] / pk[w3]
+        self.h_table[w3] += dh
+        # dzw_neg[w3] = 0.0   # (shouldn't be needed here)   
 
         #------------------------------------------
-        # Compute wetted-depth, y, for each layer
+        # (2021-07-27)  Do we need this as well ?
         #------------------------------------------
-        # Now passed as a variable in & out
-        #------------------------------------------
-        #dims  = np.size(z, /DIM)
-        #ncols = dims[0]
-        #nrows = dims[1]
-        #y     = fltarr(ncols, nrows)
-        #diff  = -(z - h)
-        #for k=0, (n_layers - 1) do begin
-        #    diff = (diff + t[k])
-        #    y[*,*,k] = (diff > 0.0) < t[k]
-        #endfor
+        self.h_table[ self.d8.noflow_IDs ] = 0.0
+        
+        #-------------------------    
+        # We shouldn't need this
+        #-------------------------
+        # self.dzw[:] = 0.0
+
+    #   update_water_table() 
+    #-------------------------------------------------------------------
+    def update_water_table_OLD(self):
+
+        #------------------------------------------------------------------
+        # Notes: h  = elevation of water table [m]
+        #        h2 = temp version of h
+        #        Q_gw = total subsurface flux [m^3/s]
+        #        Rg = rate at which water from the surface
+        #             arrives at the water table [m/s]
+        #        da = pixel area [m^2]
+        #        dt = GW timestep [sec]
+        #        w1 = IDs of pixels that flow in direction 1
+        #        p1 = IDs of parent pixels for "w1 pixels"
+
+        # Note:  h and wetted-depths, y, are updated
+        #------------------------------------------------------------------
+        # Notes: There seems to be an implicit assumption here
+        #        that Ks is nondecreasing towards the surface.
+        #        Once an element is saturated there is no internal
+        #        storage and the amount of water flowing in through
+        #        its faces must equal the amount that is flowing out.
+        #        So if the amount flowing in from the sides exceeds
+        #        the amount flowing out, (which will occur when the
+        #        flow is convergent) then the excess must flow
+        #        through the upper or lower faces.  With saturated
+        #        soil all the way down to an impermeable bedrock
+        #        boundary, this means that it must flow through the
+        #        upper face. But all that enters in a given time step
+        #        can only flow through the upper face if Ks in the
+        #        element above is high enough to accommodate it.
+        #------------------------------------------------------------------
+        # NB!  There is a fair amount of IDL "where subscripting"
+        #      used in this function.  I2PY does not handle this
+        #      correctly yet, so it was fixed by hand using ".flat", etc.
+        #      See NOTES at the end of this file.  
+        #------------------------------------------------------------------
         
         #--------------------------------------------
         # Compute dzw = total amount of water to be
@@ -930,8 +1147,7 @@ class satzone_component( infil_base.infil_component ):
         # Doesn't involve neighbor pixels.
         #------------------------------------
         Rg  = self.Rg   # (using new framework, 5/18/12)
-        
-        dzw = self.dt * (Rg - self.Q_gw / self.da)    ### USE gp.dt vs. main_dt !! ###
+        dzw = self.dt * (Rg - self.Q_gw / self.da)
         
         #----------------
         # For debugging
@@ -1332,7 +1548,7 @@ class satzone_component( infil_base.infil_component ):
         #    result = GUI_Message(msg, /INFO)
         #    sys.exit()
      
-    #   update_water_table()
+    #   update_water_table_OLD()
     #-------------------------------------------------------------------  
     def open_input_files(self):
 
@@ -1384,7 +1600,7 @@ class satzone_component( infil_base.infil_component ):
         rti = self.rti
       
         #-------------------------------------------------------
-        # All grids are assumed to have a data type of Float32.
+        # All grids are assumed to have a data type of float32.
         #-------------------------------------------------------
         elev = model_input.read_next(self.elev_unit, self.elev_type, rti)
         if (elev is not None): self.elev = elev
@@ -1423,24 +1639,32 @@ class satzone_component( infil_base.infil_component ):
     #-------------------------------------------------------------------  
     def close_input_files(self):
 
-        #############################################################
-        # NOTE:  These first 3 files have single grids and should
+        #-----------------------------------------------------------
+        # Note:  Some of these files have single grids and should
         #        be closed right after they are read the 1st time.
-        #############################################################
-        #if (self.elev_file      != ''): self.elev_unit.close()        
-        if (self.h0_table_file  != ''): self.h0_table_unit.close()
-##        if (self.d_bedrock_file != ''): self.d_bedrock_unit.close()
-        if (self.d_freeze_file  != ''): self.d_freeze_unit.close()
-        if (self.d_thaw_file    != ''): self.d_thaw_unit.close()
+        #-----------------------------------------------------------
+        #        If the component has been Disabled, and the
+        #        var_type in CFG file is not 'Scalar', then
+        #        self will not have an attribute "var_unit".
+        #-----------------------------------------------------------
+        if (self.comp_status.lower() == 'disabled'):
+            return  # (2021-07-27)
+
+        if (self.elev_type.lower() != 'scalar'):
+            self.elev_unit.close()        
+        if (self.h0_table_type.lower() != 'scalar'):
+            self.h0_table_unit.close()
+        # if (self.d_bedrock_type.lower() != 'scalar'):
+        #     self.d_bedrock_unit.close()
+        if (self.d_freeze_type.lower() != 'scalar'):
+            self.d_freeze_unit.close()
+        if (self.d_thaw_type.lower() != 'scalar'):
+            self.d_thaw_unit.close()
         
         for j in range(self.n_layers):
-            if (self.Ks_type[j] != 'Scalar'): self.Ks_unit[j].close()        
-            if (self.qs_type[j] != 'Scalar'): self.qs_unit[j].close()
-            if (self.th_type[j] != 'Scalar'): self.th_unit[j].close()
-            #-----------------------------------------------------------
-##            if (self.Ks_file[j] != ''): self.Ks_unit[j].close()        
-##            if (self.qs_file[j] != ''): self.qs_unit[j].close()
-##            if (self.th_file[j] != ''): self.th_unit[j].close()
+            if (self.Ks_type[j].lower() != 'scalar'): self.Ks_unit[j].close()        
+            if (self.qs_type[j].lower() != 'scalar'): self.qs_unit[j].close()
+            if (self.th_type[j].lower() != 'scalar'): self.th_unit[j].close()
         
     #   close_input_files()
     #-------------------------------------------------------------------
@@ -1455,15 +1679,32 @@ class satzone_component( infil_base.infil_component ):
         #-------------------------------------------------
         # Notes:  Append out_directory to outfile names.
         #-------------------------------------------------
-        self.ht_gs_file = (self.out_directory + self.ht_gs_file)
-        self.df_gs_file = (self.out_directory + self.df_gs_file)
-        self.dt_gs_file = (self.out_directory + self.dt_gs_file)
+        out_dir = self.out_directory
+        self.GW_gs_file       = (out_dir + self.GW_gs_file)
+        self.h_table_gs_file  = (out_dir + self.h_table_gs_file)
+        self.d_freeze_gs_file = (out_dir + self.d_freeze_gs_file)
+        self.d_thaw_gs_file   = (out_dir + self.d_thaw_gs_file)
         #----------------------------------------------------------
-        self.ht_ts_file = (self.out_directory + self.ht_ts_file)
-        self.df_ts_file = (self.out_directory + self.df_ts_file)
-        self.dt_ts_file = (self.out_directory + self.dt_ts_file)
+        self.GW_ts_file       = (out_dir + self.GW_ts_file)
+        self.h_table_ts_file  = (out_dir + self.h_table_ts_file)
+        self.d_freeze_ts_file = (out_dir + self.d_freeze_ts_file)
+        self.d_thaw_ts_file   = (out_dir + self.d_thaw_ts_file)
 
-    #   update_outfile_names()   
+    #   update_outfile_names()
+    #-------------------------------------------------------------------
+    def disable_all_output(self):
+
+        self.SAVE_GW_GRIDS = False 
+        self.SAVE_HT_GRIDS = False
+        self.SAVE_DF_GRIDS = False
+        self.SAVE_DT_GRIDS = False
+        #-----------------------------
+        self.SAVE_GW_PIXELS = False
+        self.SAVE_HT_PIXELS = False
+        self.SAVE_DF_PIXELS = False
+        self.SAVE_DT_PIXELS = False
+
+    #   disable_all_output()       
     #-------------------------------------------------------------------  
     def open_output_files(self):
 
@@ -1472,22 +1713,30 @@ class satzone_component( infil_base.infil_component ):
         
         #--------------------------------------
         # Open new files to write grid stacks
-        #--------------------------------------
+        #---------------------------------------------------
+        # var_name in filename must match var_name exactly
+        #---------------------------------------------------
+        if (self.SAVE_GW_GRIDS):
+            model_output.open_new_gs_file( self, self.GW_gs_file, self.rti,
+                                           var_name='GW',
+                                           long_name='baseflow_volume_flux',
+                                           units_name='m/s')
+ 
         if (self.SAVE_HT_GRIDS):
-            model_output.open_new_gs_file( self, self.ht_gs_file, self.rti,
-                                           var_name='ht',
+            model_output.open_new_gs_file( self, self.h_table_gs_file, self.rti,
+                                           var_name='h_table',
                                            long_name='water_table_height',
                                            units_name='m')
             
         if (self.SAVE_DF_GRIDS):
-            model_output.open_new_gs_file( self, self.df_gs_file, self.rti,
-                                           var_name='df',
+            model_output.open_new_gs_file( self, self.d_freeze_gs_file, self.rti,
+                                           var_name='d_freeze',
                                            long_name='depth_of_frozen_soil',
                                            units_name='m')
             
         if (self.SAVE_DT_GRIDS):
-            model_output.open_new_gs_file( self, self.dt_gs_file, self.rti,
-                                           var_name='dt',
+            model_output.open_new_gs_file( self, self.d_thaw_gs_file, self.rti,
+                                           var_name='d_thaw',
                                            long_name='depth_of_thaw',
                                            units_name='m')
             
@@ -1495,21 +1744,27 @@ class satzone_component( infil_base.infil_component ):
         # Open new files to write time series
         #--------------------------------------
         IDs = self.outlet_IDs
+        if (self.SAVE_GW_PIXELS):
+            model_output.open_new_ts_file( self, self.GW_ts_file, IDs,
+                                           var_name='GW',
+                                           long_name='baseflow_volume_flux',
+                                           units_name='m/s')
+
         if (self.SAVE_HT_PIXELS):
-            model_output.open_new_ts_file( self, self.ht_ts_file, IDs,
-                                           var_name='ht',
+            model_output.open_new_ts_file( self, self.h_table_ts_file, IDs,
+                                           var_name='h_table',
                                            long_name='water_table_height',
                                            units_name='m')
 
         if (self.SAVE_DF_PIXELS):
-            model_output.open_new_ts_file( self, self.df_ts_file, IDs,
-                                           var_name='df',
+            model_output.open_new_ts_file( self, self.d_freeze_ts_file, IDs,
+                                           var_name='d_freeze',
                                            long_name='depth_of_frozen_soil',
                                            units_name='m')
 
         if (self.SAVE_DT_PIXELS):
-            model_output.open_new_ts_file( self, self.dt_ts_file, IDs,
-                                           var_name='dt',
+            model_output.open_new_ts_file( self, self.d_thaw_ts_file, IDs,
+                                           var_name='d_thaw',
                                            long_name='depth_of_thaw',
                                            units_name='m')
 
@@ -1554,14 +1809,16 @@ class satzone_component( infil_base.infil_component ):
     #   write_output_files()    
     #-------------------------------------------------------------------
     def close_output_files(self):
-    
-        if (self.SAVE_HT_GRIDS):  model_output.close_gs_file( self, 'ht')   
-        if (self.SAVE_DF_GRIDS):  model_output.close_gs_file( self, 'df') 
-        if (self.SAVE_DT_GRIDS):  model_output.close_gs_file( self, 'dt') 
+
+        if (self.SAVE_GW_GRIDS):  model_output.close_gs_file( self, 'GW')      
+        if (self.SAVE_HT_GRIDS):  model_output.close_gs_file( self, 'h_table')   
+        if (self.SAVE_DF_GRIDS):  model_output.close_gs_file( self, 'd_freeze') 
+        if (self.SAVE_DT_GRIDS):  model_output.close_gs_file( self, 'd_thaw') 
         #-----------------------------------------------------------------
-        if (self.SAVE_HT_PIXELS): model_output.close_ts_file( self, 'ht')  
-        if (self.SAVE_DF_PIXELS): model_output.close_ts_file( self, 'df')
-        if (self.SAVE_DT_PIXELS): model_output.close_ts_file( self, 'dt')
+        if (self.SAVE_GW_PIXELS): model_output.close_ts_file( self, 'GW') 
+        if (self.SAVE_HT_PIXELS): model_output.close_ts_file( self, 'h_table')  
+        if (self.SAVE_DF_PIXELS): model_output.close_ts_file( self, 'd_freeze')
+        if (self.SAVE_DT_PIXELS): model_output.close_ts_file( self, 'd_thaw')
 
     #   close_output_files()        
     #-------------------------------------------------------------------  
@@ -1571,14 +1828,17 @@ class satzone_component( infil_base.infil_component ):
         # Notes:  The RTG function will work whether argument
         #         is a scalar or already a 2D grid.
         #------------------------------------------------------
+        if (self.SAVE_GW_GRIDS):
+            model_output.add_grid( self, self.GW, 'GW', self.time_min )
+            
         if (self.SAVE_HT_GRIDS):
-            model_output.add_grid( self, self.h_table, 'ht', self.time_min )
+            model_output.add_grid( self, self.h_table, 'h_table', self.time_min )
 
         if (self.SAVE_DF_GRIDS):
-            model_output.add_grid( self, self.d_freeze, 'df', self.time_min )
+            model_output.add_grid( self, self.d_freeze, 'd_flood', self.time_min )
 
         if (self.SAVE_DT_GRIDS):
-            model_output.add_grid( self, self.d_thaw, 'dt', self.time_min )
+            model_output.add_grid( self, self.d_thaw, 'd_thaw', self.time_min )
             
     #   save_grids()            
     #-------------------------------------------------------------------  
@@ -1586,101 +1846,55 @@ class satzone_component( infil_base.infil_component ):
 
         IDs  = self.outlet_IDs
         time = self.time_min    ######
+
+        if (self.SAVE_GW_PIXELS):
+            model_output.add_values_at_IDs( self, time,
+                                            self.GW, 'GW', IDs )
         
         if (self.SAVE_HT_PIXELS):
             model_output.add_values_at_IDs( self, time,
-                                            self.h_table, 'ht', IDs )
+                                            self.h_table, 'h_table', IDs )
 
         if (self.SAVE_DF_PIXELS):
             model_output.add_values_at_IDs( self, time,
-                                            self.d_freeze, 'df', IDs )
+                                            self.d_freeze, 'd_flood', IDs )
 
         if (self.SAVE_DT_PIXELS):
             model_output.add_values_at_IDs( self, time,
-                                            self.d_thaw, 'dt', IDs )
+                                            self.d_thaw, 'd_thaw', IDs )
             
     #   save_pixel_values()
     #-------------------------------------------------------------------
-    def get_total_darcy_layer_flow(self, cv):
 
-        #---------------------------------------------------------
-        # Notes: gv = gw_vars = structure
-        #        z  = elevation of land surface [m]
-        #        h  = elevation of water table [m]
-        #        (z-h) = depth to water table [m]
-        #        Sh = water table slope [unitless]
-        #        Ks = soil_K = sat. hydraulic conductivity [m/s]
-        #        dw = element width [m]
-        #        ds = hor. Dist. between pixel and parent [m]
-        #        y  = wetted flow depth in each layer [m]
-        #             (could be a recycled local variable)
-        #        Qg = total Darcy-flow discharge [m^3/s]
-        #             (summed over all layers)
-        #        diff = (partial sum of soil thicknesses -
-        #                depth to water table)
-
-        #        See Notes for Update_Water_Table routine.
-        #---------------------------------------------------------
-        
-        #-------------------------------------------
-        # Compute water table slope from h_table
-        #-------------------------------------------
-        # NB!  h_table is assumed to be a grid.
-        #-------------------------------------------
-        # NB!  Q is zero where Sh is zero.
-        #-------------------------------------------
-        # NB!  Flow direction is still assumed to
-        #      be given by the DEM's D8 flow grid.
-        #-------------------------------------------
-        # Sh = Free_Surface_Slope(np.float64(0), self.h_table, self.d8.ds, self.d8.pIDs)
-
-        #-----------------------------------------------------------
-        # Notes:  It is assumed that the flow directions don't
-        #         change even though the free surface is changing.
-        #-----------------------------------------------------------
-        delta_h = (self.h_table - self.h_table[self.d8.parent_IDs])
-        Sh      = (delta_h / self.d8.ds)
-    
-        #------------------------------------------
-        # Compute wetted-depth, y, for each layer
-        # Now passed by caller.
-        #------------------------------------------
-        #** diff = -(z - h)
-        
-        #----------------------------------
-        # NB!  h is assumed to be a grid.
-        # It is converted, if necessary,
-        # by Initialize_GW_Vars.
-        #----------------------------------
-        nx = self.nx
-        ny = self.ny
-        self.Q_gw = zeros([ny, nx], dtype='Float64')
-        
-        for k in range(self.n_layers):
-            #--------------------------------------
-            # Add Q for this layer, via Darcy law
-            #--------------------------------------
-            self.Q_gw += (self.Ks[k] * Sh * self.d8.dw * self.y[k,:,:])   
-        
-    #   get_total_darcy_layer_flow
-    #-------------------------------------------------------------------
-
-
-#-------------------------------------------------------------------
-#   Outside of the class    
-#-------------------------------------------------------------------
-def Darcy_Flow(K, S, dw, y):
-
-    #-----------------------------------------------------
-    # Notes: K  = hydraulic conductivity [m/s]
-    #        S  = water table slope (perhaps topo slope)
-    #        dw = width of element [m]
-    #        y  = wetted flow depth in a layer [m]
-    #        Q  = discharge through a layer [m^3 / s]
-    #-----------------------------------------------------
-    Q = K * S * dw * y
-    
-    return Q
-
-#   Darcy_Flow   
-#-------------------------------------------------------------------        
+#-----------------------------------------------------------------------
+# NB!  There is a fair amount of IDL "where subscripting" used here in
+#      update_water_table_OLD().  I2PY does not handle this correctly
+#      yet, so it was fixed by hand using ".flat", etc.  CHECK MORE.
+#
+# (5/7/09)  "Nested WHERE calls" work differently
+#           in numpy than in IDL. For a 1D array called "a":
+#
+#     >>> a = np.arange(11)-5
+#     >>> w = np.where(a < 0)
+#     >>> w2 = np.where(a[w] > -3)
+#     >>> print a[w[w2]]  # (this gives an error)
+#     >>> print a[w2]     # (this works)
+#     >>> print a[w][w2]  # (this works, too)
+#
+# For a 2D array called "a":
+#
+#     >>> a = np.arange(9) - 4
+#     >>> a = a.reshape(3,3)
+#     >>> w = np.where(a < 0)
+#     >>> w2 = np.where(a[w] > -3)
+#     >>> print a[w[w2]]    # TypeError: tuple indices must be integers
+#     >>> print a[w2]       # IndexError: index (3) out of range (0<=index<=2) in dimension 0
+#     >>> a[w][w2] = 99     # No error, but this doesn't work.
+#     >>> print a[w][w2]    # (this works)
+#     >>> print a.flat[w2]  # (this works, same result as last line)
+#     >>> a.flat[w2] = 99   # (this works)
+#     >>> a.flat[w2] = [-2,-1]  # (this works)
+#     >>> np.put(a, w2, 99)  # (this works)
+#
+#-----------------------------------------------------------------------   
+       

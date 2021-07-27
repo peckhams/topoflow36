@@ -202,7 +202,7 @@ class evap_component( evap_base.evap_component ):
         #  ALLOW ET TO BE A SCALAR ??
         ##########################################
 ##        if (size(self.ET) == 1):
-##            self.ET += np.zeros((self.ny, self.nx), dtype='Float64')
+##            self.ET += np.zeros((self.ny, self.nx), dtype='float64')
             
     #   update_ET_rate()
     #-------------------------------------------------------------------  
@@ -252,7 +252,7 @@ class evap_component( evap_base.evap_component ):
         rti = self.rti
         
         #-------------------------------------------------------
-        # All grids are assumed to have a data type of Float32.
+        # All grids are assumed to have a data type of float32.
         #-------------------------------------------------------
         ET = model_input.read_next(self.ET_unit, self.ET_type, rti,
                                    factor=self.mmph_to_mps)

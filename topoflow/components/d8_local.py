@@ -154,15 +154,15 @@ class d8_component(d8_base.d8_component):
         ny = self.ny
         self.IDs = None
         if (DOUBLE):
-            dtype = 'Float64'
+            dtype = 'float64'
         else:
-            dtype = 'Float32'
+            dtype = 'float32'
 
         #--------------------------------------------------
         # Initialize the grids, due to how d8_local works
         #--------------------------------------------------
-        self.d8_grid        = np.zeros([ny, nx], dtype='Int16')
-        self.parent_ID_grid = np.zeros([ny, nx], dtype='Int32')
+        self.d8_grid        = np.zeros([ny, nx], dtype='int16')
+        self.parent_ID_grid = np.zeros([ny, nx], dtype='int32')
         self.dw = np.zeros([ny, nx], dtype=dtype)
         self.ds = np.zeros([ny, nx], dtype=dtype)
         self.A  = np.zeros([ny, nx], dtype=dtype)
@@ -171,14 +171,14 @@ class d8_component(d8_base.d8_component):
         # These were previously used by get_neighbor_IDs()
         # but fixed bug and now next ones are used. (9/14/11)
         #------------------------------------------------------
-        self.row_incs = np.array([-1, -1, -1, 0, 0, 0, 1, 1, 1], dtype='Int32')
-        self.col_incs = np.array([-1, 0, 1, -1, 0, 1, -1, 0, 1], dtype='Int32')
+        self.row_incs = np.array([-1, -1, -1, 0, 0, 0, 1, 1, 1], dtype='int32')
+        self.col_incs = np.array([-1, 0, 1, -1, 0, 1, -1, 0, 1], dtype='int32')
 
         #-----------------------------------------------
         # (9/20/10) These get used by update_kid_IDs()
         #-----------------------------------------------
-        self.row_incs_CW = np.array([-1,0,1,1,1,0,-1,-1], dtype='Int32')
-        self.col_incs_CW = np.array([1,1,1,0,-1,-1,-1,0], dtype='Int32')
+        self.row_incs_CW = np.array([-1,0,1,1,1,0,-1,-1], dtype='int32')
+        self.col_incs_CW = np.array([1,1,1,0,-1,-1,-1,0], dtype='int32')
 
 
         ###############################################
@@ -1040,7 +1040,7 @@ class d8_component(d8_base.d8_component):
         # that are marked with RT closed-basin code?
         # Streamlines can end at either place.
         #----------------------------------------------
-        w = np.where( np.logical_or((z <= self.nodata), (np.isfinite(z) != 1)) )
+        w = np.where( np.logical_or((z <= self.DEM_nodata), (np.isfinite(z) != 1)) )
             #### or (z eq self.closed_basin_code)           
         n_bad = w[0].size
         if (n_bad != 0):
@@ -2218,7 +2218,7 @@ class d8_component(d8_base.d8_component):
             #-----------------------------------------
             # Initialize all unknown pixels as READY
             #-----------------------------------------
-            READY = np.ones([n_IDs], dtype='UInt8')
+            READY = np.ones([n_IDs], dtype='uint8')
             
             #----------------------------------
             # A pixel is not READY if any of

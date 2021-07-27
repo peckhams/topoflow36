@@ -390,7 +390,7 @@ class evap_component(evap_base.evap_component):
         rti = self.rti
         
         #-------------------------------------------------------
-        # All grids are assumed to have a data type of Float32.
+        # All grids are assumed to have a data type of float32.
         #-------------------------------------------------------
         ## alpha = model_input.read_next(self.alpha_unit, self.alpha_type, rti)
         ## if (alpha is not None): self.alpha = alpha

@@ -230,15 +230,14 @@ class infil_component( infil_base.infil_component ):
         #        subscript in the CFG file - can be read directly
         #        into a list or array.
         #----------------------------------------------------------
-        ## n_layers = 1  (before 11/15/16)
         n_layers = self.n_layers
         
         #-------------------------------------------------
         # Get arrays to store soil params for each layer
         #-------------------------------------------------
         self.soil_type = np.zeros([n_layers], dtype='<U200')
-##        self.dz_val    = np.zeros([n_layers], dtype='Float64')    #### + dz3
-##        self.nz_val    = np.zeros([n_layers], dtype='Int16')      #### + nz3
+##        self.dz_val    = np.zeros([n_layers], dtype='float64')    #### + dz3
+##        self.nz_val    = np.zeros([n_layers], dtype='int16')      #### + nz3
         #----------------------------------------------------------
         self.Ks_type  = np.zeros(n_layers, dtype='<U200')
         self.Ki_type  = np.zeros(n_layers, dtype='<U200')
@@ -264,17 +263,17 @@ class infil_component( infil_base.infil_component ):
         # NOTE!  In "initialize_computed_vars()", these lists
         # will be used to build ndarrays *with the same names*.
         #---------------------------------------------------------       
-        self.Ks  = list( np.zeros(n_layers, dtype='Float64') )
-        self.Ki  = list( np.zeros(n_layers, dtype='Float64') )
-        self.qs  = list( np.zeros(n_layers, dtype='Float64') )
-        self.qi  = list( np.zeros(n_layers, dtype='Float64') )
-        self.G   = list( np.zeros(n_layers, dtype='Float64') )
+        self.Ks  = list( np.zeros(n_layers, dtype='float64') )
+        self.Ki  = list( np.zeros(n_layers, dtype='float64') )
+        self.qs  = list( np.zeros(n_layers, dtype='float64') )
+        self.qi  = list( np.zeros(n_layers, dtype='float64') )
+        self.G   = list( np.zeros(n_layers, dtype='float64') )
         #-------------------------------------------------------------
-#         self.Ks_list  = list( np.zeros(n_layers, dtype='Float64') )
-#         self.Ki_list  = list( np.zeros(n_layers, dtype='Float64') )
-#         self.qs_list  = list( np.zeros(n_layers, dtype='Float64') )
-#         self.qi_list  = list( np.zeros(n_layers, dtype='Float64') )
-#         self.G_list   = list( np.zeros(n_layers, dtype='Float64') )
+#         self.Ks_list  = list( np.zeros(n_layers, dtype='float64') )
+#         self.Ki_list  = list( np.zeros(n_layers, dtype='float64') )
+#         self.qs_list  = list( np.zeros(n_layers, dtype='float64') )
+#         self.qi_list  = list( np.zeros(n_layers, dtype='float64') )
+#         self.G_list   = list( np.zeros(n_layers, dtype='float64') )
         
     #   initialize_layer_vars()
     #-------------------------------------------------------------------
@@ -432,7 +431,7 @@ class infil_component( infil_base.infil_component ):
         rti = self.rti
 
         #-------------------------------------------------------
-        # All grids are assumed to have data type of Float32.
+        # All grids are assumed to have data type of float32.
         #-------------------------------------------------------
         # NB! Green-Ampt and Smith-Parlange currently only
         #     support ONE layer (n_layers == 1).
@@ -834,7 +833,7 @@ def Green_Ampt_Infil_Rate_3D(self, r, r_last, n):
     ss = idl_func.size(self.tp, dimensions=True)
     nx = ss[0]
     ny = ss[1]
-    f = zeros([ny, nx], dtype='Float64')
+    f = zeros([ny, nx], dtype='float64')
     
     #-----------------------------------------------------
     # For grid cells where ponding has not yet occurred,

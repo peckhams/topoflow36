@@ -1,33 +1,29 @@
 #
-#  Copyright (c) 2001-2021, Scott D. Peckham
+#  Copyright (c) 2021, Scott D. Peckham
 #
-#  Nov 2016.
-#  Sep 2014. 
-#  Nov 2013.  Converted TopoFlow to Python package.
-#  Jan 2013.  Revised handling of input/output names.
-#  Oct 2012.  CSDMS Standard Names and BMI.
-#  May 2010.  Changes to initialize(), read_cfg_file() and unit_test().
-#  Aug 2009.  Updates.
-#  Jul 2009.  Updates.
-#  Jan 2009,  Converted from IDL.
+#  July 2021. Started with satzone_darcy_layers.py.
+#             This component takes Rg = P_rain * fraction.
 #
 #-----------------------------------------------------------------------
-#  NOTES:  This file defines a "Darcy layers" groundwater component
-#          and related functions.  It inherits from the groundwater
-#          "base class" in "satzone_base.py".
+#  NOTES:  This file defines a groundwater component that treats
+#          the water table recharge rate, Rg, to be a constant
+#          fraction of P_rain (from meteorology component.)
+#          This will route that fraction through a much slower
+#          groundwater flowpath so that it re-emerges at a later
+#          time as baseflow.  This should attenuate "flashy"
+#          hydrographs as observed for Ethiopia.
+#          This inherits from the groundwater "base class" in
+#          "satzone_base.py".
 #-----------------------------------------------------------------------
 #
 #  class satzone_component
 #
 #      get_component_name()
-#      get_attribute()          # (10/26/11)
-#      get_input_var_names()    # (5/16/12, Bolton)
-#      get_output_var_names()   # (5/16/12, Bolton)
-#      get_var_name()           # (5/16/12, Bolton)
-#      get_var_units()          # (5/16/12, Bolton)
-#      ------------------------------------------------------------     
-#      Move all "update_*" methods from satzone_base.py to here ?
-#      ------------------------------------------------------------    
+#      get_attribute()
+#      get_input_var_names()
+#      get_output_var_names()
+#      get_var_name()
+#      get_var_units() 
 #
 #-----------------------------------------------------------------------
 
@@ -40,21 +36,21 @@ from topoflow.components import satzone_base
 class satzone_component( satzone_base.satzone_component ):
 
     _att_map = {
-        'model_name':         'TopoFlow_Saturated_Zone_Darcy_Layers',
-        'version':            '3.1',        
+        'model_name':         'TopoFlow_Saturated_Zone_Attenuate',
+        'version':            '3.6',        
         'author_name':        'Scott D. Peckham',
         'grid_type':          'uniform',
         'time_step_type':     'fixed',
         'step_method':        'explicit',
-        'time_units':         'seconds', 
+        'time_units':         'seconds',
         #-------------------------------------------------------------
-        'comp_name':          'SatZoneDarcyLayers',
+        'comp_name':          'SatZoneAttenuate',
         'model_family':       'TopoFlow',
-        'cfg_template_file':  'Satzone_Darcy_Layers.cfg.in',
-        'cfg_extension':      '_satzone_darcy_layers.cfg' }
-        # 'cmt_var_prefix':     '/SatZoneDarcyLayers/Input/Var/',
-        # 'gui_xml_file':       '/home/csdms/cca/topoflow/3.1/src/share/cmt/gui/Satzone_Darcy_Layers.xml',
-        # 'dialog_title':       'Saturated Zone: Darcy Layers Parameters',
+        'cfg_template_file':  'Satzone_Attenuate.cfg.in',
+        'cfg_extension':      '_satzone_attenuate.cfg'}
+        # 'cmt_var_prefix':     '/SatZoneAttenuate/Input/Var/',
+        # 'gui_xml_file':       '/home/csdms/cca/topoflow/3.1/src/share/cmt/gui/Satzone_Attenuate.xml',
+        # 'dialog_title':       'Saturated Zone: Attenuate Parameters',
 
       
     #----------------------------------------------
@@ -62,6 +58,7 @@ class satzone_component( satzone_base.satzone_component ):
     # water surface???  (Bolton, 5/16/2012)
     #----------------------------------------------
     _input_var_names = [
+        'atmosphere_water__rainfall_volume_flux',           # (P_rain@met)
         'channel_water_x-section__mean_depth',              # (d@channels)
         'land_surface_water__evaporation_volume_flux',      # (ET@evap)
         'soil_water_sat-zone_top__recharge_volume_flux'  ]  # (Rg@infil)     
@@ -71,15 +68,15 @@ class satzone_component( satzone_base.satzone_component ):
         'land_surface_water__baseflow_volume_flux',         # GW
         'land_surface_water__domain_time_integral_of_baseflow_volume_flux',  # vol_GW
         'model__time_step',                                 # dt
-        'model_soil_layer-0__porosity',                     # qs[0]
-        'model_soil_layer-0__saturated_thickness',          # y[0,:,:]
-        'model_soil_layer-0__thickness',                    # th[0,:,:]
-        'model_soil_layer-1__porosity',                     # qs[1]
-        'model_soil_layer-1__saturated_thickness',          # y[1,:,:]
-        'model_soil_layer-1__thickness',                    # th[1,:,:]
-        'model_soil_layer-2__porosity',                     # qs[2]
-        'model_soil_layer-2__saturated_thickness',          # y[2,:,:]
-        'model_soil_layer-2__thickness',                    # th[2,:,:]
+#         'model_soil_layer-0__porosity',                     # qs[0]
+#         'model_soil_layer-0__saturated_thickness',          # y[0,:,:]
+#         'model_soil_layer-0__thickness',                    # th[0,:,:]
+#         'model_soil_layer-1__porosity',                     # qs[1]
+#         'model_soil_layer-1__saturated_thickness',          # y[1,:,:]
+#         'model_soil_layer-1__thickness',                    # th[1,:,:]
+#         'model_soil_layer-2__porosity',                     # qs[2]
+#         'model_soil_layer-2__saturated_thickness',          # y[2,:,:]
+#         'model_soil_layer-2__thickness',                    # th[2,:,:]
         #----------------------------------------------
         # These are for *all* soil layers (not used).
         #----------------------------------------------
@@ -117,6 +114,7 @@ class satzone_component( satzone_base.satzone_component ):
     #       the var_name_map, which getattr and setattr don't support.
     #-------------------------------------------------------------------
     _var_name_map = {
+        'atmosphere_water__rainfall_volume_flux':        'P_rain',
         'channel_water_x-section__mean_depth':           'd',      # channels comp
         'soil_water_sat-zone_top__recharge_volume_flux': 'Rg',
         #------------------------------------------------------------------------
@@ -126,7 +124,7 @@ class satzone_component( satzone_base.satzone_component ):
         'land_surface_water__evaporation_volume_flux': 'ET',
         'model__time_step': 'dt',
         #----------------------------------------------------------------
-        # These may be defined in satzone_base.py.  (9/22/14)
+        # These are defined in satzone_base.py.  (9/22/14)
 #         'model_soil_layer-0__porosity':            'qs_layer_0', ## 'qs[0]',
 #         'model_soil_layer-0__saturated_thickness': 'y_layer_0',  ## 'y[0,:,:]',
 #         'model_soil_layer-0__thickness':           'th_layer_0', ## 'th[0,:,:]',
@@ -152,6 +150,7 @@ class satzone_component( satzone_base.satzone_component ):
         'soil_top-layer__thickness':                  'th_layer_0' } ## 'th[0],
         
     _var_units_map = {
+        'atmosphere_water__rainfall_volume_flux':              'm s-1',
         'channel_water_x-section__mean_depth': 'm',      # channels comp
         'soil_water_sat-zone_top__recharge_volume_flux': 'm s-1',
         #----------------------------------------------------------------
@@ -160,15 +159,15 @@ class satzone_component( satzone_base.satzone_component ):
         'land_surface_water__domain_time_integral_of_baseflow_volume_flux': 'm3',
         'land_surface_water__evaporation_volume_flux': 'm s-1',
         'model__time_step': 's',         ############# CHECK UNITS
-        'model_soil_layer-0__porosity': '1',
-        'model_soil_layer-0__saturated_thickness': 'm',
-        'model_soil_layer-0__thickness':'m',
-        'model_soil_layer-1__porosity': '1',
-        'model_soil_layer-1__saturated_thickness': 'm',
-        'model_soil_layer-1__thickness': 'm',
-        'model_soil_layer-2__porosity': '1',
-        'model_soil_layer-2__saturated_thickness': 'm',
-        'model_soil_layer-2__thickness': 'm',
+#         'model_soil_layer-0__porosity': '1',
+#         'model_soil_layer-0__saturated_thickness': 'm',
+#         'model_soil_layer-0__thickness':'m',
+#         'model_soil_layer-1__porosity': '1',
+#         'model_soil_layer-1__saturated_thickness': 'm',
+#         'model_soil_layer-1__thickness': 'm',
+#         'model_soil_layer-2__porosity': '1',
+#         'model_soil_layer-2__saturated_thickness': 'm',
+#         'model_soil_layer-2__thickness': 'm',
         #----------------------------------------------
         # These are for *all* soil layers (not used).
         #----------------------------------------------
@@ -235,5 +234,72 @@ class satzone_component( satzone_base.satzone_component ):
         return self._var_units_map[ long_var_name ]
    
     #   get_var_units()
+    #-------------------------------------------------------------------
+    def update_water_volume_change(self):
+
+        #-----------------------------------------------------------
+        # Notes: Q_gw = total subsurface flux [m^3/s] (horizontal)
+        #        Rg = rate at which water from the surface
+        #             arrives at the water table [m/s]
+        #        da = pixel area [m^2]
+        #        dt = GW timestep [sec]
+        #        w1 = IDs of pixels that flow in direction 1
+        #        p1 = IDs of parent pixels for "w1 pixels" 
+        #-----------------------------------------------------------
+        fraction = 1.0
+        self.Rg = self.P_rain * fraction  ###########
+        
+        #-------------------------------------------------------
+        # Compute dV = total amount of water to be added to or
+        # removed from the soil column during the subsurface
+        # flow timestep.  Initialize with vertical recharge.
+        #-------------------------------------------------------
+        dt  = self.dt
+        self.dV = (self.Rg * self.da) * dt
+    
+        #-----------------------------------------
+        # Add contributions from neighbor pixels
+        #-------------------------------------------------------------
+        # Each grid cell passes flow to *one* downstream neighbor.
+        # Note that multiple grid cells can flow toward a given grid
+        # cell, so a grid cell ID may occur in d8.p1 and d8.p2, etc.
+        #-------------------------------------------------------------
+        if (self.d8.p1_OK):    
+            self.dV[ self.d8.p1 ] += (dt * self.Q_gw[self.d8.w1])
+        if (self.d8.p2_OK):    
+            self.dV[ self.d8.p2 ] += (dt * self.Q_gw[self.d8.w2])
+        if (self.d8.p3_OK):    
+            self.dV[ self.d8.p3 ] += (dt * self.Q_gw[self.d8.w3])
+        if (self.d8.p4_OK):    
+            self.dV[ self.d8.p4 ] += (dt * self.Q_gw[self.d8.w4])
+        if (self.d8.p5_OK):    
+            self.dV[ self.d8.p5 ] += (dt * self.Q_gw[self.d8.w5])
+        if (self.d8.p6_OK):    
+            self.dV[ self.d8.p6 ] += (dt * self.Q_gw[self.d8.w6])
+        if (self.d8.p7_OK):    
+            self.dV[ self.d8.p7 ] += (dt * self.Q_gw[self.d8.w7])
+        if (self.d8.p8_OK):    
+            self.dV[ self.d8.p8 ] += (dt * self.Q_gw[self.d8.w8])
+
+        #----------------------------------------------------
+        # Subtract the amount that flows out to D8 neighbor
+        #----------------------------------------------------
+        self.dV -= (self.Q_gw * dt)  # (in place)
+
+        #------------------------------
+        # Convert dV to a water depth
+        #------------------------------
+        self.dzw = ( self.dV / self.da)
+
+        #----------------
+        # For debugging
+        #----------------          
+#         dzw_min = self.dzw.min()
+#         dzw_max = self.dzw.max()
+#         print('   dzw_min = ' + str(dzw_min))
+#         print('   dzw_max = ' + str(dzw_max))
+#         print ' '
+                
+    #   update_water_volume_change()
     #-------------------------------------------------------------------
 

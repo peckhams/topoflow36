@@ -56,8 +56,6 @@ import os
 import time
 
 from topoflow.utils import BMI_base
-from topoflow.utils import cfg_files as cfg
-
 from topoflow.utils.tf_utils import TF_String, TF_Version
 
 #-----------------------------------------------------------------------
@@ -816,7 +814,7 @@ class topoflow_driver( BMI_base.BMI_component ):
 ##        self.win_num    = int32(0)   ########
 ##        self.temp_winID = int32(-1)
 ##        self.npanels    = npanels
-##        self.panel_IDs  = zeros([npanels], dtype='Int32')
+##        self.panel_IDs  = zeros([npanels], dtype='int32')
 ##        
 ##        self.stop_method_ID = int32(0)  #####
 ##
@@ -844,8 +842,8 @@ class topoflow_driver( BMI_base.BMI_component ):
 ##        self.nQ = int32(0)
 ##        self.nQ_init = int16(1000)
 ##        nQ_max = self.nQ_init
-##        self.tvals = zeros([nQ_max], dtype='Float32')
-##        self.Qvals = zeros([nQ_max], dtype='Float32')  
+##        self.tvals = zeros([nQ_max], dtype='float32')
+##        self.Qvals = zeros([nQ_max], dtype='float32')  
 ##
 ##    #   initialize_hydrograph_plot()
     #-------------------------------------------------------------
@@ -880,8 +878,8 @@ class topoflow_driver( BMI_base.BMI_component ):
             nQ = (nQ + np.int32(1))
             if (nQ == self.nQ_max):
                 ## Use np.concatenate() here ??
-                tvals = array([tvals, np.zeros([nQ_init], dtype='Float32')])
-                Qvals = array([Qvals, np.zeros([nQ_init], dtype='Float32')])
+                tvals = array([tvals, np.zeros([nQ_init], dtype='float32')])
+                Qvals = array([Qvals, np.zeros([nQ_init], dtype='float32')])
                 self.nQ_max = np.size(tvals)
             self.last_plot_time = self.time_min
             ########################

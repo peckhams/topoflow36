@@ -1,10 +1,27 @@
+"""
+This file defines a "base class" for channel flow components as well
+as functions used by most or all channel flow methods.  That is, all
+channel flow components inherit methods from this class.  The methods
+of this class should be over-ridden as necessary (especially the
+update_velocity() method) for different methods of modeling channel
+flow.  This class, in turn, inherits from the "BMI base class" in
+BMI_base.py.
 
-## See "d_bankfull" in update_flow_depth()  ######## (2/21/13)
-
-## See "(5/13/10)" for a temporary fix.
+See channels_kinematic_wav.py, channels_diffusive_wave.py, and
+channels_dynamic_wave.py.  Each of these has a MANNING or LAW_OF_WALL
+flag in their CFG file.
+"""
 #------------------------------------------------------------------------
-#  Copyright (c) 2001-2019, Scott D. Peckham
+# See ".FLOOD_OPTION" flag.
+# NB!  flood_manning_n = 0.15   (hardwired: 2020-06-09)
 #
+# NB!   update_diversion() is currently COMMENTED OUT.
+#
+#------------------------------------------------------------------------
+#  Copyright (c) 2001-2020, Scott D. Peckham
+#
+#  Apr 2020.  Added set_new_defaults(), disable_all_output().
+#  Oct 2019.  Added FLOOD_OPTION and CHECK_STABILITY flags.
 #  Sep 2014.  Wrote new update_diversions().
 #             New standard names and BMI updates and testing.
 #  Nov 2013.  Converted TopoFlow to a Python package.
@@ -65,6 +82,7 @@
 #      get_var_units()           # (5/15/12)
 #-----------------------------
 #      set_constants()
+#      set_missing_cfg_options()   # (4/29/20)
 #      initialize()
 #      update()
 #      finalize()
@@ -77,14 +95,17 @@
 #      initialize_peak_values()
 #      initialize_min_and_max_values()  # (2/3/13)
 #-------------------------------------
-#      update_d8_vars()            # (9/17/19, for flooding)
+#      update_flood_d8_vars()        # (9/17/19, for flooding)
 #      update_R()
 #      update_R_integral()
 #      update_discharge()
-#      update_diversions()          # (9/22/14)
+#      update_flood_discharge()      # (9/20/19)
+#      update_diversions()           # (9/22/14)
 #      update_flow_volume()
+#      update_flood_volume()         # (9/20/19)
 #      update_flow_depth_LAST()
-#      update_flow_depth()          # (9/16/19)
+#      update_flow_depth()           # (9/16/19, update)
+#      update_flood_depth()          # (9/20/19)
 #      update_free_surface_slope()
 #      update_shear_stress()        # (9/9/14, depth-slope product)
 #      update_shear_speed()         # (9/9/14)
@@ -110,6 +131,7 @@
 #----------------------------------
 #      update_outfile_names()
 #      bundle_output_files()        # (9/21/14. Not used yet)
+#      disable_all_output()         # (04/29/20)
 #      open_output_files()
 #      write_output_files()
 #      close_output_files()
@@ -130,6 +152,7 @@
 
 import numpy as np
 import os, os.path
+import copy
 
 from topoflow.utils import BMI_base
 from topoflow.utils import file_utils  ###
@@ -234,7 +257,7 @@ class channels_component( BMI_base.BMI_component ):
         'channel_x-section_trapezoid_bottom__width',               # width
         'channel_x-section_trapezoid_side__flare_angle',           # angle
         #######   Next one added for flooding:  2019-09-16.  ########
-        'land_surface_water__depth',                               # d_land
+        'land_surface_water__depth',                               # df
         'land_surface_water__runoff_volume_flux',                  # R  
         'land_surface_water__domain_time_integral_of_runoff_volume_flux', # vol_R   
         'model__time_step',                                        # dt
@@ -256,9 +279,9 @@ class channels_component( BMI_base.BMI_component ):
         'channel_x-section_trapezoid_bottom__width',               # width
         'channel_x-section_trapezoid_side__flare_angle',           # angle
         # Next two vars can be obtained from d8 component.
-#         'land_surface__elevation',                                 # DEM
-#         'land_surface__slope',                                     # S_bed
-        'land_surface_water__depth' ]                              # d_land
+#         'land_surface__elevation',                                # DEM
+#         'land_surface__slope',                                    # S_bed
+        'land_surface_water__depth' ]                               # df
             
     _var_name_map = {
         'atmosphere_water__rainfall_volume_flux':              'P_rain',
@@ -317,7 +340,7 @@ class channels_component( BMI_base.BMI_component ):
         ## 'channel_water_x-section_top__width':                   # (not used)
         'channel_x-section_trapezoid_bottom__width':               'width',   ####
         'channel_x-section_trapezoid_side__flare_angle':           'angle',   ####
-        'land_surface_water__depth':                               'd_land',
+        'land_surface_water__depth':                               'df',
         'land_surface_water__domain_time_integral_of_runoff_volume_flux': 'vol_R',
         'land_surface_water__runoff_volume_flux':                  'R',
         'model__time_step':                                        'dt',
@@ -342,14 +365,6 @@ class channels_component( BMI_base.BMI_component ):
         'network_channel_water__volume':                'vol_chan',
         'land_surface_water__area_integral_of_depth':   'vol_land' }
         #####################################
-
-
-    #------------------------------------------------
-    # Create an "inverse var name map"
-    # inv_map = dict(zip(map.values(), map.keys()))
-    #------------------------------------------------
-##    _long_name_map = dict( zip(_var_name_map.values(),
-##                               _var_name_map.keys() ) )
 
     _var_units_map = {
         'atmosphere_water__rainfall_volume_flux':              'm s-1',
@@ -501,9 +516,44 @@ class channels_component( BMI_base.BMI_component ):
     
     #   set_constants()
     #-------------------------------------------------------------------
+    def set_missing_cfg_options(self):    
+
+        #------------------------------------------------------
+        # (2019-10-08) Added CHECK_STABILITY flag to CFG file
+        # so stability check be turned off to increase speed.
+        #------------------------------------------------------
+        if not(hasattr(self, 'CHECK_STABILITY')):
+            self.CHECK_STABILITY = True
+             
+        #--------------------------------------------------------------        
+        # (2019-10-03) Added FLOOD_OPTION flag to CFG file.
+        # If not(FLOOD_OPTION), don't write flood depths (all zeros).
+        #--------------------------------------------------------------
+        # Make sure CFG file has "d_flood_gs_file" vs. "df_gs_file".
+        #--------------------------------------------------------------
+        if not(hasattr(self, 'FLOOD_OPTION')):
+            self.FLOOD_OPTION    = False
+            self.SAVE_DF_GRIDS   = False
+            self.SAVE_DF_PIXELS  = False
+            ## self.d_flood_gs_file = ''
+            ## self.d_flood_ts_file = ''
+
+        #--------------------------------------------- 
+        # Also new in 2019, not in older CFG files
+        # Not used then, but still need to be set.
+        # Need to be set if FLOOD_OPTION is False ??
+        #---------------------------------------------
+        if not(hasattr(self, 'd_bankfull_type')):
+            self.d_bankfull_type = 'Scalar'  # or Grid
+            self.d_bankfull = 10.0  # [meters]
+            self.d_bankfull_file = ''
+
+    #   set_missing_cfg_options()
+    #-------------------------------------------------------------------
     def initialize(self, cfg_file=None, mode="nondriver", SILENT=False): 
 
-        if not(SILENT):
+        self.SILENT = SILENT
+        if not(self.SILENT):
             print(' ')
             print('Channels component: Initializing...')
         
@@ -514,15 +564,24 @@ class channels_component( BMI_base.BMI_component ):
         #-----------------------------------------------
         # Load component parameters from a config file
         #-----------------------------------------------
-        self.set_constants()           # (12/7/09)
-        #------------------------------------------------------------
+        self.set_constants()       # (12/7/09)
         # print 'CHANNELS calling initialize_config_vars()...'
-        self.initialize_config_vars()  
+        self.initialize_config_vars()
+        self.set_missing_cfg_options()  # (2020-04-29)
+
+        # New option, see set_new_defaults().
+        if not(self.FLOOD_OPTION):
+            self.SAVE_DF_GRIDS  = False  # (still needed here)
+            self.SAVE_DF_PIXELS = False
+            self.d_flood_gs_file = ''
+            self.d_flood_ts_file = ''
+        
         #------------------------------------------------------------
         # Must call read_grid_info() after initialize_config_vars()
         #------------------------------------------------------------
         # print 'CHANNELS calling read_grid_info()...'
-        self.read_grid_info()
+        #### self.read_grid_info()    # NOW IN initialize_config_vars()
+
         #------------------------------------------------------------
         #print 'CHANNELS calling initialize_basin_vars()...'
         self.initialize_basin_vars()  # (5/14/10)
@@ -536,10 +595,9 @@ class channels_component( BMI_base.BMI_component ):
         # Has component been turned off ?
         #----------------------------------
         if (self.comp_status == 'Disabled'):
-            if not(SILENT):
+            if not(self.SILENT):
                 print('Channels component: Disabled in CFG file.')
-            self.SAVE_Q_GRIDS  = False   # (It is True by default.)
-            self.SAVE_Q_PIXELS = False   # (It is True by default.)
+            self.disable_all_output()   # (04/29/2020)
             self.DONE = True
             self.status = 'initialized'  # (OpenMI 2.0 convention) 
             return
@@ -548,6 +606,13 @@ class channels_component( BMI_base.BMI_component ):
 ##        print 'min(d0), max(d0) =', self.d0.min(), self.d0.max()
 ##        print '################################################'
 
+        #--------------------------------------------------------
+        # Since only Grid type is allowed, these are not set in
+        # the CFG file, but need to be defined for next part.
+        #--------------------------------------------------------
+        self.code_type  = 'Grid'  # (may not need this one)
+        self.slope_type = 'Grid'
+        
         ##################################################################
         # Move this block into new: "initialize_input_file_vars()"  ???
         #---------------------------------------------------
@@ -584,7 +649,8 @@ class channels_component( BMI_base.BMI_component ):
         #------------------------------------------------------
         # Must now do this before read_input_files (11/11/16) 
         #------------------------------------------------------
-        print('CHANNELS calling initialize_d8_vars()...')
+        if not(self.SILENT):
+            print('CHANNELS calling initialize_d8_vars()...')
         self.initialize_d8_vars()  # (depend on D8 flow grid)
     
         #---------------------------------------------
@@ -595,22 +661,32 @@ class channels_component( BMI_base.BMI_component ):
         #---------------------------------------------
         # print 'CHANNELS calling open_input_files()...'
         self.open_input_files()
-        print('CHANNELS calling read_input_files()...')
+        if not(self.SILENT):
+            print('CHANNELS calling read_input_files()...')
         self.read_input_files()
 
+        #--------------------------------------------
+        # Set any input variables that are computed
+        #--------------------------------------------------
+        # NOTE:  Must be called AFTER read_input_files().
+        #--------------------------------------------------
+        if not(self.SILENT):
+            print('CHANNELS calling set_computed_input_vars()...')
+        self.set_computed_input_vars()
+        
         #-----------------------
         # Initialize variables
         #-----------------------
         ## print 'CHANNELS calling initialize_d8_vars()...'
         ## self.initialize_d8_vars()  # (depend on D8 flow grid)
-        print('CHANNELS calling initialize_computed_vars()...')
+        if not(self.SILENT):
+            print('CHANNELS calling initialize_computed_vars()...')
         self.initialize_computed_vars()
 
         #--------------------------------------------------
         # (5/12/10) I think this is obsolete now.
         #--------------------------------------------------
-        # Make sure self.Q_ts_file is not NULL (12/22/05)
-        
+        # Make sure self.Q_ts_file is not NULL (12/22/05)  
         # This is only output file that is set by default
         # and is still NULL if user hasn't opened the
         # output var dialog for the channel process.
@@ -625,6 +701,9 @@ class channels_component( BMI_base.BMI_component ):
     #-------------------------------------------------------------------
     def update(self, dt=-1.0):
 
+        ## DEBUG = True
+        DEBUG = False
+        
         #---------------------------------------------
         # Note that u and d from previous time step
         # must be used on RHS of the equations here.
@@ -636,34 +715,50 @@ class channels_component( BMI_base.BMI_component ):
         # even if component is not the driver.  But note that
         # the TopoFlow driver also makes this same call.
         #-------------------------------------------------------
-        if (self.mode == 'driver'):
+        if (self.mode == 'driver') and not(self.SILENT):
             self.print_time_and_value(self.Q_outlet, 'Q_out', '[m^3/s]')
                                       ### interval=0.5)  # [seconds]
 
         # For testing (5/19/12)
         # self.print_time_and_value(self.Q_outlet, 'Q_out', '[m^3/s]  CHANNEL')
-            
-        ## DEBUG = True
-        DEBUG = False
- 
+
+        #-------------------------------------------
+        # Read from files as needed to update vars 
+        #-----------------------------------------------------
+        # NB! This is currently not needed for the "channel
+        # process" because values don't change over time and
+        # read_input_files() is called by initialize().
+        # NB! read_input_files() is called in initialize().
+        #-----------------------------------------------------
+        # if (self.time_index > 0):
+        #     if (DEBUG): print('#### Calling read_input_files()...')
+        #     self.read_input_files()
+        
         #-------------------------
         # Update computed values
         #-------------------------
-        if (DEBUG): print('#### Calling update_d8_vars()...')
-        self.update_d8_vars()    ### (2019-09-17)
-        #-------------------------------------------------------       
+        if (self.FLOOD_OPTION):
+            if (DEBUG): print('#### Calling update_d8_vars()...')
+            self.update_flood_d8_vars()     ############ (2019-09-17)
+        #------------------------------------------------------------       
         if (DEBUG): print('#### Calling update_R()...')
         self.update_R()
         if (DEBUG): print('#### Calling update_R_integral()...')
         self.update_R_integral()
         if (DEBUG): print('#### Calling update_discharge()...')
         self.update_discharge()
+        #------------------------------------------------------------
         if (DEBUG): print('#### Calling update_diversions()...')
         self.update_diversions()
         if (DEBUG): print('#### Calling update_flow_volume()...')
         self.update_flow_volume()
+        #------------------------------------------------------------
         if (DEBUG): print('#### Calling update_flow_depth()...')
         self.update_flow_depth()
+        #------------------------------------------------------------
+        if (self.FLOOD_OPTION):
+            if (DEBUG): print('#### Calling update_flood_depth()...')
+            self.update_flood_depth()   #### (2019-09-20)
         #-----------------------------------------------------------------
         if not(self.DYNAMIC_WAVE):
             if (DEBUG): print('#### Calling update_trapezoid_Rh()...')
@@ -687,6 +782,8 @@ class channels_component( BMI_base.BMI_component ):
         #-----------------------------------------------------------------          
         if (DEBUG): print('#### Calling update_velocity()...')
         self.update_velocity()
+        if (self.FLOOD_OPTION):
+            self.update_velocity_in_flood_cells()
         self.update_velocity_on_edges()     # (set to zero)
         if (DEBUG): print('#### Calling update_froude_number()...')
         self.update_froude_number()
@@ -714,22 +811,15 @@ class channels_component( BMI_base.BMI_component ):
         #---------------------------------------------
         ## self.update_mins_and_maxes()
 
-        #------------------------
-        # Check computed values
-        #------------------------
-        D_OK = self.check_flow_depth()
-        U_OK = self.check_flow_velocity()
-        OK   = (D_OK and U_OK)
-
-        #-------------------------------------------
-        # Read from files as needed to update vars 
-        #-----------------------------------------------------
-        # NB! This is currently not needed for the "channel
-        # process" because values don't change over time and
-        # read_input_files() is called by initialize().
-        #-----------------------------------------------------
-        # if (self.time_index > 0):
-        #     self.read_input_files()
+        #--------------------------------------------------
+        # Check computed values (but not if known stable)
+        #--------------------------------------------------
+        if (self.CHECK_STABILITY):
+            D_OK = self.check_flow_depth()
+            U_OK = self.check_flow_velocity()
+            OK   = (D_OK and U_OK)
+        else:
+            OK = True
 
         #----------------------------------------------
         # Write user-specified data to output files ?
@@ -765,8 +855,10 @@ class channels_component( BMI_base.BMI_component ):
         #---------------------------------------------------
         self.update_total_channel_water_volume()  ## (9/17/19)
         self.update_total_land_water_volume()     ## (9/17/19)
+        ## self.update_total_edge_water_volume()     ## (5/7/20)
         self.update_mins_and_maxes( REPORT=False )  ## (2/6/13)
-        self.print_final_report(comp_name='Channels component')
+        if not(self.SILENT):
+            self.print_final_report(comp_name='Channels component')
         
         self.status = 'finalizing'  # (OpenMI)
         self.close_input_files()    # TopoFlow input "data streams"
@@ -813,7 +905,15 @@ class channels_component( BMI_base.BMI_component ):
         # the "channel_base" component.
         #---------------------------------------------
         self.d8 = d8_base.d8_component()
-        
+
+        #--------------------------------------------------        
+        # We don't need any of this now.  See Note below.
+        #--------------------------------------------------
+#         self.d8.site_prefix  = self.site_prefix
+#         self.d8.case_prefix  = self.case_prefix
+#         self.d8.in_directory = self.in_directory
+#         self.d8.cfg_directory = self.cfg_directory
+
         #--------------------------------------------------         
         # D8 component builds its cfg filename from these  
         #-------------------------------------------------------------
@@ -821,11 +921,16 @@ class channels_component( BMI_base.BMI_component ):
         # uses case_prefix (vs. site_prefix) for its CFG file:
         # <site_prefix>_d8_global.cfg.  This is to prevent confusion
         # since this was the only CFG file that used site_prefix.
-        #-------------------------------------------------------------    
-        self.d8.site_prefix  = self.site_prefix
-        self.d8.case_prefix  = self.case_prefix   # (used in d8_base.py)
-        self.d8.in_directory = self.in_directory
-        self.d8.initialize( cfg_file=None, SILENT=self.SILENT, \
+        #-------------------------------------------------------------
+        # Note:  This D8 component is serving a channels component
+        #        that has already been instantiated and knows its
+        #        directory and prefix information.  So we can build
+        #        the correct D8 cfg_file name from that info.  It
+        #        will then read path_info CFG file to get other info.
+        #-------------------------------------------------------------
+        cfg_file = (self.case_prefix + '_d8_global.cfg')
+        cfg_file = (self.cfg_directory + cfg_file)
+        self.d8.initialize( cfg_file=cfg_file, SILENT=self.SILENT, \
                             REPORT=self.REPORT )
         
         #---------------------------------------------------
@@ -833,13 +938,24 @@ class channels_component( BMI_base.BMI_component ):
         # the new "d8_base.py", but are not needed when
         # using the older "tf_d8_base.py".      
         #---------------------------------------------------
-        self.d8.update(self.time, SILENT=False, REPORT=True)
+        self.d8.update(self.time, REPORT=True)
 
         #----------------------------------------------------------- 
         # Note: This is also needed, but is not done by default in
         #       d8.update() because it hurts performance of Erode.
         #----------------------------------------------------------- 
         self.d8.update_noflow_IDs()
+
+        #--------------------------------------------------- 
+        # Initialize separate set of d8 vars for flooding.
+        # (2019-09-21)
+        #---------------------------------------------------
+        if (self.FLOOD_OPTION): 
+            d8f = copy.copy( self.d8 )  # (or use "copy.deepcopy"?)
+            d8f.SILENT          = True
+            d8f.FILL_PITS_IN_Z0 = False
+            d8f.LINK_FLATS      = False
+            self.d8f = d8f
 
     #   initialize_d8_vars()
     #-------------------------------------------------------------
@@ -853,66 +969,76 @@ class channels_component( BMI_base.BMI_component ):
         # numpy "float64" data type.  Applying np.float64()
         # will break references.
         #--------------------------------------------------------
+        dtype = 'float64'
+        ##### dtype = 'float32'
+        #-----------------------------
         if (self.MANNING):
             if (self.nval is not None):
                 self.nval_min = self.nval.min()
                 self.nval_max = self.nval.max()
-                #---------------------------------------
-                print('    min(nval) = ' + str(self.nval_min) )
-                print('    max(nval) = ' + str(self.nval_max) )
-                #---------------------------------------
-            self.z0val     = self.initialize_scalar(-1, dtype='float64')
-            self.z0val_min = self.initialize_scalar(-1, dtype='float64')
-            self.z0val_max = self.initialize_scalar(-1, dtype='float64')
+                if not(self.SILENT):
+                    print('    min(nval)      = ' + str(self.nval_min) )
+                    print('    max(nval)      = ' + str(self.nval_max) )
+            #-------------------------------------------------------------
+            self.z0val     = self.initialize_scalar(-1, dtype=dtype)
+            self.z0val_min = self.initialize_scalar(-1, dtype=dtype)
+            self.z0val_max = self.initialize_scalar(-1, dtype=dtype)
             
         if (self.LAW_OF_WALL):
             if (self.z0val is not None):
                 self.z0val_min = self.z0val.min()
                 self.z0val_max = self.z0val.max()
-                #-----------------------------------------
-                print('    min(z0val) = ' + str(self.z0val_min) )
-                print('    max(z0val) = ' + str(self.z0val_max) )
-                #-----------------------------------------
-            self.nval      = self.initialize_scalar(-1, dtype='float64')
-            self.nval_min  = self.initialize_scalar(-1, dtype='float64')
-            self.nval_max  = self.initialize_scalar(-1, dtype='float64')
+                if not(self.SILENT):
+                    print('    min(z0val)     = ' + str(self.z0val_min) )
+                    print('    max(z0val)     = ' + str(self.z0val_max) )
+            #-------------------------------------------------------------
+            self.nval      = self.initialize_scalar(-1, dtype=dtype)
+            self.nval_min  = self.initialize_scalar(-1, dtype=dtype)
+            self.nval_max  = self.initialize_scalar(-1, dtype=dtype)
 
         #------------------------------------------------------------           
         # If neither set, use a constant velocity?  (Test: 5/18/15)
         #------------------------------------------------------------
         if not(self.MANNING) and not(self.LAW_OF_WALL):
             print('#### WARNING: In CFG file, MANNING=0 and LAW_OF_WALL=0.')
-            #-----------------------------------
-            self.z0val     = self.initialize_scalar(-1, dtype='float64')
-            self.z0val_min = self.initialize_scalar(-1, dtype='float64')
-            self.z0val_max = self.initialize_scalar(-1, dtype='float64')
-            #--------------------------------------------------------------            
-            self.nval      = self.initialize_scalar(-1, dtype='float64')
-            self.nval_min  = self.initialize_scalar(-1, dtype='float64')
-            self.nval_max  = self.initialize_scalar(-1, dtype='float64')
+            #-------------------------------------------------------------
+            self.z0val     = self.initialize_scalar(-1, dtype=dtype)
+            self.z0val_min = self.initialize_scalar(-1, dtype=dtype)
+            self.z0val_max = self.initialize_scalar(-1, dtype=dtype)
+            #-------------------------------------------------------------            
+            self.nval      = self.initialize_scalar(-1, dtype=dtype)
+            self.nval_min  = self.initialize_scalar(-1, dtype=dtype)
+            self.nval_max  = self.initialize_scalar(-1, dtype=dtype)
+
+        #-----------------------------------------------
+        # Convert bank angles from degrees to radians. 
+        #-------------------------------------------------
+        # When bank angles are given as a GRID, this is
+        # done in read_input_files().  Then realized that
+        # that conversion didn't occur for SCALAR angle.
+        # This caused "denom" later to be negative.
+        # (Fixed on: 2019-10-08.)
+        #-------------------------------------------------
+        ### if (np.size( self.angle ) == 1):
+        if (self.angle_type.lower() == 'scalar'):
+            self.angle *= self.deg_to_rad   # [radians]   
 
         #-----------------------------------------------
         # Print mins and maxes of some other variables
         # that were initialized by read_input_files().
         #-----------------------------------------------
-#         print '    min(slope)      =', self.slope.min()
-#         print '    max(slope)      =', self.slope.max()
-        print('    min(width)      = ' + str(self.width.min()) )
-        print('    max(width)      = ' + str(self.width.max()) )
-#         print '    min(angle)      = ' + str(self.angle.min() * self.rad_to_deg) + ' [deg]')
-#         print '    max(angle)      = ' + str(self.angle.max() * self.rad_to_deg) + ' [deg]')
-        print('    min(sinuosity)  = ' + str(self.sinu.min()) )
-        print('    max(sinuosity)  = ' + str(self.sinu.max()) )
-        print('    min(init_depth) = ' + str(self.d0.min()) )
-        print('    max(init_depth) = ' + str(self.d0.max()) )
-            
-        #-----------------------------------------------
-        # Convert bank angles from degrees to radians. 
-        #-------------------------------------------------
-        # Already done in read_input_files().  (11/16/16)
-        #-------------------------------------------------
-        ## self.angle = self.angle * self.deg_to_rad  # [radians]
-        
+        if not(self.SILENT):
+            ## print('    min(slope)      = ' + str(self.slope.min()) )
+            ## print('    max(slope)      = ' + str(self.slope.max()) )
+            print('    min(width)      = ' + str(self.width.min()) )
+            print('    max(width)      = ' + str(self.width.max()) )
+            print('    min(angle)      = ' + str(self.angle.min() * self.rad_to_deg) + ' [deg]')
+            print('    max(angle)      = ' + str(self.angle.max() * self.rad_to_deg) + ' [deg]')
+            print('    min(sinuosity)  = ' + str(self.sinu.min()) )
+            print('    max(sinuosity)  = ' + str(self.sinu.max()) )
+            print('    min(init_depth) = ' + str(self.d0.min()) )
+            print('    max(init_depth) = ' + str(self.d0.max()) )
+
         #------------------------------------------------
         # 8/29/05.  Multiply ds by (unitless) sinuosity
         # Orig. ds is used by subsurface flow
@@ -935,6 +1061,8 @@ class channels_component( BMI_base.BMI_component ):
         ### S_bed = (S_bed / self.sinu)     #*************
         self.slope = (self.slope / self.sinu)
         self.S_bed  = self.slope
+        self.S_free = self.S_bed.copy()  # (2020-04-29)
+
         ###################################################
         ###################################################
         
@@ -944,17 +1072,13 @@ class channels_component( BMI_base.BMI_component ):
         # NB!  It is not a good idea to initialize the
         # water depth grid to a nonzero scalar value.
         #-----------------------------------------------
-        print('Initializing u, f, d grids...')
-        self.u = self.initialize_grid( 0, dtype='float64' )
-        self.f = self.initialize_grid( 0, dtype='float64' )
-        self.d = self.initialize_grid( 0, dtype='float64' )
+        if not(self.SILENT):
+            print('Initializing u, f, d grids...')
+        self.u = self.initialize_grid( 0, dtype=dtype )
+        self.f = self.initialize_grid( 0, dtype=dtype )
+        self.d = self.initialize_grid( 0, dtype=dtype )
         self.d += self.d0  # (Add initial depth, if any.)
 
-        #----------------------------------------
-        # Added this on 2019-09-16 for flooding
-        #----------------------------------------
-        self.d_land = self.initialize_grid( 0, dtype='float64' )
-        
         #------------------------------------------
         # Use a constant velocity (Test: 5/18/15)
         #------------------------------------------
@@ -968,9 +1092,9 @@ class channels_component( BMI_base.BMI_component ):
         # But in "update_R()", be careful not to break the ref.
         # "Q" may be subject to the same issue.
         #########################################################
-        self.Q = self.initialize_grid( 0, dtype='float64' )
-        self.R = self.initialize_grid( 0, dtype='float64' )
-
+        self.Q  = self.initialize_grid( 0, dtype=dtype )
+        self.R  = self.initialize_grid( 0, dtype=dtype )
+                               
         ##############################################################################
         # seconds_per_year = 3600 * 24 * 365 = 31,536,000
         # mm_per_meter     = 1000
@@ -985,17 +1109,17 @@ class channels_component( BMI_base.BMI_component ):
         #---------------------------------------------------
         # Initialize new grids. Is this needed?  (9/13/14)
         #---------------------------------------------------
-        self.tau    = self.initialize_grid( 0, dtype='float64' )
-        self.u_star = self.initialize_grid( 0, dtype='float64' )
-        self.froude = self.initialize_grid( 0, dtype='float64' )
+        self.tau    = self.initialize_grid( 0, dtype=dtype )
+        self.u_star = self.initialize_grid( 0, dtype=dtype )
+        self.froude = self.initialize_grid( 0, dtype=dtype )
                         
         #---------------------------------------
         # These are used to check mass balance
         #---------------------------------------
-        self.vol_R    = self.initialize_scalar( 0, dtype='float64')
-        self.vol_Q    = self.initialize_scalar( 0, dtype='float64')
-        self.vol_chan = self.initialize_scalar( 0, dtype='float64') 
-        self.vol_land = self.initialize_scalar( 0, dtype='float64') 
+        self.vol_R    = self.initialize_scalar( 0, dtype=dtype)
+        self.vol_Q    = self.initialize_scalar( 0, dtype=dtype)
+        self.vol_chan = self.initialize_scalar( 0, dtype=dtype) 
+        self.vol_land = self.initialize_scalar( 0, dtype=dtype) 
                        
         #-------------------------------------------
         # Make sure all slopes are valid & nonzero
@@ -1003,7 +1127,27 @@ class channels_component( BMI_base.BMI_component ):
         #-------------------------------------------
         if (self.KINEMATIC_WAVE):    
             self.remove_bad_slopes()      #(3/8/07. Only Kin Wave case)
-        
+            #----------------------------------------------
+            # Use "get_new_slope_grid()" in new_slopes.py
+            # instead of "remove_bad_slopes()".
+            # Or change "slope_grid" in the CFG file.
+            #----------------------------------------------
+            ## self.get_new_slope_grid()
+
+        #---------------------------------------------------
+        # Added these new variables for flooding (2019-09)
+        # See "bankfull" variables further down.
+        #---------------------------------------------------
+        self.d_flood = self.initialize_grid( 0, dtype=dtype )
+        if (self.FLOOD_OPTION):
+            self.flood_manning_n   = 0.15  ##########
+            self.vol_flood         = self.initialize_grid( 0, dtype=dtype)
+            self.flooded_cell_mask = self.initialize_grid( 0, dtype='bool')
+            self.n_flooded_cells   = 0
+            #-------------------------------------------------
+            self.Qf = self.initialize_grid( 0, dtype=dtype )
+            self.Qc = self.Q  # (2 names for same thing)
+                        
         #----------------------------------------
         # Initial volume of water in each pixel
         #-----------------------------------------------------------
@@ -1023,13 +1167,18 @@ class channels_component( BMI_base.BMI_component ):
         L3                = self.d_bankfull * np.tan(self.angle)
         Ac_bankfull       = self.d_bankfull * (self.width + L3)
         self.vol_bankfull = Ac_bankfull * self.d8.ds
-        
+        self.vol_flood = self.initialize_grid( 0, dtype=dtype) 
+        if not(self.SILENT):
+            print('Bankfull depth grid (read from file):')
+            print('  min(bankfull depth) =', self.d_bankfull.min() )
+            print('  max(bankfull depth) =', self.d_bankfull.max() )
+            print()            
         #-------------------------------------------------------        
         # Note: depth is often zero at the start of a run, and
         # both width and then P_wet are also zero in places.
         # Therefore initialize Rh as shown.
         #-------------------------------------------------------
-        self.Rh = self.initialize_grid( 0, dtype='float64' )
+        self.Rh = self.initialize_grid( 0, dtype=dtype )
         ## self.Rh = self.A_wet / self.P_wet   # [m]
         ## print 'P_wet.min() =', self.P_wet.min()
         ## print 'width.min() =', self.width.min()
@@ -1103,11 +1252,11 @@ class channels_component( BMI_base.BMI_component ):
         #---------------------------------------------------
         # Note:  Q_last is internal to TopoFlow.
         #---------------------------------------------------        
-        # self.Q_outlet = self.Q[ self.outlet_ID ]
-        self.Q_outlet = self.initialize_scalar(0, dtype='float64')
-        self.u_outlet = self.initialize_scalar(0, dtype='float64')
-        self.d_outlet = self.initialize_scalar(0, dtype='float64')
-        self.f_outlet = self.initialize_scalar(0, dtype='float64')
+        dtype = 'float64'
+        self.Q_outlet = self.initialize_scalar(0, dtype=dtype)
+        self.u_outlet = self.initialize_scalar(0, dtype=dtype)
+        self.d_outlet = self.initialize_scalar(0, dtype=dtype)
+        self.f_outlet = self.initialize_scalar(0, dtype=dtype)
           
     #   initialize_outlet_values()  
     #-------------------------------------------------------------------
@@ -1116,12 +1265,13 @@ class channels_component( BMI_base.BMI_component ):
         #-------------------------
         # Initialize peak values
         #-------------------------
-        self.Q_peak  = self.initialize_scalar(0, dtype='float64')
-        self.T_peak  = self.initialize_scalar(0, dtype='float64')
-        self.u_peak  = self.initialize_scalar(0, dtype='float64')
-        self.Tu_peak = self.initialize_scalar(0, dtype='float64') 
-        self.d_peak  = self.initialize_scalar(0, dtype='float64')
-        self.Td_peak = self.initialize_scalar(0, dtype='float64')
+        dtype = 'float64'
+        self.Q_peak  = self.initialize_scalar(0, dtype=dtype)
+        self.T_peak  = self.initialize_scalar(0, dtype=dtype)
+        self.u_peak  = self.initialize_scalar(0, dtype=dtype)
+        self.Tu_peak = self.initialize_scalar(0, dtype=dtype) 
+        self.d_peak  = self.initialize_scalar(0, dtype=dtype)
+        self.Td_peak = self.initialize_scalar(0, dtype=dtype)
 
     #   initialize_peak_values()
     #-------------------------------------------------------------------
@@ -1132,53 +1282,46 @@ class channels_component( BMI_base.BMI_component ):
         # (2/3/13), for new framework.
         #-------------------------------
         v = 1e6
-        self.Q_min = self.initialize_scalar(v,  dtype='float64')
-        self.Q_max = self.initialize_scalar(-v, dtype='float64')
-        self.u_min = self.initialize_scalar(v,  dtype='float64')
-        self.u_max = self.initialize_scalar(-v, dtype='float64')
-        self.d_min = self.initialize_scalar(v,  dtype='float64')
-        self.d_max = self.initialize_scalar(-v, dtype='float64')
+        dtype = 'float64'
+        self.Q_min = self.initialize_scalar(v,  dtype=dtype)
+        self.Q_max = self.initialize_scalar(-v, dtype=dtype)
+        self.u_min = self.initialize_scalar(v,  dtype=dtype)
+        self.u_max = self.initialize_scalar(-v, dtype=dtype)
+        self.d_min = self.initialize_scalar(v,  dtype=dtype)
+        self.d_max = self.initialize_scalar(-v, dtype=dtype)
 
     #   initialize_min_and_max_values() 
     #-------------------------------------------------------------------
-    def update_d8_vars(self):
+    def update_flood_d8_vars(self):
 
-        #---------------------------------------------------------    
-        # Note:  Use free-surface gradient of d_land to compute
-        #        flow to neighbors.  (209-09-17)
-        #---------------------------------------------------------
-        # Note:  self.d_land is used to compute self.Q.
-        #---------------------------------------------------------        
-        if (self.d_land.max() == 0):
+        #----------------------------------------------------------    
+        # Note:  Use free-surface gradient of d_flood to compute
+        #        flow to neighbors.  (2019-09-17)
+        #----------------------------------------------------------
+        # Note:  self.d8f is initialized in initialize_d8_vars().
+        #----------------------------------------------------------
+        if (self.n_flooded_cells == 0):
             return
 
         #-------------------------------------------------------- 
-        # Use (DEM + d_land) to compute a free-surface gradient
+        # Use (DEM + d_flood) to compute a free-surface gradient
         # and update all of the D8 vars.
         #--------------------------------------------------------        
-        z_free = (self.d8.DEM + self.d_land)
-        d8 = self.d8
-        d8.FILL_PITS_IN_Z0 = False
-        d8.LINK_FLATS      = False
-        #--------------------------------------------
-        d8.update_flow_grid( DEM=z_free )    ######
-        d8.update_parent_ID_grid()
-        d8.update_parent_IDs()     # (needed for gradients)
-        d8.update_flow_from_IDs()
-        d8.update_flow_to_IDs()
-        d8.update_noflow_IDs()  # (needed to fill depressions naturally)
-        d8.update_flow_width_grid()   # (dw)
-        d8.update_flow_length_grid()  # (ds)
-        ### d8.update_area_grid()
+        z_free = (self.d8.DEM + self.d_flood)
+        #---------------------------------------
+        self.d8f.update_flow_grid( DEM=z_free )    ######
+        self.d8f.update_parent_ID_grid()
+        self.d8f.update_parent_IDs()     # (needed for gradients)
+        self.d8f.update_flow_from_IDs()
+        self.d8f.update_flow_to_IDs()
+        self.d8f.update_noflow_IDs()  # (needed to fill depressions naturally)
+        self.d8f.update_flow_width_grid()   # (dw)
+        self.d8f.update_flow_length_grid()  # (ds)
+        ### self.d8f.update_area_grid()
         #----------------------------------------
-        # d8.d8_grid gives the D8 flow codes
-
-        #------------------------        
-        # Replace the d8 object
-        #------------------------
-        self.d8 = d8    
+        # self.d8f.d8_grid gives the D8 flow codes 
     
-    #   update_d8_vars()
+    #   update_flood_d8_vars()
     #-------------------------------------------------------------------
     # def update_excess_rainrate(self):
     def update_R(self):
@@ -1215,15 +1358,21 @@ class channels_component( BMI_base.BMI_component ):
 
         #--------------
         # For testing
-        #--------------        
-##        print '(Pmin,  Pmax)  =', P.min(),  P.max()
-##        print '(SMmin, SMmax) =', SM.min(), SM.max()
-##        print '(GWmin, GWmax) =', GW.min(), GW.max()
-##        print '(ETmin, ETmax) =', ET.min(), ET.max()
-##        print '(INmin, INmax) =', IN.min(), IN.max()
-##        print '(MRmin, MRmax) =', MR.min(), MR.max()
-##        # print '(Hmin,  Hmax)  =', H.min(), H.max()
-##        print ' '
+        #-------------- 
+#         print('type(P)  =', type(P))
+#         print('type(SM) =', type(SM))
+#         print('type(GW) =', type(GW))
+#         print('type(ET) =', type(ET))
+#         print('type(IN) =', type(IN))
+#         print('type(MR) =', type(MR))
+     
+#         print( '(Pmin,  Pmax)  = ' + str(P.min())  + ', ' + str(P.max()) )
+#         print( '(SMmin, SMmax) = ' + str(SM.min()) + ', ' + str(SM.max()) )
+#         print( '(GWmin, GWmax) = ' + str(GW.min()) + ', ' + str(GW.max()) )
+#         print( '(ETmin, ETmax) = ' + str(ET.min()) + ', ' + str(ET.max()) )
+#         print( '(INmin, INmax) = ' + str(IN.min()) + ', ' + str(IN.max()) )
+#         print( '(MRmin, MRmax) = ' + str(MR.min()) + ', ' + str(MR.max()) )
+#         print( ' ' )
         
         self.R = (P + SM + GW + MR) - (ET + IN)
             
@@ -1233,7 +1382,11 @@ class channels_component( BMI_base.BMI_component ):
 
         #-----------------------------------------------
         # Update mass total for R, sum over all pixels
-        #-----------------------------------------------   
+        #---------------------------------------------------------------
+        # Note:  Typically, chan_dt < met_dt, so that vol_R is updated
+        # more frequently than vol_P.  Since EMELI performs linear
+        # interpolation in time, integrals may be slightly different.
+        #---------------------------------------------------------------  
         volume = np.double(self.R * self.da * self.dt)  # [m^3]
         if (np.size(volume) == 1):
             self.vol_R += (volume * self.rti.n_pixels)
@@ -1241,6 +1394,83 @@ class channels_component( BMI_base.BMI_component ):
             self.vol_R += np.sum(volume)
 
     #   update_R_integral()           
+    #-------------------------------------------------------------------  
+#     def update_channel_discharge(self):
+# 
+#         #---------------------------------------------------------
+#         # The discharge grid, Q, gives the flux of water _out_
+#         # of each grid cell.  This entire amount then flows
+#         # into one of the 8 neighbor grid cells, as indicated
+#         # by the D8 flow code. The update_flow_volume() function
+#         # is called right after this one in update() and uses
+#         # the Q grid.
+#         #---------------------------------------------------------
+#         # 7/15/05.  The cross-sectional area of a trapezoid is
+#         # given by:    Ac = d * (w + (d * tan(theta))),
+#         # where w is the bottom width.  If we were to
+#         # use: Ac = w * d, then we'd have Ac=0 when w=0.
+#         # We also need angle units to be radians.
+#         #---------------------------------------------------------
+#   
+#         #-----------------------------
+#         # Compute the discharge grid
+#         #------------------------------------------------------ 
+#         # A_wet is initialized in initialize_computed_vars().
+#         # A_wet is updated in update_trapezoid_Rh().
+#         #------------------------------------------------------     
+#         self.Qc[:] = self.u * self.A_wet   ## (2/19/13, in place)
+# 
+#         #--------------
+#         # For testing
+#         #--------------  
+# ##        print '(umin,   umax)  =', self.u.min(), self.u.max()
+# ##        print '(d0min, d0max)  =', self.d0.min(), self.d0.max()
+# ##        print '(dmin,   dmax)  =', self.d.min(), self.d.max()
+# ##        print '(amin,   amax)  =', self.angle.min(), self.angle.max()
+# ##        print '(wmin,   wmax)  =', self.width.min(), self.width.max()
+# ##        print '(Qmin,   Qmax)  =', self.Q.min(),  self.Q.max()
+# ##        print '(L2min,  L2max) =', L2.min(), L2.max()
+# ##        print '(Qmin,   Qmax)  =', self.Q.min(),  self.Q.max()
+#         # print ' '        
+#         # print 'u(outlet) =', self.u[self.outlet_ID]
+#         # print 'Q(outlet) =', self.Q[self.outlet_ID]  ########
+#           
+#         #----------------------------------------------------
+#         # Wherever depth is less than z0, assume that water
+#         # is not flowing and set u and Q to zero.
+#         # However, we also need (d gt 0) to avoid a divide
+#         # by zero problem, even when numerators are zero.
+#         #----------------------------------------------------
+#         # FLOWING = (d > (z0/aval))
+#         #*** FLOWING[self.d8.noflow_IDs] = False    ;******
+#         # u = (u * FLOWING)
+#         # Q = (Q * FLOWING)
+#         # d = np.maximum(d, 0.0)    ;(allow depths lt z0, if gt 0.)
+# 
+#     #   update_channel_discharge()
+#     #-------------------------------------------------------------------  
+#     def update_flood_discharge(self):
+#  
+#         ### if not(self.FLOODING):
+#         ###    return
+#            
+#         #------------------------------------------
+#         # Find grid cells with & without flooding
+#         #------------------------------------------
+#         w1 = (self.d_flood > 0)  # (array of True or False)
+#         w2 = np.invert( w1 )
+# 
+#         #---------------------------------------------------
+#         # (2019-09-16)  Add discharge due to overbank flow
+#         # See manning_formula() function in this file.
+#         #---------------------------------------------------
+#         uf = (self.u / 5.0)
+#         Af = (self.d8f.dw * self.d_flood)       ###### CHECK dw
+# 
+#         self.Qf[ w1 ] = uf[ w1 ] * Af[ w1 ]  # (in place)   
+#         self.Qf[ w2 ] = 0.0
+# 
+#     #   update_flood_discharge()
     #-------------------------------------------------------------------  
     def update_discharge(self):
 
@@ -1258,57 +1488,31 @@ class channels_component( BMI_base.BMI_component ):
         # use: Ac = w * d, then we'd have Ac=0 when w=0.
         # We also need angle units to be radians.
         #---------------------------------------------------------
-
-        #--------------------------------------------
-        # Find grid cells without and with flooding
-        #--------------------------------------------
-        w1 = (self.d_land == 0)  # (array of True or False)
-        w2 = np.invert( w1 )
-        
+  
         #-----------------------------
         # Compute the discharge grid
         #------------------------------------------------------ 
         # A_wet is initialized in initialize_computed_vars().
         # A_wet is updated in update_trapezoid_Rh().
         #------------------------------------------------------     
-        ### self.Q = np.float64(self.u * A_wet)
-        # self.Q[:] = self.u * self.A_wet   ## (2/19/13, in place)
-        self.Q[ w1 ] = self.u[ w1 ]* self.A_wet[ w1 ]   ## (9/17/19)
-                
-        #---------------------------------------------------
-        # (2019-09-16)  Add discharge due to overbank flow
-        # See manning_formula() function in this file.
-        #---------------------------------------------------
-        u2 = (self.u / 5.0)
-        A2 = (self.d8.dw * self.d_land)       ###### CHECK dw
-        ## A2 = (self.d8_flood.dw * self.d_land )
-        # self.Q +=  u2 * A2    # (in place)
-        self.Q[ w2 ] = u2[ w2 ] * A2[ w2 ]
-        # If flow direction remains the same, this is more accurate.
-        # self.Q[ w2 ] += self.u[ w2 ]* self.A_wet[ w2 ]
+        self.Q[:] = self.u * self.A_wet   ## (2/19/13, in place)
 
         #--------------
         # For testing
         #--------------  
-##        print '(umin,   umax)  =', self.u.min(), self.u.max()
-##        print '(d0min, d0max)  =', self.d0.min(), self.d0.max()
-##        print '(dmin,   dmax)  =', self.d.min(), self.d.max()
-##        print '(amin,   amax)  =', self.angle.min(), self.angle.max()
-##        print '(wmin,   wmax)  =', self.width.min(), self.width.max()
-##        print '(Qmin,   Qmax)  =', self.Q.min(),  self.Q.max()
-##        print '(L2min,  L2max) =', L2.min(), L2.max()
-##        print '(Qmin,   Qmax)  =', self.Q.min(),  self.Q.max()
-     
-        #--------------
-        # For testing
-        #--------------
-        # print 'dmin, dmax =', self.d.min(), self.d.max()
-        # print 'umin, umax =', self.u.min(), self.u.max()
-        # print 'Qmin, Qmax =', self.Q.min(), self.Q.max()
-        # print ' '        
-        # print 'u(outlet) =', self.u[self.outlet_ID]
-        # print 'Q(outlet) =', self.Q[self.outlet_ID]  ########
-          
+#         print '(umin,   umax)  =', self.u.min(), self.u.max()
+#         print '(d0min, d0max)  =', self.d0.min(), self.d0.max()
+#         print '(dmin,   dmax)  =', self.d.min(), self.d.max()
+#         print '(amin,   amax)  =', self.angle.min(), self.angle.max()
+#         print '(wmin,   wmax)  =', self.width.min(), self.width.max()
+#         print '(Qmin,   Qmax)  =', self.Q.min(),  self.Q.max()
+#         print '(L2min,  L2max) =', L2.min(), L2.max()
+#         print '(Qmin,   Qmax)  =', self.Q.min(),  self.Q.max()       
+#         print 'u(outlet) =', self.u[self.outlet_ID]
+#         print 'Q(outlet) =', self.Q[self.outlet_ID]
+
+        #---------------------------------------------         
+        # Idea for use with log law flow resistance.
         #----------------------------------------------------
         # Wherever depth is less than z0, assume that water
         # is not flowing and set u and Q to zero.
@@ -1437,6 +1641,15 @@ class channels_component( BMI_base.BMI_component ):
         # Note that R is allowed to be negative.
         #----------------------------------------------------        
         self.vol += (self.R * self.da) * dt   # (in place)
+
+        #--------------------------------------------        
+        # Use dynamic, free-surface D8 or topo D8 ?
+        # Here, d8 is just a synonym, not a copy.
+        #--------------------------------------------
+        if (self.FLOOD_OPTION) and (self.n_flooded_cells > 0):
+            d8 = self.d8f
+        else:
+            d8 = self.d8
     
         #-----------------------------------------
         # Add contributions from neighbor pixels
@@ -1444,32 +1657,49 @@ class channels_component( BMI_base.BMI_component ):
         # Each grid cell passes flow to *one* downstream neighbor.
         # Note that multiple grid cells can flow toward a given grid
         # cell, so a grid cell ID may occur in d8.p1 and d8.p2, etc.
-        #-------------------------------------------------------------
-        # (2/16/10)  RETEST THIS.  Before, a copy called "v2" was
-        # used but this doesn't seem to be necessary.
-        #-------------------------------------------------------------        
-        if (self.d8.p1_OK):    
-            self.vol[ self.d8.p1 ] += (dt * self.Q[self.d8.w1])
-        if (self.d8.p2_OK):    
-            self.vol[ self.d8.p2 ] += (dt * self.Q[self.d8.w2])
-        if (self.d8.p3_OK):    
-            self.vol[ self.d8.p3 ] += (dt * self.Q[self.d8.w3])
-        if (self.d8.p4_OK):    
-            self.vol[ self.d8.p4 ] += (dt * self.Q[self.d8.w4])
-        if (self.d8.p5_OK):    
-            self.vol[ self.d8.p5 ] += (dt * self.Q[self.d8.w5])
-        if (self.d8.p6_OK):    
-            self.vol[ self.d8.p6 ] += (dt * self.Q[self.d8.w6])
-        if (self.d8.p7_OK):    
-            self.vol[ self.d8.p7 ] += (dt * self.Q[self.d8.w7])
-        if (self.d8.p8_OK):    
-            self.vol[ self.d8.p8 ] += (dt * self.Q[self.d8.w8])
+        #-------------------------------------------------------------              
+        if (d8.p1_OK):    
+            self.vol[ d8.p1 ] += (dt * self.Q[d8.w1])
+        if (d8.p2_OK):    
+            self.vol[ d8.p2 ] += (dt * self.Q[d8.w2])
+        if (d8.p3_OK):    
+            self.vol[ d8.p3 ] += (dt * self.Q[d8.w3])
+        if (d8.p4_OK):    
+            self.vol[ d8.p4 ] += (dt * self.Q[d8.w4])
+        if (d8.p5_OK):    
+            self.vol[ d8.p5 ] += (dt * self.Q[d8.w5])
+        if (d8.p6_OK):    
+            self.vol[ d8.p6 ] += (dt * self.Q[d8.w6])
+        if (d8.p7_OK):
+            self.vol[ d8.p7 ] += (dt * self.Q[d8.w7])
+        if (d8.p8_OK):    
+            self.vol[ d8.p8 ] += (dt * self.Q[d8.w8])
+
+        ################################################
+        # IDEA:  Separate Qc and Qf again.
+        #        Use d8f to add volume to cells here.
+        ################################################
 
         #----------------------------------------------------
         # Subtract the amount that flows out to D8 neighbor
         #----------------------------------------------------
         self.vol -= (self.Q * dt)  # (in place)
-   
+
+        #-----------------------------------------        
+        # Update vol_flood and flooded_cell_mask
+        #-----------------------------------------
+        if (self.FLOOD_OPTION):
+            w1 = (self.vol > self.vol_bankfull)    # (boolean array)
+            n1 = w1.sum()   
+            if (n1 > 0):
+                #-----------------------------------------       
+                # Extra water volume, outside of channel
+                #-----------------------------------------
+                self.vol_flood[:] = self.vol - self.vol_bankfull
+                self.vol_flood[ np.invert(w1) ] = 0.0
+            self.flooded_cell_mask[:] = w1   # (boolean array)
+            self.n_flooded_cells      = n1
+
         #--------------------------------------------------------
         # While R can be positive or negative, the surface flow
         # volume must always be nonnegative. This also ensures
@@ -1481,155 +1711,220 @@ class channels_component( BMI_base.BMI_component ):
         
     #   update_flow_volume
     #-------------------------------------------------------------------
-    def update_flow_depth_LAST(self):
-
-        #-----------------------------------------------------------
-        # Notes: 7/18/05.  Modified to use the equation for volume
-        #        of a trapezoidal channel:  vol = Ac * ds, where
-        #        Ac=d*[w + d*tan(t)], and to solve the resulting
-        #        quadratic (discarding neg. root) for new depth, d.
-
-        #        8/29/05.  Now original ds is used for subsurface
-        #        flow and there is a ds_chan which can include a
-        #        sinuosity greater than 1.  This may be especially
-        #        important for larger pixel sizes.
-
-        #        Removed (ds > 1) here which was only meant to
-        #        avoid a "divide by zero" error at pixels where
-        #        (ds eq 0).  This isn't necessary since the
-        #        Flow_Lengths function in utils_TF.pro never
-        #        returns a value of zero.
-        #----------------------------------------------------------
-        #        Modified to avoid double where calls, which
-        #        reduced cProfile run time for this method from
-        #        1.391 to 0.644.  (9/23/14)
-        #----------------------------------------------------------
-        # Commented this out on (2/18/10) because it doesn't
-        #           seem to be used anywhere now.  Checked all
-        #           of the Channels components.
-        #----------------------------------------------------------        
-        # self.d_last = self.d.copy()
-
-        #-----------------------------------        
-        # Make some local aliases and vars
-        #-----------------------------------------------------------
-        # Note: angles were read as degrees & converted to radians
-        #-----------------------------------------------------------
-        d = self.d
-        d_land = self.d_land      ##### (2019-09-16)
-        width  = self.width  ###
-        angle  = self.angle
-        SCALAR_ANGLES = (np.size(angle) == 1)
-        
-        #------------------------------------------------------
-        # (2/18/10) New code to deal with case where the flow
-        #           depth exceeds a bankfull depth.
-        #           For now, d_bankfull is hard-coded.
-        #
-        #           CHANGE Manning's n here, too?
-        #------------------------------------------------------
-        d_bankfull = 4.0  # [meters]
-        ################################
-        wb = (self.d > d_bankfull)  # (array of True or False)
-        self.width[ wb ]  = self.d8.dw[ wb ]
-        if not(SCALAR_ANGLES):
-            self.angle[ wb ] = 0.0
-
-#         w_overbank = np.where( d > d_bankfull )
-#         n_overbank = np.size( w_overbank[0] )
-#         if (n_overbank != 0):
-#             width[ w_overbank ] = self.d8.dw[ w_overbank ]
-#             if not(SCALAR_ANGLES): angle[w_overbank] = 0.0
-
-        #------------------------------------------------------
-        # (2/18/10) New code to deal with case where the top
-        #           width exceeds the grid cell width, dw.
-        #------------------------------------------------------            
-        top_width = width + (2.0 * d * np.sin(self.angle))
-        wb = (top_width > self.d8.dw)  # (array of True or False)
-        self.width[ wb ] = self.d8.dw[ wb ]
-        if not(SCALAR_ANGLES):
-            self.angle[ wb ] = 0.0
-
-#         wb = np.where(top_width > self.d8.dw)
-#         nb = np.size(w_bad[0])
-#         if (nb != 0):
-#             width[ wb ] = self.d8.dw[ wb ]
-#             if not(SCALAR_ANGLES): angle[ wb ] = 0.0
-        
-        #----------------------------------
-        # Is "angle" a scalar or a grid ?
-        #----------------------------------
-        if (SCALAR_ANGLES):
-            if (angle == 0.0):    
-                d = self.vol / (width * self.d8.ds)
-            else:
-                denom = 2.0 * np.tan(angle)
-                arg   = 2.0 * denom * self.vol / self.d8.ds
-                arg  += width**(2.0)
-                d     = (np.sqrt(arg) - width) / denom
-        else:
-            #-----------------------------------------------------
-            # Pixels where angle is 0 must be handled separately
-            #-----------------------------------------------------
-            w1 = ( angle == 0 )  # (arrays of True or False)
-            w2 = np.invert( w1 )
-            #-----------------------------------
-            A_top = width[w1] * self.d8.ds[w1]    
-            d[w1] = self.vol[w1] / A_top
-            #-----------------------------------               
-            denom  = 2.0 * np.tan(angle[w2])
-            arg    = 2.0 * denom * self.vol[w2] / self.d8.ds[w2]
-            arg   += width[w2]**(2.0)
-            d[w2] = (np.sqrt(arg) - width[w2]) / denom
-        
-            #-----------------------------------------------------
-            # Pixels where angle is 0 must be handled separately
-            #-----------------------------------------------------
-#             wz   = np.where( angle == 0 )
-#             nwz  = np.size( wz[0] )
-#             wzc  = np.where( angle != 0 )
-#             nwzc = np.size( wzc[0] )
-#             
-#             if (nwz != 0):
-#                 A_top = width[wz] * self.d8.ds[wz]
-#                 ## A_top = self.width[wz] * self.d8.ds_chan[wz]            
-#                 d[wz] = self.vol[wz] / A_top
-#             
-#             if (nwzc != 0):    
-#                 term1  = 2.0 * np.tan(angle[wzc])
-#                 arg    = 2.0 * term1 * self.vol[wzc] / self.d8.ds[wzc]
-#                 arg   += width[wzc]**(2.0)
-#                 d[wzc] = (np.sqrt(arg) - width[wzc]) / term1
-
-        #------------------------------------------
-        # Set depth values on edges to zero since
-        # they become spikes (no outflow) 7/15/06
-        #------------------------------------------   
-        d[ self.d8.noflow_IDs ] = 0.0
-
-        #------------------------------------------------
-        # 4/19/06.  Force flow depth to be positive ?
-        #------------------------------------------------
-        # This seems to be needed with the non-Richards
-        # infiltration routines when starting with zero
-        # depth everywhere, since all water infiltrates
-        # for some period of time.  It also seems to be
-        # needed more for short rainfall records to
-        # avoid a negative flow depth error.
-        #------------------------------------------------
-        # 7/13/06.  Still needed for Richards method
-        #------------------------------------------------
-        ## self.d = np.maximum(d, 0.0)
-        np.maximum(d, 0.0, self.d)  # (2/19/13, in place)
-
-        #-------------------------------------------------        
-        # Find where d <= 0 and save for later (9/23/14)
-        #-------------------------------------------------
-        self.d_is_pos = (self.d > 0)
-        self.d_is_neg = np.invert( self.d_is_pos )
-        
-    #   update_flow_depth_LAST
+#     def update_flood_volume(self):
+# 
+#         ### if not(self.FLOODING):
+#         ###   return
+# 
+#         dt = self.dt  # [seconds]
+# 
+#         #---------------------------------------------------------
+#         # Excess water volume from overbank flow acts as a source
+#         # of water in the cell, that adds to whatever volume of
+#         # water is already there.  Channel volume at bankfull,
+#         # called vol_bankfull, is computed in initialize().       
+#         # D8 child cells with a higher free-surface may add to
+#         # the amount in a cell, and this total is reduced by
+#         # whatever amount flows to the D8 parent cell.
+#         #----------------------------------------------------------
+#         dvol = (self.vol - self.vol_bankfull)
+#         self.vol_flood += np.maximum(dvol, 0.0)
+#         ### np.maximum( dvol, 0.0, self.vol_flood)  # (in place)
+# 
+#         #--------------------------------------------------------------
+#         # Wherever vol > vol_bankfull, the channel volume computed
+#         # by update_flow_volume() is wrong and should instead be
+#         # the bankfull volume. Extra water volume is put into d_flood.
+#         #--------------------------------------------------------------
+#         np.minimum(self.vol, self.vol_bankfull, self.vol )  # (in place)
+#         
+#         #-----------------------------------------
+#         # Add contributions from neighbor pixels
+#         #-------------------------------------------------------------
+#         # Each grid cell passes flow to *one* downstream neighbor.
+#         # Note that multiple grid cells can flow toward a given grid
+#         # cell, so a grid cell ID may occur in d8.p1 and d8.p2, etc.
+#         #-------------------------------------------------------------       
+#         if (self.d8f.p1_OK):    
+#             self.vol_flood[ self.d8f.p1 ] += (dt * self.Qf[self.d8f.w1])
+#         if (self.d8f.p2_OK):    
+#             self.vol_flood[ self.d8f.p2 ] += (dt * self.Qf[self.d8f.w2])
+#         if (self.d8f.p3_OK):    
+#             self.vol_flood[ self.d8f.p3 ] += (dt * self.Qf[self.d8f.w3])
+#         if (self.d8f.p4_OK):    
+#             self.vol_flood[ self.d8f.p4 ] += (dt * self.Qf[self.d8f.w4])
+#         if (self.d8f.p5_OK):    
+#             self.vol_flood[ self.d8f.p5 ] += (dt * self.Qf[self.d8f.w5])
+#         if (self.d8f.p6_OK):    
+#             self.vol_flood[ self.d8f.p6 ] += (dt * self.Qf[self.d8f.w6])
+#         if (self.d8f.p7_OK):    
+#             self.vol_flood[ self.d8f.p7 ] += (dt * self.Qf[self.d8f.w7])
+#         if (self.d8f.p8_OK):    
+#             self.vol_flood[ self.d8f.p8 ] += (dt * self.Qf[self.d8f.w8])
+# 
+#         #----------------------------------------------------
+#         # Subtract the amount that flows out to D8 neighbor
+#         #----------------------------------------------------
+#         self.vol_flood -= (self.Qf * dt)  # (in place)
+#    
+#         #--------------------------------------------------------
+#         # While R can be positive or negative, the surface flow
+#         # volume must always be nonnegative. This also ensures
+#         # that the flow depth is nonnegative.  (7/13/06)
+#         #--------------------------------------------------------
+#         np.maximum( self.vol_flood, 0.0, self.vol_flood )   # (in place)
+#  
+#     #   update_flood_volume()
+    #-------------------------------------------------------------------
+#     def update_flow_depth_LAST(self):
+# 
+#         #-----------------------------------------------------------
+#         # Notes: 7/18/05.  Modified to use the equation for volume
+#         #        of a trapezoidal channel:  vol = Ac * ds, where
+#         #        Ac=d*[w + d*tan(t)], and to solve the resulting
+#         #        quadratic (discarding neg. root) for new depth, d.
+# 
+#         #        8/29/05.  Now original ds is used for subsurface
+#         #        flow and there is a ds_chan which can include a
+#         #        sinuosity greater than 1.  This may be especially
+#         #        important for larger pixel sizes.
+# 
+#         #        Removed (ds > 1) here which was only meant to
+#         #        avoid a "divide by zero" error at pixels where
+#         #        (ds eq 0).  This isn't necessary since the
+#         #        Flow_Lengths function in utils_TF.pro never
+#         #        returns a value of zero.
+#         #----------------------------------------------------------
+#         #        Modified to avoid double where calls, which
+#         #        reduced cProfile run time for this method from
+#         #        1.391 to 0.644.  (9/23/14)
+#         #----------------------------------------------------------
+#         # Commented this out on (2/18/10) because it doesn't
+#         #           seem to be used anywhere now.  Checked all
+#         #           of the Channels components.
+#         #----------------------------------------------------------        
+#         # self.d_last = self.d.copy()
+# 
+#         #-----------------------------------        
+#         # Make some local aliases and vars
+#         #-----------------------------------------------------------
+#         # Note: angles were read as degrees & converted to radians
+#         #-----------------------------------------------------------
+#         d = self.d
+#         d_flood = self.d_flood      ##### (2019-09-16)
+#         width   = self.width  ###
+#         angle   = self.angle
+#         SCALAR_ANGLES = (np.size(angle) == 1)
+#         
+#         #------------------------------------------------------
+#         # (2/18/10) New code to deal with case where the flow
+#         #           depth exceeds a bankfull depth.
+#         #           For now, d_bankfull is hard-coded.
+#         #
+#         #           CHANGE Manning's n here, too?
+#         #------------------------------------------------------
+#         d_bankfull = 4.0  # [meters]
+#         ################################
+#         wb = (self.d > d_bankfull)  # (array of True or False)
+#         self.width[ wb ]  = self.d8.dw[ wb ]
+#         if not(SCALAR_ANGLES):
+#             self.angle[ wb ] = 0.0
+# 
+# #         w_overbank = np.where( d > d_bankfull )
+# #         n_overbank = np.size( w_overbank[0] )
+# #         if (n_overbank != 0):
+# #             width[ w_overbank ] = self.d8.dw[ w_overbank ]
+# #             if not(SCALAR_ANGLES): angle[w_overbank] = 0.0
+# 
+#         #------------------------------------------------------
+#         # (2/18/10) New code to deal with case where the top
+#         #           width exceeds the grid cell width, dw.
+#         #------------------------------------------------------            
+#         top_width = width + (2.0 * d * np.sin(self.angle))
+#         wb = (top_width > self.d8.dw)  # (array of True or False)
+#         self.width[ wb ] = self.d8.dw[ wb ]
+#         if not(SCALAR_ANGLES):
+#             self.angle[ wb ] = 0.0
+# 
+# #         wb = np.where(top_width > self.d8.dw)
+# #         nb = np.size(w_bad[0])
+# #         if (nb != 0):
+# #             width[ wb ] = self.d8.dw[ wb ]
+# #             if not(SCALAR_ANGLES): angle[ wb ] = 0.0
+#         
+#         #----------------------------------
+#         # Is "angle" a scalar or a grid ?
+#         #----------------------------------
+#         if (SCALAR_ANGLES):
+#             if (angle == 0.0):    
+#                 d = self.vol / (width * self.d8.ds)
+#             else:
+#                 denom = 2.0 * np.tan(angle)
+#                 arg   = 2.0 * denom * self.vol / self.d8.ds
+#                 arg  += width**(2.0)
+#                 d     = (np.sqrt(arg) - width) / denom
+#         else:
+#             #-----------------------------------------------------
+#             # Pixels where angle is 0 must be handled separately
+#             #-----------------------------------------------------
+#             w1 = ( angle == 0 )  # (arrays of True or False)
+#             w2 = np.invert( w1 )
+#             #-----------------------------------
+#             A_top = width[w1] * self.d8.ds[w1]    
+#             d[w1] = self.vol[w1] / A_top
+#             #-----------------------------------               
+#             denom  = 2.0 * np.tan(angle[w2])
+#             arg    = 2.0 * denom * self.vol[w2] / self.d8.ds[w2]
+#             arg   += width[w2]**(2.0)
+#             d[w2] = (np.sqrt(arg) - width[w2]) / denom
+#         
+#             #-----------------------------------------------------
+#             # Pixels where angle is 0 must be handled separately
+#             #-----------------------------------------------------
+# #             wz   = np.where( angle == 0 )
+# #             nwz  = np.size( wz[0] )
+# #             wzc  = np.where( angle != 0 )
+# #             nwzc = np.size( wzc[0] )
+# #             
+# #             if (nwz != 0):
+# #                 A_top = width[wz] * self.d8.ds[wz]
+# #                 ## A_top = self.width[wz] * self.d8.ds_chan[wz]            
+# #                 d[wz] = self.vol[wz] / A_top
+# #             
+# #             if (nwzc != 0):    
+# #                 term1  = 2.0 * np.tan(angle[wzc])
+# #                 arg    = 2.0 * term1 * self.vol[wzc] / self.d8.ds[wzc]
+# #                 arg   += width[wzc]**(2.0)
+# #                 d[wzc] = (np.sqrt(arg) - width[wzc]) / term1
+# 
+#         #------------------------------------------
+#         # Set depth values on edges to zero since
+#         # they become spikes (no outflow) 7/15/06
+#         #------------------------------------------   
+#         d[ self.d8.noflow_IDs ] = 0.0
+# 
+#         #------------------------------------------------
+#         # 4/19/06.  Force flow depth to be positive ?
+#         #------------------------------------------------
+#         # This seems to be needed with the non-Richards
+#         # infiltration routines when starting with zero
+#         # depth everywhere, since all water infiltrates
+#         # for some period of time.  It also seems to be
+#         # needed more for short rainfall records to
+#         # avoid a negative flow depth error.
+#         #------------------------------------------------
+#         # 7/13/06.  Still needed for Richards method
+#         #------------------------------------------------
+#         ## self.d = np.maximum(d, 0.0)
+#         np.maximum(d, 0.0, self.d)  # (2/19/13, in place)
+# 
+#         #-------------------------------------------------        
+#         # Find where d <= 0 and save for later (9/23/14)
+#         #-------------------------------------------------
+#         self.d_is_pos = (self.d > 0)
+#         self.d_is_neg = np.invert( self.d_is_pos )
+#         
+#     #   update_flow_depth_LAST
     #-------------------------------------------------------------------
     def update_flow_depth(self):
 
@@ -1658,11 +1953,6 @@ class channels_component( BMI_base.BMI_component ):
         #        reduced cProfile run time for this method from
         #        1.391 to 0.644.  (9/23/14)
         #----------------------------------------------------------
-        # Commented this out on (2/18/10) because it doesn't
-        #           seem to be used anywhere now.  Checked all
-        #           of the Channels components.
-        #----------------------------------------------------------        
-        # self.d_last = self.d.copy()
 
         #-----------------------------------        
         # Make some local aliases and vars
@@ -1670,47 +1960,10 @@ class channels_component( BMI_base.BMI_component ):
         # Note: angles were read as degrees & converted to radians
         #-----------------------------------------------------------
         d      = self.d
-        d_land = self.d_land       ### (2019-09-16)
         width  = self.width  ###
         angle  = self.angle
         SCALAR_ANGLES = (np.size(angle) == 1)  
-        SCALAR_DA     = (np.size(self.d8.da) == 1)
-
-        #----------------------------------------------------------
-        # (2019-09-16)  Compute the overbank/flooding depth.       
-        # Channel volume at bankfull is computed in initialize().
-        #----------------------------------------------------------
-        # Remember that "width" is the trapezoid bottom width.
-        # In addition, w_bankfull is not used here, but:
-        #    w_bankfull = width + (2 * d_bankfull * tan(angle))
-        #    width = w_bankfull - (2 * d_bankfull * tan(angle))
-        # If we know any 3 of these 4 vars, we can compute the
-        # 4th one. So assume d_bankfull, angle & width are known.
-        # HOWEVER, values of w_bankfull found by remote sensing
-        # may be more accurate than values of d_bankfull.
-        #----------------------------------------------------------        
-        vol_bankfull = self.vol_bankfull
-        dvol         = (self.vol - vol_bankfull)
-        wb1 = (dvol > 0)  # (array of True or False)
-        wb2 = np.invert( wb1 )
-        if (SCALAR_DA):
-            d_land[ wb1 ] = dvol[ wb1] / self.d8.da
-        else:
-            d_land[ wb1 ] = dvol[ wb1] / self.d8.da[ wb1 ]
-        d_land[ wb2 ] = 0.0
-        #-------------------------------------------
-        # Set depth values on edges to zero since
-        # otherwise they become spikes (no outflow)
-        #-----------------------------------------------------------
-        # NB!  This destroys mass, and will have a small effect on
-        # mass balance calculations.  Since flooding uses the
-        # free-surface gradient (DEM + d_land), we should not
-        # set it to zero at interior noflow_IDs.
-        #-----------------------------------------------------------
-        ## d_land[ self.d8.noflow_IDs ] = 0.0     
-        d_land[ self.d8.edge_IDs ] = 0.0      
-        self.d_land[:] = d_land   # write in place
-
+       
         #-----------------------------------------------        
         # Now compute the water depth in the channels.
         #-----------------------------------------------
@@ -1724,6 +1977,16 @@ class channels_component( BMI_base.BMI_component ):
                 arg   = 2.0 * denom * self.vol / self.d8.ds
                 arg  += width**(2.0)
                 d     = (np.sqrt(arg) - width) / denom
+                
+                # For debugging
+#                 print('angle       = ' + str(angle) )
+#                 print('denom.min() = ' + str(denom.min()) ) 
+#                 print('denom.max() = ' + str(denom.max()) ) 
+#                 print('ds.min()    = ' + str(self.d8.ds.min()) ) 
+#                 print('ds.max()    = ' + str(self.d8.ds.max()) )                
+#                 print('arg.min()   = ' + str(arg.min()) )
+#                 print('arg.max()   = ' + str(arg.max()) )
+#                 d     = (np.sqrt(arg) - width) / denom
         else:
             #-----------------------------------------------------
             # Pixels where angle is 0 must be handled separately
@@ -1739,12 +2002,15 @@ class channels_component( BMI_base.BMI_component ):
             arg   += width[w2]**(2.0)
             d[w2] = (np.sqrt(arg) - width[w2]) / denom
 
-        #------------------------------------------------------------
-        # Wherever vol > vol_bankfull, the flow depth just computed
-        # is wrong and should instead be the bankfull depth.
-        # Extra water volume has already been put into d_land.
-        #------------------------------------------------------------
-        d[ wb1 ] = self.d_bankfull[ wb1 ]
+        #---------------------------------------------
+        # Determine where overbank flow is occurring
+        # self.d is just the channel flow depth.
+        #---------------------------------------------
+        # It's okay if w1 is all False
+        #--------------------------------
+        if (self.FLOOD_OPTION):
+            w1 = self.flooded_cell_mask    # (boolean array)
+            d[ w1 ] = self.d_bankfull[ w1 ]   #############
 
         #------------------------------------------
         # Set depth values on edges to zero since
@@ -1752,12 +2018,12 @@ class channels_component( BMI_base.BMI_component ):
         #-----------------------------------------------------------
         # NB!  This destroys mass, and will have a small effect on
         # mass balance calculations.  Since flooding now uses the
-        # free-surface gradient (DEM + d_land), we should not
+        # free-surface gradient (DEM + d_flood), we should not
         # set it to zero at interior noflow_IDs.
         #----------------------------------------------------------- 
-        ## d[ self.d8.noflow_IDs ] = 0.0
-        d[ self.d8.edge_IDs ] = 0.0
-        
+        d[ self.d8.noflow_IDs ] = 0.0  # (was needed for Baro)
+        ## d[ self.d8.edge_IDs ] = 0.0
+
         #------------------------------------------------
         # 4/19/06.  Force flow depth to be positive ?
         #------------------------------------------------
@@ -1783,8 +2049,52 @@ class channels_component( BMI_base.BMI_component ):
     #-------------------------------------------------------------------
     def update_flood_depth(self):
 
-        # We may not need this.
-        dum = 0
+        ### This is done in self.update().
+        ### if not(self.FLOOD_OPTION):
+        ###     return
+
+        #----------------------------------------------------------
+        # (2019-09-16)  Compute the overbank/flooding depth.       
+        # Channel volume at bankfull is computed in initialize().
+        #----------------------------------------------------------
+        # Remember that "width" is the trapezoid bottom width.
+        # In addition, w_bankfull is not used here, but:
+        #    w_bankfull = width + (2 * d_bankfull * tan(angle))
+        #    width = w_bankfull - (2 * d_bankfull * tan(angle))
+        # If we know any 3 of these 4 vars, we can compute the
+        # 4th one. So assume d_bankfull, angle & width are known.
+        # HOWEVER, values of w_bankfull found by remote sensing
+        # may be more accurate than values of d_bankfull.
+        #----------------------------------------------------------
+        SCALAR_DA = (np.size(self.d8.da) == 1) 
+        d_flood   = self.d_flood
+
+        #-------------------------------------------------        
+        # This is extra water volume, outside of channel
+        # vol_flood = (self.vol - self.vol_bankfull)
+        #-------------------------------------------------
+        vol_flood = self.vol_flood
+
+        w1 = (vol_flood > 0)     # (boolean array)
+        w2 = np.invert( w1 )
+        if (SCALAR_DA):
+            d_flood[ w1 ] = vol_flood[ w1 ] / self.d8.da
+        else:
+            d_flood[ w1 ] = vol_flood[ w1 ] / self.d8.da[ w1 ]
+        d_flood[ w2 ] = 0.0
+
+        #-------------------------------------------
+        # Set depth values on edges to zero since
+        # otherwise they become spikes (no outflow)
+        #-----------------------------------------------------------
+        # NB!  This destroys mass, and will have a small effect on
+        # mass balance calculations.  Since flooding uses the
+        # free-surface gradient (DEM + d_flood), we should not
+        # set it to zero at interior noflow_IDs.
+        #-----------------------------------------------------------
+        d_flood[ self.d8.noflow_IDs ] = 0.0     
+        ## d_flood[ self.d8.edge_IDs ] = 0.0      
+        self.d_flood[:] = d_flood   # write in place 
 
     #   update_flood_depth()
     #-------------------------------------------------------------------
@@ -1877,12 +2187,12 @@ class channels_component( BMI_base.BMI_component ):
         # print 'In update_trapezoid_Rh():'
         # print '   P_wet= 0 at', w[0].size, 'cells'
 
-        #--------------------------------------------------
-        # Override Rh for overland flow, where d_land > 0
+        #---------------------------------------------------
+        # Override Rh for overland flow, where d_flood > 0
         # (2019-09-18)
-        #--------------------------------------------------
-#         w1 = (self.d_land > 0)  # (array of True or False)
-#         Rh[ w1 ] = self.d_land[ w1 ]   #########################################
+        #---------------------------------------------------
+#         w1 = (self.d_flood > 0)  # (array of True or False)
+#         Rh[ w1 ] = self.d_flood[ w1 ]   #########################################
 
         #------------------------------------
         # Force edge pixels to have Rh = 0.
@@ -1896,6 +2206,18 @@ class channels_component( BMI_base.BMI_component ):
         self.Rh[:]    = Rh
         self.A_wet[:] = A_wet   ## (Now shared: 9/9/14)
         self.P_wet[:] = P_wet   ## (Now shared: 9/9/14)
+
+        #----------------------------------
+        # For flooded cells, Rh = d_flood
+        #----------------------------------
+        if (self.FLOOD_OPTION):
+            fcm = self.flooded_cell_mask
+            self.Rh[ fcm ] = self.d_flood[ fcm ]
+            #-----------------------------------
+            # This is used to update discharge
+            #-----------------------------------
+            Af = (self.d8f.dw * self.d_flood) 
+            self.A_wet[ fcm ] = Af[ fcm ]
 
         #---------------
         # For testing
@@ -2032,6 +2354,27 @@ class channels_component( BMI_base.BMI_component ):
 
     #   update_velocity()
     #-------------------------------------------------------------------
+    def update_velocity_in_flood_cells(self, REPORT=False):
+
+        #--------------------------------------------------------
+        # Note:  self.u is set by update_velocity(), a function
+        #        that is overridden in non-base components.
+        #--------------------------------------------------------
+        S   = self.S_bed
+        ### S  = self.S_free
+        nf  = self.flood_manning_n
+        uf  = (self.Rh ** self.two_thirds) * np.sqrt(S) / nf
+        fcm = self.flooded_cell_mask  
+        self.u[ fcm ] = uf[ fcm ]
+  
+        if (REPORT):
+            print('In update_velocity_in_flood_cells:')
+            print('min(uf) =', uf[fcm].min() )
+            print('max(uf) =', uf[fcm].max() )
+            print()
+    
+    #   update_velocity_in_flood_cells()
+    #-------------------------------------------------------------------
     def update_velocity_on_edges(self):
 
         #---------------------------------
@@ -2106,6 +2449,10 @@ class channels_component( BMI_base.BMI_component ):
     #-------------------------------------------------------------
     def update_peak_values(self):
 
+        #-------------------------------------------
+        # Using "fill" saves new values "in-place"
+        # and preserves "mutable scalars".
+        #-------------------------------------------
         if (self.Q_outlet > self.Q_peak):    
             self.Q_peak.fill( self.Q_outlet )
             self.T_peak.fill( self.time_min )      # (time to peak)
@@ -2138,9 +2485,9 @@ class channels_component( BMI_base.BMI_component ):
         # Note: Renamed "volume_out" to "vol_Q" for consistency
         # with vol_P, vol_SM, vol_IN, vol_ET, etc. (5/18/12)
         #--------------------------------------------------------
-        self.vol_Q += (self.Q_outlet * self.dt)  ## Experiment: 5/19/12.
+        self.vol_Q += (self.Q_outlet * self.dt)  ## 5/19/12.
         ## self.vol_Q += (self.Q[self.outlet_ID] * self.dt)
-        
+
     #   update_Q_out_integral()
     #-------------------------------------------------------------
     def update_mins_and_maxes(self, REPORT=False):
@@ -2247,6 +2594,13 @@ class channels_component( BMI_base.BMI_component ):
         #        in the final mass balance reporting.
         #        (2019-09-17)
         #----------------------------------------------------
+        # Note:  This should be called from finalize().
+        #----------------------------------------------------
+        vol = self.vol
+        vol[ self.d8.noflow_IDs ] = 0.0
+        ## vol[ self.d8.edge_IDs ]   = 0.0       
+        vol_chan = np.sum( vol )
+        self.vol_chan.fill( vol_chan )
 
         #-------------------------------------
         # Exclude values on edges of the DEM?
@@ -2255,10 +2609,6 @@ class channels_component( BMI_base.BMI_component ):
 #         ny = self.ny
 #         vol = self.vol[1:(ny - 2)+1,1:(nx - 2)+1].min()
 
-        vol = self.vol
-        vol_chan = np.sum( vol )
-        self.vol_chan.fill( vol_chan )   
-        
     #   update_total_channel_water_volume()
     #-------------------------------------------------------------
     def update_total_land_water_volume(self, REPORT=False):
@@ -2275,15 +2625,15 @@ class channels_component( BMI_base.BMI_component ):
         #-------------------------------------
 #         nx = self.nx
 #         ny = self.ny
-#         d_land = self.d_land[1:(ny - 2)+1,1:(nx - 2)+1].min()
+#         d_flood = self.d_flood[1:(ny - 2)+1,1:(nx - 2)+1].min()
 
-        d_land = self.d_land
-        vol_land = np.sum( d_land * self.da )
+        d_flood = self.d_flood
+        vol_land = np.sum( d_flood * self.da )
         self.vol_land.fill( vol_land )   
         
     #   update_total_land_water_volume()
     #-------------------------------------------------------------------
-    def check_flow_depth(self):
+    def check_flow_depth_LAST(self):
 
         OK = True
         d  = self.d
@@ -2292,7 +2642,7 @@ class channels_component( BMI_base.BMI_component ):
         
         #---------------------------------
         # All all flow depths positive ?
-        #---------------------------------
+        #---------------------------------  
         wbad = np.where( np.logical_or( d < 0.0, np.logical_not(np.isfinite(d)) ))
         nbad = np.size( wbad[0] )       
         if (nbad == 0):    
@@ -2304,7 +2654,7 @@ class channels_component( BMI_base.BMI_component ):
         
         msg = [ star_line, \
                'ERROR: Simulation aborted.', ' ', \
-               'Negative depth found: ' + str(dmin), \
+               'Negative or NaN depth found: ' + str(dmin), \
                'Time step may be too large.', \
                'Time step:      ' + str(dt) + ' [s]' ]
 
@@ -2333,9 +2683,97 @@ class channels_component( BMI_base.BMI_component ):
 
         return OK
 
-    #   check_flow_depth
+    #   check_flow_depth_LAST()
     #-------------------------------------------------------------------
-    def check_flow_velocity(self):
+    def check_flow_depth(self):
+
+        OK = True
+        d  = self.d
+        dt = self.dt
+        nx = self.nx   #################
+        
+        #---------------------------------
+        # Are any flow depths negative ?
+        #---------------------------------
+        wneg = np.where( d < 0.0 )
+        nneg = np.size( wneg[0] )
+        #-----------------------------
+        # Are any flow depths NaNs ?
+        #-----------------------------
+        wnan = np.where( np.isnan(d) )
+        nnan = np.size( wnan[0] )
+        #-----------------------------
+        # Are any flow depths Infs ?
+        #-----------------------------
+        winf = np.where( np.isinf(d) )
+        ninf = np.size( winf[0] )
+        #----------------------------------
+        # Option to allow NaN but not Inf
+        #----------------------------------
+        if (nneg == 0) and (ninf == 0):
+            return OK
+        OK = False
+        #-------------------------------------------------- 
+#         if (nneg == 0) and (nnan == 0) and (ninf == 0):
+#             return OK
+#         OK = False
+
+        #----------------------------------
+        # Print informative error message
+        #----------------------------------
+        star_line = '*******************************************'
+        print( star_line )           
+        print('ERROR: Simulation aborted.')
+        print(' ')
+        #--------------------------------------------------------        
+        if (nneg > 0):
+            dmin = d[ wneg ].min()
+            str1 = 'Found ' + str(nneg) + ' negative depths.'
+            str2 = '  Smallest negative depth = ' + str(dmin)
+            print( str1 )
+            print( str2 )
+        #--------------------------------------------------------
+        if (nnan > 0):
+            str3 = 'Found ' + str(nnan) + ' NaN depths.'
+            print( str3 )
+        #--------------------------------------------------------
+        if (ninf > 0):
+            str4 = 'Found ' + str(ninf) + ' infinite depths.'
+            print( str4 )
+        #------------------------------------
+        # Option to allow NaNs on the edges
+        #------------------------------------
+        print( 'Time step may be too large for stability.' )
+        print( 'Time step:      ' + str(dt) + ' [s]' )
+        print( 'Try reducing timestep in channels CFG file.' )
+        print( star_line )
+        print( ' ' )
+            
+        #-------------------------------------------
+        # If not too many, print actual depths
+        #-------------------------------------------
+#         if (nbad < 30):          
+#             brow = wbad[0][0]
+#             bcol = wbad[1][0]
+# ##            badi = wbad[0]
+# ##            bcol = (badi % nx)
+# ##            brow = (badi / nx)
+#             crstr = str(bcol) + ', ' + str(brow)
+# 
+#             msg = [' ', '(Column, Row):  ' + crstr, \
+#                    'Flow depth:     ' + str(d[brow, bcol])]
+#             for k in range(len(msg)):
+#                 print(msg[k])
+#         print(star_line) 
+#         print(' ')
+
+        raise RuntimeError('Negative or NaN depth found.')  # (11/16/16)
+
+        return OK
+
+    #   check_flow_depth()
+    #-------------------------------------------------------------------
+    def check_flow_velocity_LAST(self):
 
         OK = True
         u  = self.u
@@ -2404,30 +2842,127 @@ class channels_component( BMI_base.BMI_component ):
 ##        return OK                          
 
 
-    #   check_flow_velocity
+    #   check_flow_velocity_LAST()
+    #-------------------------------------------------------------------
+    def check_flow_velocity(self):
+
+        OK = True
+        u  = self.u
+        dt = self.dt
+        nx = self.nx
+        
+        #---------------------------------
+        # Are any flow depths negative ?
+        #---------------------------------
+        wneg = np.where( u < 0.0 )
+        nneg = np.size( wneg[0] )
+        #-----------------------------
+        # Are any flow depths NaNs ?
+        #-----------------------------
+        wnan = np.where( np.isnan(u) )
+        nnan = np.size( wnan[0] )
+        #-----------------------------
+        # Are any flow depths Infs ?
+        #-----------------------------
+        winf = np.where( np.isinf(u) )
+        ninf = np.size( winf[0] )
+        #----------------------------------
+        # Option to allow NaN but not Inf
+        #----------------------------------
+        if (nneg == 0) and (ninf == 0):
+            return OK
+        OK = False
+        #-------------------------------------------------- 
+#         if (nneg == 0) and (nnan == 0) and (ninf == 0):
+#             return OK
+#         OK = False
+
+        #----------------------------------
+        # Print informative error message
+        #----------------------------------
+        star_line = '*******************************************'
+        print( star_line )           
+        print('ERROR: Simulation aborted.')
+        print(' ')
+        #--------------------------------------------------------        
+        if (nneg > 0):
+            umin = u[ wneg ].min()
+            str1 = 'Found ' + str(nneg) + ' negative velocities.'
+            str2 = '  Smallest negative velocity = ' + str(umin)
+            print( str1 )
+            print( str2 )
+        #--------------------------------------------------------
+        if (nnan > 0):
+            str3 = 'Found ' + str(nnan) + ' NaN velocities.'
+            print( str3 )
+        #--------------------------------------------------------
+        if (ninf > 0):
+            str4 = 'Found ' + str(ninf) + ' infinite velocities.'
+            print( str4 )
+        #------------------------------------
+        # Option to allow NaNs on the edges
+        #------------------------------------
+        print( 'Time step may be too large for stability.' )
+        print( 'Time step:      ' + str(dt) + ' [s]' )
+        print( 'Try reducing timestep in channels CFG file.' )
+        print( star_line )
+        print( ' ' )
+        
+        raise RuntimeError('Negative or NaN velocity found.')  # (11/16/16)
+
+        return OK
+
+
+##        umin = u[wbad].min()
+##        badi = wbad[0]
+##        bcol = (badi % nx)
+##        brow = (badi / nx)
+##        crstr = str(bcol) + ', ' + str(brow)
+##        msg = np.array([' ', \
+##                     '*******************************************', \
+##                     'ERROR: Simulation aborted.', ' ', \
+##                     'Negative velocity found: ' + str(umin), \
+##                     'Time step may be too large.', ' ', \
+##                     '(Column, Row):  ' + crstr, \
+##                     'Velocity:       ' + str(u[badi]), \
+##                     'Time step:      ' + str(dt) + ' [s]', \
+##                     '*******************************************', ' '])
+##        for k in xrange( np.size(msg) ):
+##            print msg[k]
+
+##        return OK                          
+
+
+    #   check_flow_velocity()
     #-------------------------------------------------------------------  
     def open_input_files(self):
 
-        # This doesn't work, because file_unit doesn't get full path. (10/28/11)
-        # start_dir = os.getcwd()
-        # os.chdir( self.in_directory )
+        #------------------------------------------------------
+        # This method uses prepend_directory() in BMI_base.py
+        # which uses both eval and exec.
+        #------------------------------------------------------
+#         in_files = ['slope_file', 'nval_file', 'z0val_file',
+#                     'width_file', 'angle_file', 'sinu_file',
+#                     'd0_file', 'd_bankfull_file' ]
+#         self.prepend_directory( in_files, INPUT=True )
 
-        # print '### start_dir =', start_dir
-        # print '### in_directory =', self.in_directory
+        #------------------------------------------------------
+        # This avoids eval/exec, but is brute-force
+        # 2020-05-03. Changed in_directory to topo_directory.
+        # See set_directories() in BMI_base.py.
+        #------------------------------------------------------
+        self.slope_file = (self.topo_directory + self.slope_file)
+        self.nval_file  = (self.topo_directory + self.nval_file)
+        self.z0val_file = (self.topo_directory + self.z0val_file)        
+        self.width_file = (self.topo_directory + self.width_file)
+        self.angle_file = (self.topo_directory + self.angle_file)
+        self.sinu_file  = (self.topo_directory + self.sinu_file) 
+        self.d0_file    = (self.topo_directory + self.d0_file)
+        self.d_bankfull_file = (self.topo_directory + self.d_bankfull_file) 
 
-        in_files = ['slope_file', 'nval_file', 'z0val_file',
-                    'width_file', 'angle_file', 'sinu_file',
-                    'd0_file', 'd_bankfull_file' ]
-        self.prepend_directory( in_files, INPUT=True )
-
-        # self.slope_file = self.in_directory + self.slope_file
-        # self.nval_file  = self.in_directory + self.nval_file
-        # self.z0val_file = self.in_directory + self.z0val_file
-        # self.width_file = self.in_directory + self.width_file
-        # self.angle_file = self.in_directory + self.angle_file
-        # self.sinu_file  = self.in_directory + self.sinu_file
-        # self.d0_file    = self.in_directory + self.d0_file
-
+        #----------------------------------------------        
+        # Open all input files and store file objects
+        #----------------------------------------------                
         #self.code_unit = model_input.open_file(self.code_type,  self.code_file)
         self.slope_unit = model_input.open_file(self.slope_type, self.slope_file)
         if (self.MANNING):
@@ -2438,9 +2973,7 @@ class channels_component( BMI_base.BMI_component ):
         self.angle_unit = model_input.open_file(self.angle_type, self.angle_file)
         self.sinu_unit  = model_input.open_file(self.sinu_type,  self.sinu_file)
         self.d0_unit    = model_input.open_file(self.d0_type,    self.d0_file)
-        self.d_bankfull_unit    = model_input.open_file(self.d_bankfull_type, self.d_bankfull_file)
-        
-        # os.chdir( start_dir )
+        self.d_bankfull_unit = model_input.open_file(self.d_bankfull_type, self.d_bankfull_file)
 
     #   open_input_files()
     #-------------------------------------------------------------------  
@@ -2462,7 +2995,7 @@ class channels_component( BMI_base.BMI_component ):
         slope = model_input.read_next(self.slope_unit, self.slope_type, rti)
         if (slope is not None):
             self.update_var( 'slope', slope )
-
+        
         if (self.MANNING):
             nval = model_input.read_next(self.nval_unit, self.nval_type, rti)
             if (nval is not None):
@@ -2485,9 +3018,11 @@ class channels_component( BMI_base.BMI_component ):
 
         angle = model_input.read_next(self.angle_unit, self.angle_type, rti)
         if (angle is not None):
-            #-----------------------------------------------
-            # Convert bank angles from degrees to radians. 
-            #-----------------------------------------------
+            #------------------------------------------------------------
+            # Convert bank angles from degrees to radians.  For a
+            # SCALAR angle, this is done in initialize_computed_vars().
+            # To support general case this is done here for angle GRID. 
+            #------------------------------------------------------------
             angle *= self.deg_to_rad   # [radians]
             self.update_var( 'angle', angle )
 
@@ -2635,14 +3170,14 @@ class channels_component( BMI_base.BMI_component ):
         self.Q_gs_file  = (self.out_directory + self.Q_gs_file)
         self.u_gs_file  = (self.out_directory + self.u_gs_file)
         self.d_gs_file  = (self.out_directory + self.d_gs_file) 
-        self.f_gs_file  = (self.out_directory + self.f_gs_file) 
-        self.dl_gs_file = (self.out_directory + self.dl_gs_file) 
+        self.f_gs_file  = (self.out_directory + self.f_gs_file)
+        self.d_flood_gs_file = (self.out_directory + self.d_flood_gs_file) 
         #--------------------------------------------------------
         self.Q_ts_file  = (self.out_directory + self.Q_ts_file)
         self.u_ts_file  = (self.out_directory + self.u_ts_file) 
         self.d_ts_file  = (self.out_directory + self.d_ts_file) 
         self.f_ts_file  = (self.out_directory + self.f_ts_file) 
-        self.dl_ts_file = (self.out_directory + self.dl_ts_file) 
+        self.d_flood_ts_file = (self.out_directory + self.d_flood_ts_file) 
         
     #   update_outfile_names()
     #-------------------------------------------------------------------  
@@ -2681,16 +3216,32 @@ class channels_component( BMI_base.BMI_component ):
         save_ts:self.SAVE_F_PIXELS, ts_file:self.f_ts_file,
         long_name:get_long_name('f'), units_name:get_var_units('f')},
         #-----------------------------------------------------------------
-        {var_name:'d_land',
-        save_gs:self.SAVE_DL_GRIDS,  gs_file:self.dl_gs_file,
-        save_ts:self.SAVE_DL_PIXELS, ts_file:self.dl_ts_file,
-        long_name:get_long_name('d_land'), units_name:get_var_units('d_land')} ]
+        {var_name:'d_flood',
+        save_gs:self.SAVE_DF_GRIDS,  gs_file:self.d_flood_gs_file,
+        save_ts:self.SAVE_DF_PIXELS, ts_file:self.d_flood_ts_file,
+        long_name:get_long_name('d_flood'), units_name:get_var_units('d_flood')} ]
                                 
     #   bundle_output_files
+    #------------------------------------------------------------------- 
+    def disable_all_output(self):
+    
+        self.SAVE_Q_GRIDS  = False
+        self.SAVE_U_GRIDS  = False
+        self.SAVE_D_GRIDS  = False
+        self.SAVE_F_GRIDS  = False
+        self.SAVE_DF_GRIDS = False
+        #----------------------------
+        self.SAVE_Q_PIXELS  = False
+        self.SAVE_U_PIXELS  = False
+        self.SAVE_D_PIXELS  = False
+        self.SAVE_F_PIXELS  = False
+        self.SAVE_DF_PIXELS = False
+        
+    #   disable_all_output()
     #-------------------------------------------------------------------  
     def open_output_files(self):
 
-        model_output.check_netcdf()
+        model_output.check_netcdf( SILENT=self.SILENT )
         self.update_outfile_names()
         ## self.bundle_output_files()
         
@@ -2745,9 +3296,9 @@ class channels_component( BMI_base.BMI_component ):
                                            long_name='friction_factor',
                                            units_name='none')
  
-        if (self.SAVE_DL_GRIDS):    
-            model_output.open_new_gs_file( self, self.dl_gs_file, self.rti,
-                                           var_name='dl',
+        if (self.SAVE_DF_GRIDS):    
+            model_output.open_new_gs_file( self, self.d_flood_gs_file, self.rti,
+                                           var_name='d_flood',
                                            long_name='land_surface_water__depth',
                                            units_name='m')
                                                       
@@ -2779,9 +3330,9 @@ class channels_component( BMI_base.BMI_component ):
                                            long_name='friction_factor',
                                            units_name='none')
 
-        if (self.SAVE_DL_PIXELS):    
-            model_output.open_new_ts_file( self, self.dl_ts_file, IDs,
-                                           var_name='dl',
+        if (self.SAVE_DF_PIXELS):    
+            model_output.open_new_ts_file( self, self.d_flood_ts_file, IDs,
+                                           var_name='d_flood',
                                            long_name='land_surface_water__depth',
                                            units_name='m')
                                                    
@@ -2831,13 +3382,13 @@ class channels_component( BMI_base.BMI_component ):
         if (self.SAVE_U_GRIDS):  model_output.close_gs_file( self, 'u')  
         if (self.SAVE_D_GRIDS):  model_output.close_gs_file( self, 'd')   
         if (self.SAVE_F_GRIDS):  model_output.close_gs_file( self, 'f')
-        if (self.SAVE_DL_GRIDS):  model_output.close_gs_file( self, 'dl')
+        if (self.SAVE_DF_GRIDS): model_output.close_gs_file( self, 'd_flood')
         #---------------------------------------------------------------
-        if (self.SAVE_Q_PIXELS): model_output.close_ts_file( self, 'Q')   
-        if (self.SAVE_U_PIXELS): model_output.close_ts_file( self, 'u')    
-        if (self.SAVE_D_PIXELS): model_output.close_ts_file( self, 'd')    
-        if (self.SAVE_F_PIXELS): model_output.close_ts_file( self, 'f')
-        if (self.SAVE_DL_PIXELS): model_output.close_ts_file( self, 'dl')
+        if (self.SAVE_Q_PIXELS):  model_output.close_ts_file( self, 'Q')   
+        if (self.SAVE_U_PIXELS):  model_output.close_ts_file( self, 'u')    
+        if (self.SAVE_D_PIXELS):  model_output.close_ts_file( self, 'd')    
+        if (self.SAVE_F_PIXELS):  model_output.close_ts_file( self, 'f')
+        if (self.SAVE_DF_PIXELS): model_output.close_ts_file( self, 'd_flood')
                 
     #   close_output_files()              
     #-------------------------------------------------------------------  
@@ -2861,8 +3412,8 @@ class channels_component( BMI_base.BMI_component ):
         if (self.SAVE_F_GRIDS):
             model_output.add_grid( self, self.f, 'f', self.time_min )     
 
-        if (self.SAVE_DL_GRIDS):
-            model_output.add_grid( self, self.d_land, 'dl', self.time_min )   
+        if (self.SAVE_DF_GRIDS):
+            model_output.add_grid( self, self.d_flood, 'd_flood', self.time_min )   
             
     #   save_grids()
     #-------------------------------------------------------------------  
@@ -2886,8 +3437,8 @@ class channels_component( BMI_base.BMI_component ):
         if (self.SAVE_F_PIXELS):
             model_output.add_values_at_IDs( self, time, self.f, 'f', IDs )
 
-        if (self.SAVE_DL_PIXELS):
-            model_output.add_values_at_IDs( self, time, self.d_land, 'dl', IDs )
+        if (self.SAVE_DF_PIXELS):
+            model_output.add_values_at_IDs( self, time, self.d_flood, 'd_flood', IDs )
                     
     #   save_pixel_values()
     #-------------------------------------------------------------------
@@ -3003,7 +3554,75 @@ class channels_component( BMI_base.BMI_component ):
         print(' ')
         print('-------------------------------------------------')
 
-    #   print_status_report()         
+    #   print_status_report() 
+    #-------------------------------------------------------------------
+#     def remove_bad_slopes0(self, FLOAT=False):
+# 
+#         #------------------------------------------------------------
+#         # Notes: The main purpose of this routine is to find
+#         #        pixels that have nonpositive slopes and replace
+#         #        then with the smallest value that occurs anywhere
+#         #        in the input slope grid.  For example, pixels on
+#         #        the edges of the DEM will have a slope of zero.
+# 
+#         #        With the Kinematic Wave option, flow cannot leave
+#         #        a pixel that has a slope of zero and the depth
+#         #        increases in an unrealistic manner to create a
+#         #        spike in the depth grid.
+# 
+#         #        It would be better, of course, if there were
+#         #        no zero-slope pixels in the DEM.  We could use
+#         #        an "Imposed gradient DEM" to get slopes or some
+#         #        method of "profile smoothing".
+# 
+#         #        It is possible for the flow code to be nonzero
+#         #        at a pixel that has NaN for its slope. For these
+#         #        pixels, we also set the slope to our min value.
+# 
+#         #        7/18/05. Broke this out into separate procedure.
+#         #------------------------------------------------------------
+# 
+#         #-----------------------------------
+#         # Are there any "bad" pixels ?
+#         # If not, return with no messages.
+#         #-----------------------------------  
+#         wb = np.where(np.logical_or((self.slope <= 0.0), \
+#                               np.logical_not(np.isfinite(self.slope))))
+#         nbad = np.size(wb[0])
+#         print('size(slope) = ' + str(np.size(self.slope)) )
+#         print('size(wb) = ' + str(nbad) )
+#         
+#         wg = np.where(np.invert(np.logical_or((self.slope <= 0.0), \
+#                                      np.logical_not(np.isfinite(self.slope)))))
+#         ngood = np.size(wg[0])
+#         if (nbad == 0) or (ngood == 0):
+#             return
+#         
+#         #---------------------------------------------
+#         # Find smallest positive value in slope grid
+#         # and replace the "bad" values with smin.
+#         #---------------------------------------------
+#         print('-------------------------------------------------')
+#         print('WARNING: Zero or negative slopes found.')
+#         print('         Replacing them with smallest slope.')
+#         print('         Use "Profile smoothing tool" instead.')
+#         S_min = self.slope[wg].min()
+#         S_max = self.slope[wg].max()
+#         print('         min(S) = ' + str(S_min))
+#         print('         max(S) = ' + str(S_max))
+#         print('-------------------------------------------------')
+#         print(' ')
+#         self.slope[wb] = S_min
+#         
+#         #--------------------------------
+#         # Convert data type to double ?
+#         #--------------------------------
+#         if (FLOAT):    
+#             self.slope = np.float32(self.slope)
+#         else:    
+#             self.slope = np.float64(self.slope)
+#         
+#     #   remove_bad_slopes0()
     #-------------------------------------------------------------------
     def remove_bad_slopes(self, FLOAT=False):
 
@@ -3031,38 +3650,68 @@ class channels_component( BMI_base.BMI_component ):
         #        7/18/05. Broke this out into separate procedure.
         #------------------------------------------------------------
 
-        #-----------------------------------
-        # Are there any "bad" pixels ?
-        # If not, return with no messages.
-        #-----------------------------------  
-        wb = np.where(np.logical_or((self.slope <= 0.0), \
-                              np.logical_not(np.isfinite(self.slope))))
-        nbad = np.size(wb[0])
-        print('size(slope) = ' + str(np.size(self.slope)) )
-        print('size(wb) = ' + str(nbad) )
-        
-        wg = np.where(np.invert(np.logical_or((self.slope <= 0.0), \
-                                     np.logical_not(np.isfinite(self.slope)))))
-        ngood = np.size(wg[0])
-        if (nbad == 0) or (ngood == 0):
+        #------------------------
+        # Are any slopes Nans ?
+        #------------------------
+        wnan = np.where( np.isnan( self.slope ) )
+        nnan = np.size( wnan[0] )
+        #------------------------
+        # Are any slopes zero ?
+        #------------------------
+        wzero = np.where( self.slope == 0.0 )
+        nzero = np.size( wzero[0] )
+        #-------------------------------
+        # Are any slopes negative ?
+        #-------------------------------
+        wneg = np.where( self.slope < 0.0 )
+        nneg = np.size( wneg[0] )
+        #-------------------------------
+        # Are any slopes infinite ?
+        #-------------------------------
+        winf = np.where( np.isinf( self.slope ) )
+        ninf = np.size( winf[0] )
+        #----------------------------
+        nbad = (nnan + nneg + ninf + nzero)
+        if (nbad == 0):
             return
-        
+
+        #---------------------------       
+        # Merge "wheres" into wbad
+        #---------------------------
+        S_shape = self.slope.shape
+        bad = np.zeros( S_shape, dtype='bool' )
+        if (nnan > 0): bad[ wnan ] = True
+        if (nzero >0): bad[ wzero] = True
+        if (nneg > 0): bad[ wneg ] = True
+        if (ninf > 0): bad[ winf ] = True
+        good = np.invert( bad )
+
         #---------------------------------------------
         # Find smallest positive value in slope grid
         # and replace the "bad" values with smin.
         #---------------------------------------------
-        print('-------------------------------------------------')
-        print('WARNING: Zero or negative slopes found.')
-        print('         Replacing them with smallest slope.')
-        print('         Use "Profile smoothing tool" instead.')
-        S_min = self.slope[wg].min()
-        S_max = self.slope[wg].max()
-        print('         min(S) = ' + str(S_min))
-        print('         max(S) = ' + str(S_max))
-        print('-------------------------------------------------')
-        print(' ')
-        self.slope[wb] = S_min
-        
+        S_min = self.slope[ good ].min()
+        S_max = self.slope[ good ].max()
+        self.slope[ bad ] = S_min        
+                   
+        #--------------------
+        # Print information
+        #--------------------
+        if not(self.SILENT):
+            print('Total number of slope values = ' + str(np.size(self.slope)) )
+            print('Number of zero values        = ' + str(nzero) + ' (maybe edge)' )
+            print('Number of negative values    = ' + str(nneg) )
+            print('Number of NaN values         = ' + str(nnan) )
+            print('Number of infinite values    = ' + str(ninf) )
+            print('-------------------------------------------------')
+            print('WARNING: Zero, negative or NaN slopes found.')
+            print('         Replacing them with smallest slope.')
+            print('         Consider using "new_slopes.py" instead.')
+            print('         min(S) = ' + str(S_min))
+            print('         max(S) = ' + str(S_max))
+            print('-------------------------------------------------')
+            print()
+
         #--------------------------------
         # Convert data type to double ?
         #--------------------------------
@@ -3073,7 +3722,7 @@ class channels_component( BMI_base.BMI_component ):
         
     #   remove_bad_slopes
     #-------------------------------------------------------------------
-
+    
 #-------------------------------------------------------------------
 def Trapezoid_Rh(d, wb, theta):
 

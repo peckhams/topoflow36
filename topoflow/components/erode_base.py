@@ -646,7 +646,7 @@ class erosion_component( BMI_base.BMI_component ):
             #---------------------------
             # Option 2 for x & y grids 
             #---------------------------
-            ## ramp = np.arange(nx*ny, dtype='Int32')
+            ## ramp = np.arange(nx*ny, dtype='int32')
             ## IDs  = np.reshape( ramp, [ny, nx] )
             ## cols = (IDs % nx)
             ## rows = (IDS / nx)
@@ -697,7 +697,7 @@ class erosion_component( BMI_base.BMI_component ):
 
         nx = self.nx   # (local synonyms)
         ny = self.ny
-        ID_type = 'Int32'
+        ID_type = 'int32'
         
         #------------------------------------
         # Use bottom row/edge as base level
@@ -781,7 +781,7 @@ class erosion_component( BMI_base.BMI_component ):
         self.vol_R = self.initialize_scalar( 0, dtype='float64')
         self.vol_U = self.initialize_scalar( 0, dtype='float64')
 
-        self.dz_max_vec = np.zeros([self.n_steps], dtype='Float32')
+        self.dz_max_vec = np.zeros([self.n_steps], dtype='float32')
         self.dz_max     = self.initialize_scalar( -9999, dtype='float32')
         self.dz_min     = self.initialize_scalar(  9999, dtype='float32')
 
@@ -2046,7 +2046,7 @@ class erosion_component( BMI_base.BMI_component ):
     def read_input_files(self):
 
         #-------------------------------------------------------
-        # All grids are assumed to have a data type of Float32.
+        # All grids are assumed to have a data type of float32.
         #-------------------------------------------------------
         if (self.make_z0_method == 'READ_FILE'):
             self.z0 = model_input.read_next(self.z0_unit, self.z0_type, self.rti)

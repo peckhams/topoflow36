@@ -310,7 +310,7 @@ class d8_component( d8_base.d8_component ):
         # that are marked with RT closed-basin code?
         # Streamlines can end at either place.
         #----------------------------------------------
-        w = np.where( np.logical_or((DEM <= self.nodata), (np.isfinite(DEM) != 1)) )            
+        w = np.where( np.logical_or((DEM <= self.DEM_nodata), (np.isfinite(DEM) != 1)) )            
         n_bad = w[0].size
         if (n_bad != 0):
             d8_grid[ w ] = 0
@@ -601,9 +601,9 @@ class d8_component( d8_base.d8_component ):
         #---------------------------------------
         # Get IDs for pixels on the four edges
         #---------------------------------------
-        T = np.arange(nx, dtype='Int32')
+        T = np.arange(nx, dtype='int32')
         B = T + (nx * (ny - 1))
-        L = nx * np.arange(ny, dtype='Int32')
+        L = nx * np.arange(ny, dtype='int32')
         R = L + (nx - 1)
 
         #------------------------------------------------
@@ -701,7 +701,7 @@ class d8_component( d8_base.d8_component ):
 ##        # with flow code of 0, such as edges
 ##        # and nodata pixels.
 ##        #--------------------------------------- 
-##        base = zeros([ny, nx], dtype='UInt8')
+##        base = zeros([ny, nx], dtype='uint8')
 ##        base[parent_IDs] = 1
 ##
 ##        wbad = no_flow_IDs(flow_grid, rti)
@@ -1163,7 +1163,7 @@ class d8_component( d8_base.d8_component ):
                 #-----------------------------------------
                 # Initialize all unknown pixels as READY
                 #-----------------------------------------
-                READY = np.ones([n_unknown], dtype='UInt8')
+                READY = np.ones([n_unknown], dtype='uint8')
                 
                 #----------------------------------
                 # A pixel is not READY if any of

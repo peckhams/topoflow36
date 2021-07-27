@@ -541,7 +541,7 @@ class snow_component( snow_base.snow_component ):
         rti = self.rti
 
         #--------------------------------------------------------
-        # All grids are assumed to have a data type of Float32.
+        # All grids are assumed to have a data type of float32.
         #--------------------------------------------------------
         Cp_snow = model_input.read_next(self.Cp_snow_unit, self.Cp_snow_type, rti)
         if (Cp_snow is not None):

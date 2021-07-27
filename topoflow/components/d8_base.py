@@ -1,27 +1,22 @@
 
-## Copyright (c) 2001-2016, Scott D. Peckham
-## January 2009  (converted from IDL)
-## May, July, August, October 2009
-## March 2010 (modified to support local timestepping)
-## September 2011  (Updated unit tests.)
-## October 2011 (prepared for use as a CMT component)
-## January 2012 (Added set_default_config_vars().)
-## January 2012 (Removed call to update_noflow_IDs() and
-##               removed GLOBAL implementations of many methods.
-##
-#####################################################
-# (3/4/10)  Replaced ".flow_grid" with ".d8_grid"
-#####################################################
-## NB!  TF expects d8.codes vs. d8.d8_grid
-## NB!  Need to update a few more functions to use g = "code_list".
-
-#############################################################
-## Note:  channel_base.py calls many of these but then
-##        saves the results among its state variables.
-#############################################################
+# Copyright (c) 2001-2021, Scott D. Peckham
+#
+# July 2021.  Added DEM_nodata to CFG file; replaces nodata.
+# Jan. 2012.  Added set_default_config_vars().
+#             Removed call to update_noflow_IDs() and
+#             removed GLOBAL implementations of many methods.
+# Oct. 2011.  Prepared for use as a CMT component.
+# Sep. 2011.  Updated unit tests.
+# Mar. 2010.  Modified to support local timestepping.
+# Oct. 2009.  Improvements.
+# Aug. 2009.  Improvements.
+# Jul. 2009.  Improvements.
+# May  2009.  Improvements.
+# Jan. 2009.  Converted from IDL to Python
+#
+#---------------------------------------------------------------------
 
 import numpy as np
-
 import os        # (for os.chdir(), in unit_test())
 import os.path
 import time
@@ -32,21 +27,11 @@ from topoflow.utils import model_output
 from topoflow.utils import pixels
 from topoflow.utils import rtg_files
 
-#-------------------------------------------
-# For use outside of the TopoFlow package.
-#-------------------------------------------
-# import BMI_base
-# import fill_pits
-# import model_output     # (added: 11/8/11)
-# import pixels
-# import rtg_files
-## import tf_utils  # (not used now)
-
 #---------------------------------------------------------------------
 #
 #   class d8_base
 #
-#       get_attribute()           # (NOT READY YET)  #############
+#       get_attribute()           # (NOT READY YET)
 #       get_input_var_names()
 #       get_output_var_names()
 #       get_var_name()
@@ -180,14 +165,20 @@ class d8_component( BMI_base.BMI_component ):
         #------------------------
         # Define some constants
         #------------------------
-        self.dt     = 1.0   # (needs to be defined)
-        self.nodata = np.float32(-9999)
+        self.dt = 1.0   # (needs to be defined, but doesn't matter)
+
+        #-------------------------------------------------    
+        # See self.DEM_nodata in next function.  Leaving
+        # this here in case any caller still needs it.
+        # Maybe erode_d8_global.py ??  Or a notebook.
+        #-------------------------------------------------    
+        self.nodata = -9999.0
 
         #----------------------------------------
         # (9/19/11) Put these here because they
         # don't seem to be anywhere else.
         #----------------------------------------
-        self.BREAK_TIES = True
+        self.BREAK_TIES = True   # (This is always True.)
         # self.LINK_FLATS = True       # (this is read from CFG file)
         # self.FILL_PITS_IN_Z0 = True  # (this is read from CFG file)
         
@@ -221,6 +212,8 @@ class d8_component( BMI_base.BMI_component ):
         if not(hasattr(self, 'A_units')):
             # (1/17/11) Need "km^2" for DEM_Smoother ??
             self.A_units          = 'km^2'
+        if not(hasattr(self, 'DEM_nodata')):
+            self.DEM_nodata = -9999.0        #########################
         self.LINK_FLATS       = 1
         if not(hasattr(self, 'FILL_PITS_IN_Z0')):
             # (1/17/12) DEM_file is overwritten if this is set to 1.
@@ -440,13 +433,13 @@ class d8_component( BMI_base.BMI_component ):
         ny = self.ny
 
         if (DOUBLE):
-            self.dw = np.zeros([ny, nx], dtype='Float64')
-            self.ds = np.zeros([ny, nx], dtype='Float64')
-            self.A  = np.zeros([ny, nx], dtype='Float64')
+            self.dw = np.zeros([ny, nx], dtype='float64')
+            self.ds = np.zeros([ny, nx], dtype='float64')
+            self.A  = np.zeros([ny, nx], dtype='float64')
         else:
-            self.dw = np.zeros([ny, nx], dtype='Float32')
-            self.ds = np.zeros([ny, nx], dtype='Float32')
-            self.A  = np.zeros([ny, nx], dtype='Float32')
+            self.dw = np.zeros([ny, nx], dtype='float32')
+            self.ds = np.zeros([ny, nx], dtype='float32')
+            self.A  = np.zeros([ny, nx], dtype='float32')
 
         #-----------------------------------
         # Read DEM from DEM_file (11/7/11)
@@ -585,7 +578,7 @@ class d8_component( BMI_base.BMI_component ):
         #        to set any invalid flow code to 0, which signifies
         #        that the flow direction for that grid cell is undefined.
         #-----------------------------------------------------------------
-        self.valid_code_map = np.zeros([256], dtype='UInt8')
+        self.valid_code_map = np.zeros([256], dtype='uint8')
         self.valid_code_map[ self.code_list ] = np.uint8( self.code_list )
 
     #   get_valid_code_map()
@@ -601,7 +594,7 @@ class d8_component( BMI_base.BMI_component ):
         
         nx = self.nx
         ny = self.ny
-        self.ID_grid = np.reshape(np.arange(nx*ny, dtype='Int32'), [ny, nx])
+        self.ID_grid = np.reshape(np.arange(nx*ny, dtype='int32'), [ny, nx])
         
     #   get_ID_grid() 
     #---------------------------------------------------------------------
@@ -614,9 +607,9 @@ class d8_component( BMI_base.BMI_component ):
         #--------------------------------------------
         nx   = self.nx
         incs = np.array([-nx + 1, 1, nx + 1, nx, nx - 1,
-                            -1, -nx - 1, -nx], dtype='Int32')
+                            -1, -nx - 1, -nx], dtype='int32')
         
-        MAP = np.zeros([129], dtype='Int32')
+        MAP = np.zeros([129], dtype='int32')
         MAP[self.code_list] = incs
         
         self.inc_map = MAP
@@ -634,9 +627,9 @@ class d8_component( BMI_base.BMI_component ):
         #------------------------------------------
         nx    = self.nx
         ny    = self.ny
-        T_IDs = np.arange(nx, dtype='Int32')
+        T_IDs = np.arange(nx, dtype='int32')
         B_IDs = T_IDs + (ny - 1) * nx
-        L_IDs = (1 + np.arange(ny - 2, dtype='Int32')) * nx
+        L_IDs = (1 + np.arange(ny - 2, dtype='int32')) * nx
         R_IDs = L_IDs + (nx - 1)
         edge_IDs = np.concatenate([T_IDs, B_IDs, L_IDs, R_IDs])
 
@@ -660,7 +653,7 @@ class d8_component( BMI_base.BMI_component ):
             print('Computing "not_edge" grid...')
 
         self.not_edge_grid = np.ones([self.ny, self.nx],
-                                        dtype='UInt8')
+                                        dtype='uint8')
         self.not_edge_grid[ self.edge_IDs ] = 0
         
 ##        self.not_edge_grid[:, 0]      = 0
@@ -706,7 +699,7 @@ class d8_component( BMI_base.BMI_component ):
         if (REPORT):
             print('Computing "resolve array"...')
             
-        resolve = np.zeros([256], dtype='UInt8')
+        resolve = np.zeros([256], dtype='uint8')
         
         #-----------------------------------
         # High-symmetry groups are:
@@ -1239,7 +1232,7 @@ class d8_component( BMI_base.BMI_component ):
 ##                #-----------------------------------------
 ##                # Initialize all unknown pixels as READY
 ##                #-----------------------------------------
-##                READY = np.zeros([n_unknown], dtype='UInt8') + 1
+##                READY = np.zeros([n_unknown], dtype='uint8') + 1
 ##                
 ##                #--------------------------------------
 ##                # Upstream areas of 8 neighbor pixels
@@ -1435,9 +1428,9 @@ class d8_component( BMI_base.BMI_component ):
 ##        # Double or Float type ?
 ##        #-------------------------
 ##        if (DOUBLE):    
-##            dw = np.zeros([self.ny, self.nx], dtype='Float64')
+##            dw = np.zeros([self.ny, self.nx], dtype='float64')
 ##        else:    
-##            dw = np.zeros([self.ny, self.nx], dtype='Float32')
+##            dw = np.zeros([self.ny, self.nx], dtype='float32')
 ##            dx = np.float32(dx)
 ##            dy = np.float32(dy)
 ##            dd = np.float32(dd)
@@ -1524,9 +1517,9 @@ class d8_component( BMI_base.BMI_component ):
 ##        # Double or Float type ?
 ##        #-------------------------
 ##        if (DOUBLE):    
-##            ds = np.zeros([self.ny, self.nx], dtype='Float64')
+##            ds = np.zeros([self.ny, self.nx], dtype='float64')
 ##        else:    
-##            ds = np.zeros([self.ny, self.nx], dtype='Float32')
+##            ds = np.zeros([self.ny, self.nx], dtype='float32')
 ##            dx = np.float32(dx)
 ##            dy = np.float32(dy)
 ##            dd = np.float32(dd)

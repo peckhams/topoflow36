@@ -229,8 +229,8 @@ class infil_component( infil_base.infil_component ):
         # Get arrays to store soil params for each layer
         #-------------------------------------------------
         self.soil_type = np.zeros([n_layers], dtype='<U200')
-##        self.dz_val    = np.zeros([n_layers], dtype='Float64')    #### + dz3
-##        self.nz_val    = np.zeros([n_layers], dtype='Int16')      #### + nz3
+##        self.dz_val    = np.zeros([n_layers], dtype='float64')    #### + dz3
+##        self.nz_val    = np.zeros([n_layers], dtype='int16')      #### + nz3
         #----------------------------------------------------------
         self.Ks_type  = np.zeros(n_layers, dtype='<U200')
         self.qs_type  = np.zeros(n_layers, dtype='<U200')
@@ -256,17 +256,17 @@ class infil_component( infil_base.infil_component ):
         # NOTE!  In "initialize_computed_vars()", these lists
         # will be used to build ndarrays *with the same names*.
         #---------------------------------------------------------   
-        self.Ks  = list( np.zeros(n_layers, dtype='Float64') )
-        self.qs  = list( np.zeros(n_layers, dtype='Float64') )
-        self.qi  = list( np.zeros(n_layers, dtype='Float64') )
-        self.f   = list( np.zeros(n_layers, dtype='Float64') )
-        self.C   = list( np.zeros(n_layers, dtype='Float64') )
+        self.Ks  = list( np.zeros(n_layers, dtype='float64') )
+        self.qs  = list( np.zeros(n_layers, dtype='float64') )
+        self.qi  = list( np.zeros(n_layers, dtype='float64') )
+        self.f   = list( np.zeros(n_layers, dtype='float64') )
+        self.C   = list( np.zeros(n_layers, dtype='float64') )
         #--------------------------------------------------------- 
-#         self.Ks_list  = list( np.zeros(n_layers, dtype='Float64') )
-#         self.qs_list  = list( np.zeros(n_layers, dtype='Float64') )
-#         self.qi_list  = list( np.zeros(n_layers, dtype='Float64') )
-#         self.f_list   = list( np.zeros(n_layers, dtype='Float64') )
-#         self.C_list   = list( np.zeros(n_layers, dtype='Float64') )
+#         self.Ks_list  = list( np.zeros(n_layers, dtype='float64') )
+#         self.qs_list  = list( np.zeros(n_layers, dtype='float64') )
+#         self.qi_list  = list( np.zeros(n_layers, dtype='float64') )
+#         self.f_list   = list( np.zeros(n_layers, dtype='float64') )
+#         self.C_list   = list( np.zeros(n_layers, dtype='float64') )
         
     #   initialize_layer_vars()
     #-------------------------------------------------------------------
@@ -417,7 +417,7 @@ class infil_component( infil_base.infil_component ):
         rti = self.rti
 
         #-------------------------------------------------------
-        # All grids are assumed to have data type of Float32.
+        # All grids are assumed to have data type of float32.
         #-------------------------------------------------------
         # NB! Beven, Green-Ampt & Smith-Parlange currently only
         #     support ONE layer (n_layers == 1).

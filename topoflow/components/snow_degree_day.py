@@ -371,7 +371,7 @@ class snow_component( snow_base.snow_component ):
         rti = self.rti
 
         #-------------------------------------------------------
-        # All grids are assumed to have a data type of Float32.
+        # All grids are assumed to have a data type of float32.
         #-------------------------------------------------------
         c0 = model_input.read_next(self.c0_unit, self.c0_type, rti)
         if (c0 is not None):
@@ -397,17 +397,14 @@ class snow_component( snow_base.snow_component ):
     #-------------------------------------------------------------------  
     def close_input_files(self):
 
-        if (self.c0_type       != 'Scalar'): self.c0_unit.close()        
-        if (self.T0_type       != 'Scalar'): self.T0_unit.close()
-        if (self.rho_snow_type != 'Scalar'): self.rho_snow_unit.close()
-        if (self.h0_snow_type  != 'Scalar'): self.h0_snow_unit.close()
-        if (self.h0_swe_type   != 'Scalar'): self.h0_swe_unit.close()
-        
-##        if (self.c0_file       != ''): self.c0_unit.close()        
-##        if (self.T0_file       != ''): self.T0_unit.close()
-##        if (self.rho_snow_file != ''): self.rho_snow_unit.close()
-##        if (self.h0_snow_file  != ''): self.h0_snow_unit.close()
-##        if (self.h0_swe_file   != ''): self.h0_swe_unit.close()
+        if (self.comp_status.lower() == 'disabled'):
+            return  # (2021-07-27)
+            
+        if (self.c0_type.lower()       != 'scalar'): self.c0_unit.close()        
+        if (self.T0_type.lower()       != 'scalar'): self.T0_unit.close()
+        if (self.rho_snow_type.lower() != 'scalar'): self.rho_snow_unit.close()
+        if (self.h0_snow_type.lower()  != 'scalar'): self.h0_snow_unit.close()
+        if (self.h0_swe_type.lower()   != 'scalar'): self.h0_swe_unit.close()
 
     #   close_input_files()    
     #-------------------------------------------------------------------

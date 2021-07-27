@@ -23,7 +23,7 @@ import scipy.optimize
 
 from topoflow.components import d8_global
 
-from topoflow.utils import cfg_files
+from topoflow.utils import cfg_files as cfg
 from topoflow.utils import BMI_base
 from topoflow.utils import file_utils   # (for count_lines())
 from topoflow.utils import model_output
@@ -124,7 +124,7 @@ def curve_fit_test():
     #** x0   = 0.01   # (IDL: doesn't converge)
     #** x0 = 0.1      # (IDL: converges; large stderr)
     x0   = float64(1)
-    x    = arange(100, dtype='Float64') + x0     # (distance [km];  NB! x[0]=x0)
+    x    = arange(100, dtype='float64') + x0     # (distance [km];  NB! x[0]=x0)
     xmin = x.min()
     xmax = x.max()
     Amax = float64(625)                # [km^2]
@@ -658,10 +658,10 @@ class DEM_smoother( BMI_base.BMI_component ):
         # old DEM for pixels whose parent flow code = 0
         # and nodata value otherwise
         #-------------------------------------------------
-        self.DEM = zeros([ny, nx], dtype='Float32') + self.nodata
+        self.DEM = zeros([ny, nx], dtype='float32') + self.nodata
         self.DEM[ w ] = self.z0[ w ]
         #----------------------------------------------------------------
-        self.flow_dist = zeros([ny, nx], dtype='Float32') + self.nodata
+        self.flow_dist = zeros([ny, nx], dtype='float32') + self.nodata
         self.flow_dist[ w ] = 0
         #----------------------------------------------------------------        
         n_reps = np.int32(0)
@@ -821,17 +821,17 @@ class DEM_smoother( BMI_base.BMI_component ):
         n_lines = file_utils.count_lines( self.profile_file, SILENT=True )
         n_lines = (n_lines - n_header)
         #-------------------------------
-        dist = np.zeros([n_lines], dtype='Float64')  ## 1/16/12
-        elev = np.zeros([n_lines], dtype='Float64')  ## 1/16/12
-        cols = np.zeros([n_lines], dtype='Int32')
-        rows = np.zeros([n_lines], dtype='Int32')
+        dist = np.zeros([n_lines], dtype='float64')  ## 1/16/12
+        elev = np.zeros([n_lines], dtype='float64')  ## 1/16/12
+        cols = np.zeros([n_lines], dtype='int32')
+        rows = np.zeros([n_lines], dtype='int32')
 
         #-----------------------------
         # Open file to read IDs and
         # skip over the header lines
         #-----------------------------
         file_unit = open(self.profile_file, 'r')
-        cfg_files.skip_header( file_unit, n_lines=n_header )
+        cfg.skip_header( file_unit, n_lines=n_header )
 
         #----------------------------------
         # Read the column and row vectors
@@ -840,7 +840,7 @@ class DEM_smoother( BMI_base.BMI_component ):
         #-----------------------------------------------------
         dtype_list = ['float64','float64','int32', 'int32']
         for k in range(n_lines):
-            var_list = cfg_files.read_list( file_unit, dtype_list=dtype_list )
+            var_list = cfg.read_list( file_unit, dtype_list=dtype_list )
             dist[k] = var_list[0]  ## 1/16/12
             elev[k] = var_list[1]  ## 1/16/12
             cols[k] = var_list[2]
@@ -887,7 +887,7 @@ class DEM_smoother( BMI_base.BMI_component ):
         diffs          = np.diff( dist )
         # print 'size(dist)  =', dist.size
         # print 'size(diffs) =', diffs.size
-        ds_profile      = np.zeros( dist.size, dtype='Float64' )
+        ds_profile      = np.zeros( dist.size, dtype='float64' )
         ds_profile[:-1] = diffs
         ds_profile[-1]  = diffs[-2]  ######################  NOT STRICTLY CORRECT
         ds_profile      = ds_profile * 1000.0   # [meters]
@@ -1403,7 +1403,7 @@ class DEM_smoother( BMI_base.BMI_component ):
 ##    ##        dz_dc = np.cumsum(double(ds * A ** p))
 ##    ##        dz_dp = c * np.cumsum(double(ds * log(A) * A ** p))
 ##    ##        nA = np.size(A)
-##    ##        dz_dz0 = zeros([nA], dtype='Float64') + 1.0
+##    ##        dz_dz0 = zeros([nA], dtype='float64') + 1.0
 ##    ##        partials = array([array([dz_dc]), array([dz_dp]), array([dz_dz0])])
 ##    ##    
 ##    ##    return (A, params, z, partials)
