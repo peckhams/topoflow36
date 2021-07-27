@@ -77,21 +77,21 @@ def make_fractal_surface(n_levels, H=1.5, RTG_file=None,
     if not(SILENT):
         print('nx, ny =', nx, ',', ny)
     #----------------------------------------------
-    x_vec      = numpy.arange(nx, dtype='Int16')
-    y_vec      = numpy.arange(ny, dtype='Int16')
+    x_vec      = numpy.arange(nx, dtype='int16')
+    y_vec      = numpy.arange(ny, dtype='int16')
     cols, rows = numpy.meshgrid( x_vec, y_vec )
     ## rows = reshape(repeat(y_vec, nx), (ny, nx))
     ## cols = rot90(rows)  # (will work if nx=ny)
     
     sum_grid = (cols + rows)
     #----------------------------------------------
-    DONE = zeros([ny, nx], dtype='UInt8')
+    DONE = zeros([ny, nx], dtype='uint8')
     DONE[0,0]           = 1
     DONE[0,nx - 1]      = 1
     DONE[ny - 1,0]      = 1
     DONE[ny - 1,nx - 1] = 1
     #----------------------------------------------
-    EDGE = zeros([ny, nx], dtype='UInt8')
+    EDGE = zeros([ny, nx], dtype='uint8')
     EDGE[:,0]      = 1
     EDGE[:,nx - 1] = 1
     EDGE[0,:]      = 1
@@ -102,7 +102,7 @@ def make_fractal_surface(n_levels, H=1.5, RTG_file=None,
     #------------------------------
     numpy.random.seed(seed)
     v = random.normal(loc=0.0, scale=1.0, size=(2, 2))
-    z = zeros([ny, nx], dtype='Float64')
+    z = zeros([ny, nx], dtype='float64')
     z[0,0]           = v[0,0]
     z[0,nx - 1]      = v[0,1]
     z[ny - 1,0]      = v[1,0]

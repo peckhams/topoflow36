@@ -36,7 +36,7 @@ def unit_test(file_name='MC_TEXT_FILE_TEST.txt'):
     #---------------------------------------
     # Create a grid of values and some IDs
     #---------------------------------------
-    var   = np.arange(25, dtype='Float32').reshape(5,5)
+    var   = np.arange(25, dtype='float32').reshape(5,5)
     rows  = np.array([1,2,4])
     cols  = np.array([1,2,4])
     IDs   = (rows, cols)
@@ -185,7 +185,7 @@ class ts_file():
             # Without this, don't get a value for every ID.
             #-----------------------------------------------------
             n_IDs  = np.size(IDs[0])
-            vector = np.zeros( n_IDs, dtype='Float32')
+            vector = np.zeros( n_IDs, dtype='float32')
             values = (vector + np.float32(var)) 
 
 ##        print 'VALUES ='

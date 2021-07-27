@@ -7,10 +7,9 @@
 ## July 2010 (added read_list()
 
 import numpy as np
+import os, os.path
 
 #---------------------------------------------------------------------
-#
-#   unit_test()
 #
 #   skip_header()
 #   get_yes_words()
@@ -27,31 +26,6 @@ import numpy as np
 #   read_input_option()
 #   read_output_option()    # (boolean and string)
 #
-#---------------------------------------------------------------------
-def unit_test():
-
-    import d8_base
-    comp = d8_base.d8_component()
-    #------------------------------
-    comp.CCA = False
-    comp.directory   = '/Applications/Erode/Data/Test1/'
-    comp.data_prefix = 'Test1'
-    comp.case_prefix = 'Test1'
-
-    comp.read_config_file()
-    print('comp.method         =', comp.method)
-    print('comp.method_name    =', comp.method_name)
-    print('comp.dt             =', comp.dt)
-    print('comp.dt.dtype       =', comp.dt.dtype)
-    print('comp.LINK_FLATS     =', comp.LINK_FLATS)
-    print('comp.LR_PERIODIC    =', comp.LR_PERIODIC)
-    print('comp.TB_PERIODIC    =', comp.TB_PERIODIC)
-    print('comp.SAVE_DW_PIXELS =', comp.SAVE_DW_PIXELS)
-    
-    print('Finished with cfg_files.unit_test().')
-    print(' ')
-    
-#   unit_test()
 #---------------------------------------------------------------------
 def skip_header(file_unit, n_lines=4):
 

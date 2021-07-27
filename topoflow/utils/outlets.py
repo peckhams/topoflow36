@@ -100,13 +100,17 @@ def read_outlet_file( self ):
     file_unit = open(self.outlet_file, 'r')    
     lines     = file_unit.readlines()
     file_unit.close()
-    lines = lines[6:]   # (skip over 6 header lines)
+    #----------------------------------------------------
+    # BUG FIX: 07-13-2021.  This could be a big problem
+    #----------------------------------------------------
+    lines = lines[5:]   # (skip over 5 header lines)
+    ### lines = lines[6:]   # (skip over 6 header lines)
     n_lines = len(lines)
     
-    outlet_cols   = np.zeros(n_lines, dtype='Int64')  ###
-    outlet_rows   = np.zeros(n_lines, dtype='Int64')
-    basin_areas   = np.zeros(n_lines, dtype='Float64')
-    basin_reliefs = np.zeros(n_lines, dtype='Float64')
+    outlet_cols   = np.zeros(n_lines, dtype='int64')  ###
+    outlet_rows   = np.zeros(n_lines, dtype='int64')
+    basin_areas   = np.zeros(n_lines, dtype='float64')
+    basin_reliefs = np.zeros(n_lines, dtype='float64')
     
     n = 0
     for line in lines:
@@ -202,7 +206,7 @@ def read_main_basin_IDs( self ):
     RTM_filesize = os.path.getsize(RTM_unit.name)
     n_IDs = RTM_filesize / int32(4)
 
-    basin_IDs = np.fromfile(RTM_unit, count=n_IDs, dtype='Int32')
+    basin_IDs = np.fromfile(RTM_unit, count=n_IDs, dtype='int32')
     if (self.rti.SWAP_ENDIAN):
         basin_IDs.byteswap(True)
     RTM_unit.close()

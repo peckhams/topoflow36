@@ -1,10 +1,14 @@
 
-# S.D. Peckham
-# Sept 2014 (new version to use netCDF4)
-# June 2010 (streamlined a bit more)
-# December 2, 2009 (updated open_new_file to use "info")
-# October 13, 2009
-# Nov. 2019 (changed how netCDF is written in open_new_file())
+# Copyright (c) 2021, Scott D. Peckham
+# Jul. 2021.  Changes to support MINT netCDF and datetimes.
+#             Mostly in open_new_file() and add_grid().
+# Nov. 2019.  Changed how netCDF is written in open_new_file().
+# Sept 2014.  New version to use netCDF4 package.
+# June 2010.  Streamlined a bit more.
+# Dec. 2009.  Updated open_new_file to use "info".
+# Oct. 2009.  First version.
+#
+#-------------------------------------------------------------------
 
 import os
 import sys
@@ -17,11 +21,14 @@ from . import file_utils
 from . import rti_files
 from . import svo_names
 from . import tf_utils
+from . import time_utils
 
 import netCDF4 as nc
 
-#-------------------------------------------------------------------
-
+#---------------------------------------------------------------------
+# This class is for I/O of time-indexed 2D grids to netCDF files.
+#---------------------------------------------------------------------
+#
 #   unit_test()
 #   save_ncgs_frame()    ## (12/7/09)
 #
@@ -50,12 +57,12 @@ def unit_test(nx=4, ny=6, n_grids=6, VERBOSE=False,
     # Make instance of ncgs_file() class
     #-------------------------------------
     ncgs = ncgs_file()
-    xres_sec = 900
-    yres_sec = 900
+    xres_arcsec = 900
+    yres_arcsec = 900
     var_name = "depth"
 
     info = rti_files.make_info( file_name, ncols=nx, nrows=ny,
-                                xres=xres_sec, yres=yres_sec,
+                                xres=xres_arcsec, yres=yres_arcsec,
                                 x_west_edge=0.0, x_east_edge=1.0,
                                 y_south_edge=0.0, y_north_edge=1.5 )
                                 
@@ -69,7 +76,7 @@ def unit_test(nx=4, ny=6, n_grids=6, VERBOSE=False,
         print('ERROR during open_new_file().')
         return
     
-    grid = np.arange(nx * ny, dtype='Float32')
+    grid = np.arange(nx * ny, dtype='float32')
     grid = grid.reshape( (ny, nx) )
 
     #-----------------------------------------------
@@ -196,7 +203,7 @@ class ncgs_file():
         #       "info" should still be available in "self".
         #       We only need info if MAKE_RTI or MAKE_BOV.
         #-----------------------------------------------------
-        self.format     = 'NCGS'
+        self.format     = 'ncgs'
         self.file_name  = file_name
         self.time_index = 0
         self.grid_name  = grid_name
@@ -288,12 +295,12 @@ class ncgs_file():
         #-------------------------------------------------
         # These one-char codes are used for Nio in PyNIO
         #-------------------------------------------------
-        # dtype_code = "d"  # (double, Float64)
-        # dtype_code = "f"  # (float,  Float32)
-        # dtype_code = "l"  # (long,   Int64)
-        # dtype_code = "i"  # (int,    Int32)
-        # dtype_code = "h"  # (short,  Int16)
-        # dtype_code = "b"  # (byte,   Int8)
+        # dtype_code = "d"  # (double, float64)
+        # dtype_code = "f"  # (float,  float32)
+        # dtype_code = "l"  # (long,   int64)
+        # dtype_code = "i"  # (int,    int32)
+        # dtype_code = "h"  # (short,  int16)
+        # dtype_code = "b"  # (byte,   int8)
         # dtype_code = "S1" # (char)
         #-------------------------------------------
 #         dtype_map = {'float64':'d', 'float32':'f',
@@ -487,18 +494,17 @@ class ncgs_file():
 #         time_res_sec = factor * int(time_res)
 #         time_res_sec_str = str(time_res_sec)
         #----------------------------------------------------------
-        start_date = time_info.start_date
-        start_time = time_info.start_time
-        end_date   = time_info.end_date
-        end_time   = time_info.end_time
-        #-----------------------------------------------
-        start_datetime = start_date + ' ' + start_time
-        end_datetime   = end_date   + ' ' + end_time
+        start_date     = time_info.start_date
+        start_time     = time_info.start_time
+        end_date       = time_info.end_date
+        end_time       = time_info.end_time
+        start_datetime = time_info.start_datetime
+        end_datetime   = time_info.end_datetime
         dur_units      = time_units        
-        duration = tf_utils.get_duration( start_date, start_time,
-                                          end_date, end_time,
-                                          dur_units)
-                                          ## time_res_sec_str) 
+        duration = time_utils.get_duration( start_date, start_time,
+                                            end_date, end_time,
+                                            dur_units)
+        self.start_datetime = start_datetime  # for add_grid()
         
         #-----------------------------------
         # Save the two-char data type code
@@ -511,8 +517,8 @@ class ncgs_file():
         # Open a new netCDF file for writing
         #-------------------------------------        
         try:
-            ## format = 'NETCDF4'
-            format = 'NETCDF4_CLASSIC'
+            format = 'NETCDF4'  # better string support
+            ### format = 'NETCDF4_CLASSIC'
             ncgs_unit = nc.Dataset(file_name, mode='w', format=format)
             OK = True
         except:
@@ -570,15 +576,28 @@ class ncgs_file():
         # "The dimensions themselves are usually also defined
         # as variables, called *coordinate variables*."
         #------------------------------------------------------
-        #('d' = float64; must match in add_grid()
-        # In netCDF4 package, use 'f8' vs. 'd'.
-        #-----------------------------------------------------------
-        # Create coordinate variables, time, X, and Y
-        #-----------------------------------------------------------        
-        tvar = ncgs_unit.createVariable('time', 'f8', ('time',))     
-        Xvar = ncgs_unit.createVariable('X', 'f8', ('X',))
-        Yvar = ncgs_unit.createVariable('Y', 'f8', ('Y',))
 
+        #-----------------------------------
+        # Create coordinate variable, time
+        #---------------------------------------------------
+        #('f8' = float32; must match in add_grid()
+        #------------------------------------------------------------
+        # If using the NETCDF4 format (vs. NETCDF4_CLASSIC),
+        # then for a fixed-length string (e.g. 2021-07-01 00:00:00)
+        # the 2nd argument here can be 'S19', and for a variable-
+        # length string it can just be 'str'.
+        # Otherwise, you must use: netCDF4.stringtochar() to
+        # convert the string array to a character array.
+        #------------------------------------------------------------               
+        tvar  = ncgs_unit.createVariable('time', 'f8', ('time',))   
+        dtvar = ncgs_unit.createVariable('datetime', 'S19', ('time',))
+
+        #----------------------------------------------
+        # Create coordinate variables, time, X, and Y
+        #----------------------------------------------            
+        Xvar  = ncgs_unit.createVariable('X', 'f8', ('X',))
+        Yvar  = ncgs_unit.createVariable('Y', 'f8', ('Y',))
+               
         #-----------------------------------------
         # Create a computed variable in the file
         #-----------------------------------------
@@ -639,8 +658,8 @@ class ncgs_file():
         ncgs_unit.variables['X'].units = 'degrees_east'       
         ncgs_unit.variables['X'].geospatial_lon_min = minlon
         ncgs_unit.variables['X'].geospatial_lon_max = maxlon
-        ncgs_unit.variables['X'].xres_sec = grid_info.xres
-        ## ncgs_unit.variables['X'].xres_sec = self.info.xres
+        ncgs_unit.variables['X'].xres_arcsec = grid_info.xres
+        ## ncgs_unit.variables['X'].xres_arcsec = self.info.xres
         # Will need something like this for UTM coords later
         # ncgs_unit.variables['X'].x_west_edge = minlon
         # ncgs_unit.variables['X'].x_east_edge = maxlon  
@@ -653,27 +672,48 @@ class ncgs_file():
         ncgs_unit.variables['Y'].units = 'degrees_north'     
         ncgs_unit.variables['Y'].geospatial_lat_min = minlat
         ncgs_unit.variables['Y'].geospatial_lat_max = maxlat
-        ncgs_unit.variables['Y'].yres_sec = grid_info.yres
-        ## ncgs_unit.variables['Y'].yres_sec = self.info.yres
+        ncgs_unit.variables['Y'].yres_arcsec = grid_info.yres
+        ## ncgs_unit.variables['Y'].yres_arcsec = self.info.yres
         # Will need something like this for UTM coords later
         # ncgs_unit.variables['Y'].y_south_edge  = minlat
         # ncgs_unit.variables['Y'].y_north_edge  = maxlat
 
         #------------------------------------------
         # Save attributes of coordinate var, time
-        #------------------------------------------
+        #----------------------------------------------------
+        # Note!  add_values_at_IDs() builds a time vector
+        #        but starts at 0 and doesn't include dates.
+        #        Recall time is an unlimited dimension.
+        #----------------------------------------------------
         ncgs_unit.variables['time'].long_name = 'time'
         ncgs_unit.variables['time'].units = time_units
-        ncgs_unit.variables['time'].time_coverage_resolution = time_res    
+        ncgs_unit.variables['time'].time_units = time_units
+        ncgs_unit.variables['time'].time_coverage_resolution = time_res  
         ncgs_unit.variables['time'].time_coverage_start = start_datetime 
         ncgs_unit.variables['time'].time_coverage_end = end_datetime 
         ncgs_unit.variables['time'].time_coverage_duration = duration
-                    
+
+        #-----------------------------------------
+        # Save attributes of extra var, datetime
+        #-------------------------------------------------------------
+        # Note: The duration is determined from start_datetime,
+        #       end_datetime and dur_units.  However, if the model
+        #       is run for a shorter time period, then the T_vector
+        #       computed here may be longer than the time var vector.
+        #       This results in nodata values "--" in time vector.
+        #-------------------------------------------------------------
+        # Note!  add_profile() now builds a datetime vector.
+        #        Recall time is an unlimited dimension.
+        #-------------------------------------------------------------
+        time_dtype = time_utils.get_time_dtype( time_units )
+        ncgs_unit.variables['datetime'].long_name = 'datetime' 
+        ncgs_unit.variables['datetime'].units = time_dtype
+                            
         #---------------------------------------
         # Save attributes of the main variable
         #---------------------------------------
         svo_name = svo_names.get_svo_name( var_name )
-        ncgs_unit.variables[var_name].svo_name= svo_name 
+        ncgs_unit.variables[var_name].svo_name  = svo_name 
         ncgs_unit.variables[var_name].long_name = long_name
         ncgs_unit.variables[var_name].units     = units_name
         ncgs_unit.variables[var_name].n_grids   = 0   ##########
@@ -705,20 +745,32 @@ class ncgs_file():
         #-------------------------------------
         if (time_index == -1):
             time_index = self.time_index
-        if (time is None):
-            time = np.float64( time_index )
-            
-        #---------------------------------------
-        # Write a time to existing netCDF file
-        #---------------------------------------
-        # times = self.ncgs_unit.variables[ 'time' ]
-        # times[ time_index ] = time  ############################ CHECK
+        # if (time is None):
+        #     time = np.float64( time_index )
+
+        #----------------------------------------------
+        # Write current time to existing netCDF file
+        # Recall that time has an unlimited dimension
+        #----------------------------------------------
+        times = self.ncgs_unit.variables[ 'time' ]
+        times[ time_index ] = time
+
+        #-------------------------------------------------
+        # Write current datetime to existing netCDF file
+        # Recall that time has an unlimited dimension
+        # Datetime strings have netCDF4 type 'S19'
+        #-------------------------------------------------
+        datetime = time_utils.get_current_datetime(
+                              self.start_datetime,
+                              time, time_units='minutes')
+        datetimes = self.ncgs_unit.variables[ 'datetime' ]
+        datetimes[ time_index ] = str(datetime)
         
         #---------------------------------------
         # Write a grid to existing netCDF file
         #---------------------------------------
         var = self.ncgs_unit.variables[ grid_name ]
-        var.n_grids += 1  ##########
+        var.n_grids += 1
         if (np.ndim(grid) == 0):
             #-----------------------------------------------
             # "grid" is actually a scalar (dynamic typing)

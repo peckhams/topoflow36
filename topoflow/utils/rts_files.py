@@ -57,7 +57,7 @@ def unit_test(nx=4, ny=5, n_grids=6, VERBOSE=False,
         print('ERROR during open_new_file().')
         return
     
-    grid = np.arange(nx * ny, dtype='Float32')
+    grid = np.arange(nx * ny, dtype='float32')
     grid = grid.reshape( (ny, nx) )
     
     #----------------------------------
@@ -104,7 +104,7 @@ def unit_test(nx=4, ny=5, n_grids=6, VERBOSE=False,
     # Re-open the file and change one grid
     #---------------------------------------
     print('Updating RTS file:', file_name)
-    grid = np.ones( (ny, nx), dtype='Float32' )
+    grid = np.ones( (ny, nx), dtype='float32' )
     OK = rts.open_file( file_name, UPDATE=True )
     if not(OK): return
     rts.add_grid( grid, time_index=0 )
@@ -368,7 +368,7 @@ class rts_file():
             self.rts_unit.seek( offset )
 
         #-------------------------------------------------
-        # Convert grid to Float32 (usually from Float64)
+        # Convert grid to float32 (usually from float64)
         #-------------------------------------------------
         out_grid = grid.copy().astype(dtype)
 
@@ -404,7 +404,7 @@ class rts_file():
 ##            # "grid" is actually a scalar (dynamic typing)
 ##            # so convert it to a grid before saving
 ##            #-----------------------------------------------
-##            grid2 = grid + np.zeros([self.ny, self.nx], dtype='Float32')
+##            grid2 = grid + np.zeros([self.ny, self.nx], dtype='float32')
 ##            if (self.info.SWAP_ENDIAN):
 ##                grid2.byteswap().tofile( self.rts_unit )
 ##            else:

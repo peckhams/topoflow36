@@ -1,8 +1,11 @@
 
 #------------------------------------------------------------------------
-#  Copyright (c) 2020, Scott D. Peckham
+#  Copyright (c) 2021, Scott D. Peckham
 #
-#  Jun 2020.  Created for TopoFlow calibration notebooks.
+# Jul. 2021.  Changes to support MINT netCDF and datetimes.
+#             Added get_time_dtype(), get_time_letter(),
+#             get_duration() (from tf_utils), get_current_datetime().
+# June 2020.  Created for TopoFlow calibration notebooks.
 #             Started from code in: balto_gui.py and calibrate.py.
 #
 #------------------------------------------------------------------------
@@ -12,6 +15,10 @@ import numpy as np
 import sys
 
 #------------------------------------------------------------------------
+#  get_time_dtype()      # 2021-07-15
+#  get_time_letter()     # 2021-07-22
+#  get_duration()
+#  get_current_datetime()
 #
 #  standardize_datetime_str()
 #  get_datetime_obj_from_str()
@@ -29,6 +36,10 @@ import sys
 #  convert_times_from_datetime_to_minutes()
 #  convert_times_from_minutes_to_datetime()
 #
+#  get_duration()
+#
+#  save_averaged_time_series()      ##### NOT FINISHED
+#
 #  COMMENTED OUT FOR NOW.
 #  get_actual_time_units()
 #  get_time_delta_str()
@@ -37,6 +48,143 @@ import sys
 #  get_dt_from_datetime_str()
 #
 #--------------------------------------------------------------------
+def get_time_dtype( time_units ):
+
+    #----------------------------------------------------------
+    # Note: Added on 2021-07-15 so that time vector in netCDF
+    #       files can be returned as an array of datetimes.
+    #       Callers: ncgs_files.py, ncts_files.py,
+    #       ncps_files.py, nccs_files.py.
+    #--------------------------------------------------------------
+    # Numpy now supports a datetime64 "data type" that can be
+    # used with np.arange() to create an array of datetimes.
+    # The resolution is determined by a bracketed letter from:
+    # Y=year, M=month, D=day, h=hour, m=minute, s=second
+    # https://numpy.org/doc/stable/reference/arrays.datetime.html
+    #--------------------------------------------------------------
+    umap = {'seconds':'datetime64[s]', 'minutes':'datetime64[m]',
+            'hours':'datetime64[h]',   'days':'datetime64[D]',
+            'months':'datetime64[M]',  'years':'datetime64[Y]'}
+    return umap[ time_units ]
+
+#   get_time_dtype()
+#--------------------------------------------------------------------
+def get_time_letter( time_units ):
+ 
+    umap = {'seconds':'s', 'minutes':'m', 'hours':'h',
+            'days':'D', 'months':'M',  'years':'Y'}
+    return umap[ time_units ]
+ 
+#   get_time_letter()      
+#--------------------------------------------------------------------
+def get_duration(start_date=None, start_time=None,
+                 end_date=None, end_time=None,
+                 dur_units=None, REPORT=False):
+                 ### time_step_secs=None):
+                 
+    #------------------------------------------------    
+    # Note:  Compute time span between 2 datetimes.
+    #------------------------------------------------
+    # Next block is used for testing.
+    #------------------------------------------------    
+    if (start_date is None): start_date = '2014-01-01'
+    if (start_time is None): start_time = '00:00:00'
+    if (end_date is None):   end_date   = '2015-01-01'
+    if (end_time is None):   end_time   = '00:00:00'
+    if (dur_units is None):  dur_units = 'days'
+    #------------------------------------------------          
+#     if (end_date is None):   end_date   = '2014-12-31'
+#     if (end_time is None):   end_time   = '23:30:00'
+#     if (time_step_secs is None):  time_step_secs  = '1800'
+
+
+    date1 = start_date.split('-')
+    y1 = int(date1[0])
+    m1 = int(date1[1])  # NOTE:  int('08') = 8
+    d1 = int(date1[2])
+    #------------------------------  
+    time1 = start_time.split(':')
+    h1  = int(time1[0])
+    mm1 = int(time1[1])
+    s1  = int(time1[2])
+    #------------------------------
+    date2 = end_date.split('-')
+    y2 = int(date2[0])
+    m2 = int(date2[1])
+    d2 = int(date2[2])
+    #------------------------------   
+    time2 = end_time.split(':')
+    h2  = int(time2[0])
+    mm2 = int(time2[1])
+    s2  = int(time2[2])
+    #-----------------------------------------------------------   
+    start_obj     = datetime.datetime(y1, m1, d1, h1, mm1, s1)
+    end_obj       = datetime.datetime(y2, m2, d2, h2, mm2, s2)
+    duration_obj  = (end_obj - start_obj)
+    duration_secs = duration_obj.total_seconds()
+    
+    #-------------------------------------------------------
+    # If end_date is really the beginning of the last
+    # interval, need to add time_step to get full duration
+    #-------------------------------------------------------
+    ## duration_secs += int(time_step_secs)
+
+    #-----------------------------------------    
+    # Convert duration to dur_units provided
+    #-----------------------------------------
+    if (dur_units == 'seconds'):
+        duration = duration_secs
+    elif (dur_units == 'minutes'):
+        duration = (duration_secs / 60.0)
+    elif (dur_units == 'hours'):
+        duration = (duration_secs / 3600.0)
+    elif (dur_units == 'days'):
+        duration = (duration_secs / 86400.0)
+    elif (dur_units == 'years'):
+        duration = (duration_secs / 31536000.0)
+    else:
+        print('Unknown duration units = ' + dur_units + '.')
+        print('Returning duration in hours.')
+        duration = (duration_secs / 3600.0)
+        
+    if (REPORT):
+        print( 'duration =', duration, '[' + dur_units + ']' )
+
+    return duration
+    
+    #-----------------------------------------      
+    # Alternate approach, where dur_units is
+    # determined and then returned
+    #-----------------------------------------   
+#     if (duration_secs < 60):
+#         duration  = duration_secs
+#         dur_units = 'seconds'
+#     elif (duration_secs < 3600):
+#         duration  = divmod( duration_secs, 60 )[0]
+#         dur_units = 'minutes'
+#     elif (duration_secs < 86400):
+#         duration  = divmod( duration_secs, 3600 )[0]
+#         dur_units = 'hours'
+#     elif (duration_secs <  31536000):          
+#         duration = divmod( duration_secs, 86400 )[0]
+#         dur_units = 'days'
+#     else:
+#         duration = divmod( duration_secs, 86400 )[0]
+#         dur_units = 'days'
+#               
+#     return (duration, dur_units)
+     
+#   get_duration()
+#--------------------------------------------------------------------
+def get_current_datetime( start_datetime, time, time_units ):
+
+    start_datetime_obj = get_datetime_obj_from_one_str( start_datetime )
+    datetime = get_datetime_from_time_since(start_datetime_obj,
+                            time, units=time_units)
+    return datetime
+
+#   get_current_datetime()
+#---------------------------------------------------------------------
 def standardize_datetime_str( datetime_str ):
 
 	#---------------------------------------------------
@@ -311,7 +459,52 @@ def convert_times_from_minutes_to_datetime( times_min,
     return times_datetime
 
 #   convert_times_from_minutes_to_datetime()
+#-------------------------------------------------------------------
 #---------------------------------------------------------------------
+# def save_averaged_time_series( values, n_days=1, PLOT=False,
+#                   start_datetime='2015-10-01 00:00:00'):
+# 
+#   THIS IS NOT FINISHED YET.
+#
+# 	#------------------------------------
+# 	# Convert hourly time series values
+# 	# to n-day average values
+# 	#------------------------------------
+# 	## start_date = '2015-10-01'
+# 	# n_days  = 12
+# 
+# 	#------------------------	
+# 	# Hours to average over
+# 	#------------------------
+# 	n_hours = 24 * n_days
+# 	n_avg   = np.int32(values.size / n_hours)
+# 	v_avg   = np.zeros(n_avg, dtype='float32')
+# 	t_avg   = np.zeros(n_avg, dtype='float32')    ###########
+# 	i1 = 0
+# 	i2 = n_hours
+# 
+# 	hours = 0
+# 
+# 	for k in range(n_avg):
+# 		v_avg[k] = (values[i1:i2].sum() / n_hours)
+# 		t_avg[k] = ''
+# 		hours += n_hours
+# 		i1 += n_hours
+# 		i2 += n_hours
+# 
+#     #-----------------------------------------
+#     # Write time series to multi-column text
+#     #-----------------------------------------
+#     # from topoflow.utils import text_ts_files
+#     
+#     #-------------------------------------
+#     # Option to plot the new time series
+#     #-------------------------------------
+#     if (PLOT):
+#         from topoflow.utils import visualize as tfvis
+# 	    tfvis.plot_data(t_avg, v_avg)
+# 
+# #   save_averaged_time_series()
 #---------------------------------------------------------------------
 #     def get_actual_time_units(self):
 # 

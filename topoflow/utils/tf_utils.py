@@ -611,7 +611,7 @@ def Convert_Flow_Grid(infile, outfile, itype, otype, byte_order, \
     #-----------------
     # Create the map
     #-----------------
-    _map = np.zeros([255], dtype='UInt8')
+    _map = np.zeros([255], dtype='uint8')
     _map[icodes] = ocodes
     
     #-----------------
@@ -642,13 +642,13 @@ def Convert_Flow_Grid(infile, outfile, itype, otype, byte_order, \
     # Initialize block array
     #------------------------
     if itype == 'BYTE':    
-        block = np.zeros([blocksize], dtype='UInt8')
+        block = np.zeros([blocksize], dtype='uint8')
     elif itype == 'INTEGER':    
-        block = np.zeros([blocksize], dtype='Int16')
+        block = np.zeros([blocksize], dtype='int16')
     elif itype == 'LONG':    
-        block = np.zeros([blocksize], dtype='Int32')
+        block = np.zeros([blocksize], dtype='int32')
     else:    
-        block = np.zeros([blocksize], dtype='UInt8')
+        block = np.zeros([blocksize], dtype='uint8')
     
     
     #-------------------------------
@@ -656,13 +656,13 @@ def Convert_Flow_Grid(infile, outfile, itype, otype, byte_order, \
     #-------------------------------
     if (rem_size != 0):    
         if itype == 'BYTE':    
-            last_block = np.zeros([rem_size], dtype='UInt8')
+            last_block = np.zeros([rem_size], dtype='uint8')
         elif itype == 'INTEGER':    
-            last_block = np.zeros([rem_size], dtype='Int16')
+            last_block = np.zeros([rem_size], dtype='int16')
         elif itype == 'LONG':    
-            last_block = np.zeros([rem_size], dtype='Int32')
+            last_block = np.zeros([rem_size], dtype='int32')
         else:    
-            last_block = np.zeros([rem_size], dtype='UInt8')
+            last_block = np.zeros([rem_size], dtype='uint8')
         
     
     #-----------------------------------
@@ -716,106 +716,7 @@ def Convert_Flow_Grid(infile, outfile, itype, otype, byte_order, \
     file_ounit.close()
     
 #  Convert_Flow_Grid
-#-------------------------------------------------------------------
-def get_duration(start_date=None, start_time=None,
-                 end_date=None, end_time=None,
-                 dur_units=None, REPORT=False):
-                 ### time_step_secs=None):
-                 
-    #------------------------------------------------    
-    # Note:  Compute time span between 2 datetimes.
-    #------------------------------------------------
-    # Next block is used for testing.
-    #------------------------------------------------    
-    if (start_date is None): start_date = '2014-01-01'
-    if (start_time is None): start_time = '00:00:00'
-    if (end_date is None):   end_date   = '2015-01-01'
-    if (end_time is None):   end_time   = '00:00:00'
-    if (dur_units is None):  dur_units = 'days'
-    #------------------------------------------------          
-#     if (end_date is None):   end_date   = '2014-12-31'
-#     if (end_time is None):   end_time   = '23:30:00'
-#     if (time_step_secs is None):  time_step_secs  = '1800'
-
-
-    date1 = start_date.split('-')
-    y1 = int(date1[0])
-    m1 = int(date1[1])  # NOTE:  int('08') = 8
-    d1 = int(date1[2])
-    #------------------------------  
-    time1 = start_time.split(':')
-    h1  = int(time1[0])
-    mm1 = int(time1[1])
-    s1  = int(time1[2])
-    #------------------------------
-    date2 = end_date.split('-')
-    y2 = int(date2[0])
-    m2 = int(date2[1])
-    d2 = int(date2[2])
-    #------------------------------   
-    time2 = end_time.split(':')
-    h2  = int(time2[0])
-    mm2 = int(time2[1])
-    s2  = int(time2[2])
-    #-----------------------------------------------------------   
-    start_obj     = datetime.datetime(y1, m1, d1, h1, mm1, s1)
-    end_obj       = datetime.datetime(y2, m2, d2, h2, mm2, s2)
-    duration_obj  = (end_obj - start_obj)
-    duration_secs = duration_obj.total_seconds()
-    
-    #-------------------------------------------------------
-    # If end_date is really the beginning of the last
-    # interval, need to add time_step to get full duration
-    #-------------------------------------------------------
-    ## duration_secs += int(time_step_secs)
-
-    #-----------------------------------------    
-    # Convert duration to dur_units provided
-    #-----------------------------------------
-    if (dur_units == 'seconds'):
-        duration = duration_secs
-    elif (dur_units == 'minutes'):
-        duration = (duration_secs / 60.0)
-    elif (dur_units == 'hours'):
-        duration = (duration_secs / 3600.0)
-    elif (dur_units == 'days'):
-        duration = (duration_secs / 86400.0)
-    elif (dur_units == 'years'):
-        duration = (duration_secs / 31536000.0)
-    else:
-        print('Unknown duration units = ' + dur_units + '.')
-        print('Returning duration in hours.')
-        duration = (duration_secs / 3600.0)
-        
-    if (REPORT):
-        print( 'duration =', duration, '[' + dur_units + ']' )
-
-    return duration
-    
-    #-----------------------------------------      
-    # Alternate approach, where dur_units is
-    # determined and then returned
-    #-----------------------------------------   
-#     if (duration_secs < 60):
-#         duration  = duration_secs
-#         dur_units = 'seconds'
-#     elif (duration_secs < 3600):
-#         duration  = divmod( duration_secs, 60 )[0]
-#         dur_units = 'minutes'
-#     elif (duration_secs < 86400):
-#         duration  = divmod( duration_secs, 3600 )[0]
-#         dur_units = 'hours'
-#     elif (duration_secs <  31536000):          
-#         duration = divmod( duration_secs, 86400 )[0]
-#         dur_units = 'days'
-#     else:
-#         duration = divmod( duration_secs, 86400 )[0]
-#         dur_units = 'days'
-#               
-#     return (duration, dur_units)
-     
-#   get_duration()
-#-------------------------------------------------------------------
+#------------------------------------------------------------------------
 
 
 

@@ -603,7 +603,7 @@ def Convert_Flow_Grid(infile, outfile, itype, otype, byte_order, \
     #-----------------
     # Create the map
     #-----------------
-    _map = zeros([255], dtype='UInt8')
+    _map = zeros([255], dtype='uint8')
     _map[icodes] = ocodes
     
     #-----------------
@@ -634,13 +634,13 @@ def Convert_Flow_Grid(infile, outfile, itype, otype, byte_order, \
     # Initialize block array
     #------------------------
     if itype == 'BYTE':    
-        block = zeros([blocksize], dtype='UInt8')
+        block = zeros([blocksize], dtype='uint8')
     elif itype == 'INTEGER':    
-        block = zeros([blocksize], dtype='Int16')
+        block = zeros([blocksize], dtype='int16')
     elif itype == 'LONG':    
-        block = zeros([blocksize], dtype='Int32')
+        block = zeros([blocksize], dtype='int32')
     else:    
-        block = zeros([blocksize], dtype='UInt8')
+        block = zeros([blocksize], dtype='uint8')
     
     
     #-------------------------------
@@ -648,13 +648,13 @@ def Convert_Flow_Grid(infile, outfile, itype, otype, byte_order, \
     #-------------------------------
     if (rem_size != 0):    
         if itype == 'BYTE':    
-            last_block = zeros([rem_size], dtype='UInt8')
+            last_block = zeros([rem_size], dtype='uint8')
         elif itype == 'INTEGER':    
-            last_block = zeros([rem_size], dtype='Int16')
+            last_block = zeros([rem_size], dtype='int16')
         elif itype == 'LONG':    
-            last_block = zeros([rem_size], dtype='Int32')
+            last_block = zeros([rem_size], dtype='int32')
         else:    
-            last_block = zeros([rem_size], dtype='UInt8')
+            last_block = zeros([rem_size], dtype='uint8')
         
     
     #-----------------------------------

@@ -197,11 +197,11 @@ def get_start_pixels(DEM, nx, ny,
     # IDs and need to have the correct type
     #----------------------------------------
     if (USE_64_BITS):    
-        ID_type = 'Int64'
+        ID_type = 'int64'
         nx = int64(nx)
         ny = int64(ny)
     else:
-        ID_type = 'Int32'
+        ID_type = 'int32'
         nx = int32(nx)
         ny = int32(ny)
 
@@ -362,11 +362,11 @@ def fill_pits(DEM, DEM_type, nx, ny,
     start  = time.time()
 
     if (USE_64_BITS):    
-        ID_type = 'Int64'
+        ID_type = 'int64'
         nx = numpy.int64(nx)
         ny = numpy.int64(ny)
     else:
-        ID_type = 'Int32'
+        ID_type = 'int32'
         nx = numpy.int32(nx)
         ny = numpy.int32(ny)
     n_pixels = (nx * ny)
@@ -392,8 +392,8 @@ def fill_pits(DEM, DEM_type, nx, ny,
     OPEN    = uint8(0)
     CLOSED  = uint8(1)
     ON_HEAP = uint8(2)
-    ## C  = numpy.zeros( (ny, nx), dtype='UInt8' ).flat  # (iterator for 1D indices)
-    C  = numpy.zeros( n_pixels, dtype='UInt8' )
+    ## C  = numpy.zeros( (ny, nx), dtype='uint8' ).flat  # (iterator for 1D indices)
+    C  = numpy.zeros( n_pixels, dtype='uint8' )
     w  = where( logical_or((DEM <= nodata), (isfinite(DEM) == 0)) )
     nw = size(w[0])
     w  = w[0]        ############## (need this ?)

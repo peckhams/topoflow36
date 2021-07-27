@@ -541,14 +541,20 @@ def plot_time_series(nc_file, output_dir=None, var_index=1,
         print( lat_list )
         print()
 
-    (series, times) = ncts.get_series( var_name )
-    long_name = series.long_name
-    v_units   = series.units
-    t_units   = times.units
-    values    = np.array( series )
-    times     = np.array( times )
-    # values = series[:]   # also works
-    # times  = times[:]    # also works
+    # (series, times) = ncts.get_series( var_name )
+    # long_name = series.long_name
+    # v_units   = series.units
+    # values    = np.array( series )
+    #-----------------------------------------
+    ts_values = ncts.get_values( var_name )
+    ts_times  = ncts.get_times()
+    long_name = ts_values.long_name
+    v_units   = ts_values.units
+    t_units   = ts_times.units
+    values    = ts_values[:]
+    times     = ts_times[:]
+    # values    = np.array( ts_values )
+    # times     = np.array( ts_times )
 
     if (t_units == 'minutes'):
         # times = times / 60.0
@@ -556,6 +562,14 @@ def plot_time_series(nc_file, output_dir=None, var_index=1,
         times = times / (60.0 * 24)
         t_units = 'days'
 
+    # For testing
+    ####################
+    # print(' max value =', values.max())
+    # print(' min value =', values.min())
+    # print(' values[-50:-1] =', values[-50:-1])
+    # print(' times[-50:-1]  =', times[-50:-1])
+    # print()
+    
     # ymin = values.min()
     ymin = 0.0
     ymax = values.max()

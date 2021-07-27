@@ -1,13 +1,13 @@
 
-# This new verion (6/11/10) hasn't been tested yet.
-# Can't run unit tests on my MacPro w/o Nio.
-#---------------------------------------------------
-
-# S.D. Peckham
-# Sept 2014 (new version to use netCDF4)
-# May, June 2010
-# Nov 2019  (MINT netCDF compliance)
-
+# Copyright (c) 2021, Scott D. Peckham
+# Jul. 2021.  Changes to support MINT netCDF and datetimes.
+#             Mostly in open_new_file() and add_values_at_IDs().
+# Nov. 2019   MINT netCDF compliance.
+# Sept 2014.  New version to use netCDF4 package.
+# June 2010.  Improvements
+# May  2010.  First version?
+#
+#-------------------------------------------------------------------
 import os
 import sys
 import time
@@ -18,6 +18,7 @@ from . import file_utils
 from . import rti_files
 from . import svo_names
 from . import tf_utils
+from . import time_utils
 
 import netCDF4 as nc
 
@@ -51,6 +52,10 @@ import netCDF4 as nc
 #       get_var_units()        # 2019-11-24
 #       get_var_lons()         # 2019-11-24
 #       get_var_lats()         # 2019-11-24
+#-----------------------------
+#       get_values()
+#       get_times()
+#       get_datetimes()
 #       get_series()
 #-----------------------------
 #       close_file()
@@ -97,8 +102,8 @@ def unit_test1(n_values=10, VERBOSE=False,
         print('ERROR during open_new_file().')
         return
 
-    series = np.sqrt(np.arange( n_values, dtype='Float32'))
-    times  = np.arange( n_values, dtype='Float32') * 60.0
+    series = np.sqrt(np.arange( n_values, dtype='float32'))
+    times  = np.arange( n_values, dtype='float32') * 60.0
     
     #--------------------------
     # Add time series to file
@@ -174,8 +179,8 @@ def unit_test2(n_values=10, VERBOSE=False,
         print('ERROR during open_new_file().')
         return
 
-    series = np.sqrt(np.arange( n_values, dtype='Float32'))
-    times  = np.arange( n_values, dtype='Float32') * 60.0
+    series = np.sqrt(np.arange( n_values, dtype='float32'))
+    times  = np.arange( n_values, dtype='float32') * 60.0
     
     #--------------------------
     # Add time series to file
@@ -254,18 +259,18 @@ def get_dtype_map():
     #-------------------------------------------------
     # These one-char codes are used for Nio in PyNIO
     #-------------------------------------------------
-    # dtype_code = "d"  # (double, Float64)
-    # dtype_code = "f"  # (float,  Float32)
-    # dtype_code = "l"  # (long,   Int64)
-    # dtype_code = "i"  # (int,    Int32)
-    # dtype_code = "h"  # (short,  Int16)
-    # dtype_code = "b"  # (byte,   Int8)
+    # dtype_code = "d"  # (double, float64)
+    # dtype_code = "f"  # (float,  float32)
+    # dtype_code = "l"  # (long,   int64)
+    # dtype_code = "i"  # (int,    int32)
+    # dtype_code = "h"  # (short,  int16)
+    # dtype_code = "b"  # (byte,   int8)
     # dtype_code = "S1" # (char)
     #-------------------------------------------
 #         dtype_map = {'float64':'d', 'float32':'f',
-#                         'int64':'l', 'int32':'i',
-#                         'int16':'s', 'int8':'b',
-#                         'S|100':'S1'}  # (check last entry)                      
+#                      'int64':'l', 'int32':'i',
+#                      'int16':'s', 'int8':'b',
+#                      'S|100':'S1'}  # (check last entry)                      
 
     return dtype_map
 
@@ -394,7 +399,7 @@ class ncts_file():
 
         #-------------------------------------------
         # We may not need to save these in self.
-        # I don't think they're used anywhere yet.
+        # See how RHS vars are used below.
         #-------------------------------------------
         self.var_names   = var_names           
         self.long_names  = long_names
@@ -417,18 +422,18 @@ class ncts_file():
 #         time_res_sec = factor * int(time_res)
 #         time_res_sec_str = str(time_res_sec)
         #----------------------------------------------------------
-        start_date = time_info.start_date
-        start_time = time_info.start_time
-        end_date   = time_info.end_date
-        end_time   = time_info.end_time
-        #------------------------------------------------
-        start_datetime = start_date + ' ' + start_time
-        end_datetime   = end_date   + ' ' + end_time
+        start_date     = time_info.start_date
+        start_time     = time_info.start_time
+        end_date       = time_info.end_date
+        end_time       = time_info.end_time
+        start_datetime = time_info.start_datetime
+        end_datetime   = time_info.end_datetime
         dur_units      = time_units        
-        duration = tf_utils.get_duration( start_date, start_time,
-                                          end_date, end_time,
-                                          dur_units)
-                                          
+        duration = time_utils.get_duration( start_date, start_time,
+                                            end_date, end_time,
+                                            dur_units)
+        self.start_datetime = start_datetime  # for add_values_at_IDs()
+                                 
         #---------------------------------------------
         # Create array of dtype codes from dtypes
         # for multiple time series (i.e. columns).
@@ -440,8 +445,8 @@ class ncts_file():
         # Open a new netCDF file for writing
         #-------------------------------------
         try:
-            ## format = 'NETCDF4'
-            format = 'NETCDF4_CLASSIC'
+            format = 'NETCDF4'
+            ## format = 'NETCDF4_CLASSIC'  # does not easily support string array
             ncts_unit = nc.Dataset(file_name, mode='w', format=format)
             OK = True
         except:
@@ -504,21 +509,63 @@ class ncts_file():
         #------------------------------------------------
         ncts_unit.createDimension("time", None)
 
+        #-----------------------------------
+        # Create coordinate variable, time
+        #----------------------------------------------------
+        #('f8' = float32; must match in add_values_at_IDs()
+        #------------------------------------------------------------
+        # If using the NETCDF4 format (vs. NETCDF4_CLASSIC),
+        # then for a fixed-length string (e.g. 2021-07-01 00:00:00)
+        # the 2nd argument here can be 'S19', and for a variable-
+        # length string it can just be 'str'.
+        # Otherwise, you must use: netCDF4.stringtochar() to
+        # convert the string array to a character array.
+        #------------------------------------------------------------               
+        tvar  = ncts_unit.createVariable('time', 'f8', ('time',))   
+        dtvar = ncts_unit.createVariable('datetime', 'S19', ('time',))
+   
         #------------------------------------------
         # Save attributes of coordinate var, time
-        #---------------------------------------------------
-        #('f' = float32; must match in add_values_at_IDs()
-        #---------------------------------------------------
-        # NB! Can't use "time" vs. "tvar" here unless we
-        #     add "import time" inside this function.
-        #---------------------------------------------------
-        tvar = ncts_unit.createVariable('time', 'f8', ("time",))
+        #----------------------------------------------------
+        # Note!  add_values_at_IDs() builds a time vector
+        #        but starts at 0 and doesn't include dates.
+        #        Recall time is an unlimited dimension.
+        #----------------------------------------------------
+        ncts_unit.variables['time'].long_name = 'time'        
         ncts_unit.variables['time'].units = time_units
+        ncts_unit.variables['time'].time_units = time_units
         ncts_unit.variables['time'].time_coverage_resolution = time_res    
         ncts_unit.variables['time'].time_coverage_start = start_datetime 
         ncts_unit.variables['time'].time_coverage_end = end_datetime 
         ncts_unit.variables['time'].time_coverage_duration = duration
-                
+ 
+        #-----------------------------------------
+        # Save attributes of extra var, datetime
+        #-------------------------------------------------------------
+        # Note: The duration is determined from start_datetime,
+        #       end_datetime and dur_units.  However, if the model
+        #       is run for a shorter time period, then the T_vector
+        #       computed here may be longer than the time var vector.
+        #       This results in nodata values "--" in time vector.
+        #-------------------------------------------------------------
+        # Note!  add_values_at_IDs() now builds a datetime vector.
+        #        Recall time is an unlimited dimension.
+        #-------------------------------------------------------------
+#         dt = np.int( time_res )
+#         n_times = np.int(duration / dt)
+#         T_vector = np.linspace( 0, duration, n_times, dtype='float64' )
+        #--------------------------------------------------------------------
+#         dt = np.int( time_res )
+#         time_dtype  = time_utils.get_time_dtype( time_units )
+#         time_letter = time_utils.get_time_letter( time_units )
+#         del_t = np.timedelta64(dt, time_letter)
+#         T_vector = np.arange(start_datetime, end_datetime, del_t, dtype=time_dtype)
+#         ncts_unit.variables['datetime'][:] = T_vector
+        #--------------------------------------------------------------------
+        time_dtype = time_utils.get_time_dtype( time_units )
+        ncts_unit.variables['datetime'].long_name = 'datetime' 
+        ncts_unit.variables['datetime'].units = time_dtype
+ 
         #-----------------------------------
         # Create variables using var_names
         #---------------------------------------------------
@@ -570,7 +617,9 @@ class ncts_file():
             row2 = (row - 0.5)
             lon = minlon + (col2 * xres_deg)
             lat = minlat + ((nrows - 1 - row2) * yres_deg)       
-            #---------------------------------------------------                      
+            #---------------------------------------------------
+            ncts_unit.variables[var_name].grid_cell_col  = col
+            ncts_unit.variables[var_name].grid_cell_row  = row                       
             ncts_unit.variables[var_name].geospatial_lon = lon
             ncts_unit.variables[var_name].geospatial_lat = lat            
             #----------------------------------------------------------------           
@@ -693,7 +742,7 @@ class ncts_file():
             # Without this, don't get a value for every ID.
             #-----------------------------------------------------
             n_IDs  = np.size(IDs[0])
-            vector = np.zeros( n_IDs, dtype='Float32')
+            vector = np.zeros( n_IDs, dtype='float32')
             return (vector + np.float32(var)) 
         
     #   values_at_IDs()
@@ -724,12 +773,24 @@ class ncts_file():
         if (time_index == -1):
             time_index = self.time_index
 
-        #---------------------------------------------
+        #----------------------------------------------
         # Write current time to existing netCDF file
-        #---------------------------------------------
+        # Recall that time has an unlimited dimension
+        #----------------------------------------------
         times = self.ncts_unit.variables[ 'time' ]
         times[ time_index ] = time
-        
+
+        #-------------------------------------------------
+        # Write current datetime to existing netCDF file
+        # Recall that time has an unlimited dimension
+        # Datetime strings have netCDF4 type 'S19'
+        #-------------------------------------------------
+        datetime = time_utils.get_current_datetime(
+                              self.start_datetime,
+                              time, time_units='minutes')
+        datetimes = self.ncts_unit.variables[ 'datetime' ]
+        datetimes[ time_index ] = str(datetime)
+                                          
         #--------------------------------------------
         # Write data values to existing netCDF file
         #--------------------------------------------
@@ -760,7 +821,7 @@ class ncts_file():
         #---------------------------
         self.time_index += 1
          
-    #   add_values_at_IDs() 
+    #   add_values_at_IDs()
     #-------------------------------------------------------------------
     def add_series(self, values, var_name, times,
                    time_index=-1):
@@ -823,11 +884,11 @@ class ncts_file():
     def get_var_lons(self):
         
         var_names = self.get_var_names()
-        var_names = var_names[1:]    # exclude 'time'
         lons = []
         for name in var_names:
-            var = self.ncts_unit.variables[ name ]
-            lons.append( var.geospatial_lon )
+            if (name not in ['time', 'datetime']):
+                var = self.ncts_unit.variables[ name ]
+                lons.append( var.geospatial_lon )
         return lons
  
     #   get_var_lons()
@@ -835,14 +896,53 @@ class ncts_file():
     def get_var_lats(self):
         
         var_names = self.get_var_names()
-        var_names = var_names[1:]    # exclude 'time'
         lats = []
         for name in var_names:
-            var = self.ncts_unit.variables[ name ]
-            lats.append( var.geospatial_lat )
+            if (name not in ['time', 'datetime']):
+                var = self.ncts_unit.variables[ name ]
+                lats.append( var.geospatial_lat )
         return lats
  
     #   get_var_lats()
+    #----------------------------------------------------------
+    def get_values(self, var_name):
+
+        #----------------------------------------------------------
+        # Note:  Attributes such as long_name and units can
+        #        be obtained as values.units or values.long_name.
+        #        The actual values can be obtained from:
+        #           values[:], or np.array(values))
+        #----------------------------------------------------------
+        values = self.ncts_unit.variables[ var_name ]
+        return values
+               
+    #   get_values()
+    #----------------------------------------------------------
+    def get_times(self):
+
+        #----------------------------------------------------------
+        # Note:  Attributes such as long_name and units can
+        #        be obtained as times.units or times.long_name.
+        #        The actual values can be obtained from:
+        #           times[:], or np.array(times))
+        #----------------------------------------------------------
+        times = self.ncts_unit.variables[ 'time' ]
+        return times
+        
+    #   get_times()
+    #----------------------------------------------------------
+    def get_datetimes(self):
+
+        #----------------------------------------------------------
+        # Note:  Attributes such as long_name and units can
+        #        be obtained as dt.units or dt.long_name.
+        #        The actual values can be obtained from:
+        #           datetimes[:], or np.array(datetimes))
+        #----------------------------------------------------------
+        datetimes = self.ncts_unit.variables[ 'datetime' ]
+        return datetimes
+        
+    #   get_datetimes()
     #----------------------------------------------------------
     def get_series(self, var_name):
 

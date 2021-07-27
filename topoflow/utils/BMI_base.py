@@ -2,7 +2,7 @@
 #  We should use "initialize_scalar()" for all scalar assignments.
 #  See the Notes for that method.  Search for "np.float64(0".
 #      
-#  Copyright (c) 2009-2020, Scott D. Peckham
+#  Copyright (c) 2009-2021, Scott D. Peckham
 #
 #  May 2020. Revamped version of set_directories()
 #  Sep 2019. Updates to allow TF to run in Python 3, including
@@ -149,7 +149,6 @@
 #      is_scalar()
 #      is_vector()
 #      is_grid()
-#      get_duration()                # (1/14/20)
 #
 #-----------------------------------------------------------------------
 
@@ -165,21 +164,12 @@ import traceback        # (10/10/10)
 # See initialize_basin_vars() below.
 #--------------------------------------------
 # import basins
-   
-## import cfg_files as cfg   # (not used)
 
 from . import outlets          ## (9/19/14)
 from . import pixels
 from . import rti_files
 from . import tf_utils
-
-#---------------------------------------------
-# Experiment.  9/19/14
-#---------------------------------------------
-# from topoflow.utils import basins
-# from topoflow.utils import cfg_files as cfg
-# from topoflow.utils import pixels
-# from topoflow.utils import rti_files
+from . import time_utils
 
 #-----------------------------------------------------------------------
 def unit_test():
@@ -207,12 +197,6 @@ class BMI_component:
 
     def __init__(self):
 
-        ######################################################
-        # These should be obsolete now.
-        # self.CCA              = tf_utils.TF_Use_CCA()
-        # self.USE_GUI_SETTINGS = False
-        ######################################################
- 
         self.SILENT      = True    # (new default: 11/16/11)        
         ## self.DEBUG    = True
         self.DEBUG       = False   # a "VERBOSE" setting
@@ -1670,11 +1654,15 @@ class BMI_component:
         # is not included here.
         #----------------------------------------------------        
         dur_units = 'minutes'  #######
-        duration  = tf_utils.get_duration( time_info.start_date, time_info.start_time,
-                                           time_info.end_date, time_info.end_time,
-                                           dur_units )
+        duration  = time_utils.get_duration( time_info.start_date, time_info.start_time,
+                                             time_info.end_date, time_info.end_time,
+                                             dur_units )
         time_info.duration = duration  # (2020-04-29) 
-        time_info.duration_units = dur_units   
+        time_info.duration_units = dur_units
+
+        time_info.start_datetime = time_info.start_date + ' ' + time_info.start_time
+        time_info.end_datetime   = time_info.end_date   + ' ' + time_info.end_time
+                   
         self.time_info = time_info
 
     #   read_time_info()

@@ -42,6 +42,7 @@ from . import file_utils
 from . import ncgs_files
 from . import ncts_files
 from . import ncps_files
+from . import nccs_files
 from . import rti_files
 from . import rts_files
 from . import text_ts_files
@@ -91,22 +92,23 @@ def get_dtype_map(self):
                  'int64':'i8', 'int32':'i4',
                  'int16':'i2', 'int8':'i',
                  'S|100':'S1'}  # ( ????? )       
-        
+                 ######## 'U<100':'S1'}  ## ????
+                         
     #-------------------------------------------------
     # These one-char codes are used for Nio in PyNIO
     #-------------------------------------------------
-    # dtype_code = "d"  # (double, Float64)
-    # dtype_code = "f"  # (float,  Float32)
-    # dtype_code = "l"  # (long,   Int64)
-    # dtype_code = "i"  # (int,    Int32)
-    # dtype_code = "h"  # (short,  Int16)
-    # dtype_code = "b"  # (byte,   Int8)
+    # dtype_code = "d"  # (double, float64)
+    # dtype_code = "f"  # (float,  float32)
+    # dtype_code = "l"  # (long,   int64)
+    # dtype_code = "i"  # (int,    int32)
+    # dtype_code = "h"  # (short,  int16)
+    # dtype_code = "b"  # (byte,   int8)
     # dtype_code = "S1" # (char)
     #-------------------------------------------
 #         dtype_map = {'float64':'d', 'float32':'f',
-#                         'int64':'l', 'int32':'i',
-#                         'int16':'s', 'int8':'b',
-#                         'S|100':'S1'}  # (check last entry)                      
+#                      'int64':'l', 'int32':'i',
+#                      'int16':'s', 'int8':'b',
+#                      'S|100':'S1'}  # (check last entry)                      
 
     return dtype_map
     
@@ -173,6 +175,17 @@ def open_new_gs_file(self, file_name, info=None,
     # print 'time_units    =', time_units
     # print ' '
 
+    #------------------------------------------------------
+    # The try/except below makes it hard to troubleshoot.
+    #------------------------------------------------------
+    exec( ncgs_file_str + "= file_utils.replace_extension(" +
+          gs_file_str + ", '.nc')" )
+    exec( ncgs_unit_str + "=" + "ncgs_files.ncgs_file()" )
+    exec( ncgs_unit_str + ".open_new_file(" + ncgs_file_str +
+          ", self.rti, self.time_info, " +
+          "var_name, long_name, units_name, dtype=dtype," +
+          "time_units=time_units, time_res=time_res_min)" )
+          
     #--------------------------------------------
     # Open new netCDF file to write grid stacks
     # using var_name to build variable names
@@ -181,35 +194,35 @@ def open_new_gs_file(self, file_name, info=None,
     # last TopoFlow version (always float32),
     # but Erode needs other types.
     #--------------------------------------------
-    try:
-        #--------------------------------------------------------
-        # (2019-10-03) This is okay; variable is set into self.
-        #--------------------------------------------------------       
-        exec( ncgs_file_str + "= file_utils.replace_extension(" +
-              gs_file_str + ", '.nc')" )
-        exec( ncgs_unit_str + "=" + "ncgs_files.ncgs_file()" )
-        exec( ncgs_unit_str + ".open_new_file(" + ncgs_file_str +
-              ", self.rti, self.time_info, " +
-              "var_name, long_name, units_name, dtype=dtype," +
-              "time_units=time_units, time_res=time_res_min)" )
+#     try:
+#         #--------------------------------------------------------
+#         # (2019-10-03) This is okay; variable is set into self.
+#         #--------------------------------------------------------       
+#         exec( ncgs_file_str + "= file_utils.replace_extension(" +
+#               gs_file_str + ", '.nc')" )
+#         exec( ncgs_unit_str + "=" + "ncgs_files.ncgs_file()" )
+#         exec( ncgs_unit_str + ".open_new_file(" + ncgs_file_str +
+#               ", self.rti, self.time_info, " +
+#               "var_name, long_name, units_name, dtype=dtype," +
+#               "time_units=time_units, time_res=time_res_min)" )
             #----------------------------------------
             # (2019-10-03)  This isn't needed here.
             #----------------------------------------
-    #         ncgs_file_str = eval( "file_utils.replace_extension(" +
-    #               gs_file_str + ", '.nc')" )
-    #         expr = "ncgs_files.ncgs_file().open_new_file(" + ncgs_file_str +
-    #                ", self.rti, var_name, long_name, units_name, " +
-    #                "dtype=dtype, time_units=time_units)" )
-    #         ncgs_unit_str = eval( expr )  ## (2019-10-03)
+##             ncgs_file_str = eval( "file_utils.replace_extension(" +
+##                   gs_file_str + ", '.nc')" )
+##             expr = "ncgs_files.ncgs_file().open_new_file(" + ncgs_file_str +
+##                    ", self.rti, var_name, long_name, units_name, " +
+##                    "dtype=dtype, time_units=time_units)" )
+##             ncgs_unit_str = eval( expr )  ## (2019-10-03)
         
-        MAKE_RTS = False
-    except:
-        print('ERROR: Unable to open new netCDF file:')
-        print( '      ' + ncgs_file_str )
-        print(' ')
-        print('Will write grid stack in generic RTS format.')
-        print(' ')
-        MAKE_RTS = True
+#         MAKE_RTS = False
+#     except:
+#         print('ERROR: Unable to open new netCDF file:')
+#         print( '      ' + ncgs_file_str )
+#         print(' ')
+#         print('Will write grid stack in generic RTS format.')
+#         print(' ')
+#         MAKE_RTS = True
 
     #-------------------------------------------
     # Always save grid stacks in an RTS file ?
@@ -312,7 +325,7 @@ def open_new_ts_file(self, file_name, IDs, ####
                      units_name='None',
                      dtype='float32',
                      time_units='minutes'):
-                     
+                                                                
     #----------------------------------
     # Build lists for var_names, etc.
     #----------------------------------
@@ -330,9 +343,9 @@ def open_new_ts_file(self, file_name, IDs, ####
         #----------------------------------------
         row_str  = '_' + str(rows[k])
         col_str  = '_' + str(cols[k])
-        #------------------------------------------------
-        # Must match with ncts_files.add_values_add_IDs
-        #------------------------------------------------
+        #-----------------------------------------------
+        # Must match with ncts_files.add_values_at_IDs
+        #-----------------------------------------------
 ##        row_str = '[' + str(rows[k]) + ','
 ##        col_str = str(cols[k]) + ']'            
         vname = var_name + row_str + col_str
@@ -351,10 +364,10 @@ def open_new_ts_file(self, file_name, IDs, ####
     # Open new netCDF file to write time series
     # using var_name to build variable names
     #--------------------------------------------
-#     try:              
+#     try:
     ncts_unit_str = "self." + var_name + "_ncts_unit"
     ncts_file_str = "self." + var_name + "_ncts_file"
-    ts_file_str   = "self." + var_name + "_ts_file"
+    ts_file_str   = "self." + var_name + "_ts_file"    
     exec( ncts_file_str + "= file_utils.replace_extension(" +
           ts_file_str + ", '.nc')" )
     exec( ncts_unit_str + "=" + "ncts_files.ncts_file()" )
@@ -362,6 +375,7 @@ def open_new_ts_file(self, file_name, IDs, ####
           ", self.rti, self.time_info," +
           "var_names, long_names, units_names, dtypes=dtypes," +
           "time_units=time_units, time_res=time_res_min)" )
+    #------------------------------------------------------------- 
     MAKE_TTS = False
 #     except:
 #         print('ERROR: Unable to open new netCDF file:')
@@ -371,7 +385,7 @@ def open_new_ts_file(self, file_name, IDs, ####
 #         print('Will write time series to multi-column text file.')
 #         print(' ')
 #         MAKE_TTS = True
-                      
+                     
     #-------------------------------------------
     # Always save time series in a text file ?
     #-------------------------------------------
@@ -402,22 +416,22 @@ def open_new_ts_file(self, file_name, IDs, ####
 #-------------------------------------------------------------------
 def add_values_at_IDs(self, time_min, var, var_name, IDs):
 
-##    ncts_unit_str = "self." + var_name + "_ncts_unit"   
-##    exec( ncts_unit_str + ".add_values_at_IDs( time_min, var, var_name, IDs )")
+    ncts_unit_str = "self." + var_name + "_ncts_unit"   
+    exec( ncts_unit_str + ".add_values_at_IDs( time_min, var, var_name, IDs )")
 
     #-------------------------------------------     
     # Save time series values to a netCDF file
     #-------------------------------------------         
-    try:
-        ncts_unit_str = "self." + var_name + "_ncts_unit"   
-        exec( ncts_unit_str + ".add_values_at_IDs( time_min, var, var_name, IDs )")
-    except:
-        pass
-        #------------------------------------------------
-        # Don't want to print this every time.
-        # Could use "self.SAVE_CDF = False" to disable.
-        #------------------------------------------------
-        # print 'ERROR: Unable to add values to netCDF file.'
+#     try:
+#         ncts_unit_str = "self." + var_name + "_ncts_unit"
+#         exec( ncts_unit_str + ".add_values_at_IDs( time_min, var, var_name, IDs )")
+#     except:
+#         # pass
+#         #------------------------------------------------
+#         # Don't want to print this every time.
+#         # Could use "self.SAVE_CDF = False" to disable.
+#         #------------------------------------------------
+#         print('ERROR: Unable to add values to netCDF file.')
 
     #-----------------------------------------     
     # Save time series values to a text file
@@ -469,7 +483,7 @@ def close_ts_file(self, var_name):
 #-------------------------------------------------------------------
 #-------------------------------------------------------------------
 def open_new_ps_file(self, file_name, IDs, ####
-                     z_values=numpy.arange(10),
+                     z_values=[None],
                      z_units='m',
                      var_name='q',
                      long_name='Unknown',
@@ -631,13 +645,15 @@ def close_ps_file(self, var_name):
 #-------------------------------------------------------------------    
 #-------------------------------------------------------------------
 def open_new_cs_file(self, file_name, info=None,
+                     z_values=[None],    # added 2021-07-15
+                     z_units='m',        # added 2021-07-15
                      var_name='X',
                      long_name='Unknown',
                      units_name='None',
                      dtype='float32',
                      time_units='minutes',
                      nx=None, ny=None, dx=None, dy=None):
-
+                                          
     #---------------------------
     # Was grid info provided ?
     #---------------------------
@@ -657,31 +673,32 @@ def open_new_cs_file(self, file_name, info=None,
             print('      Grid info not provided.')
             print(' ')
             ## return -1
-        
+
+    #---------------------------------
+    # Build strings to be used below 
+    #---------------------------------
+    nccs_unit_str = "self." + var_name + "_nccs_unit"
+    nccs_file_str = "self." + var_name + "_nccs_file"
+    cs_file_str   = "self." + var_name + "_cs_file"
+    time_res_sec  = self.save_grid_dt    # [seconds]
+    time_res_min  = (time_res_sec / 60)  # [minutes]
+            
     #--------------------------------------------
-    # Open new netCDF file to write curbe stacks
+    # Open new netCDF file to write cube stacks
     # using var_name to build variable names
     #--------------------------------------------
-    try:
-        nccs_unit_str = "self." + var_name + "_nccs_unit"
-        nccs_file_str = "self." + var_name + "_nccs_file"
-        cs_file_str   = "self." + var_name + "_cs_file"
-            
+    try:         
         exec( nccs_file_str + "= file_utils.replace_extension(" +
               cs_file_str + ", '.nc')" )
         exec( nccs_unit_str + "=" + "nccs_files.nccs_file()" )
         exec( nccs_unit_str + ".open_new_file(" + nccs_file_str +
               ", self.rti, self.time_info, " +
               "var_name, long_name, units_name, dtype=dtype, " +
-              "time_units=time_units)" )
-#               ", self.rti, var_name, long_name, units_name, " +
-#               "dtype=dtype, " +  ## (11/5/13)
-#               "time_units=time_units)" )
+              "time_units=time_units, time_res=time_res_min)" )
         MAKE_RT3 = False
     except:
         print('ERROR: Unable to open new netCDF file:')
-        vstr = 'self.' + var_name + '_nccs_file'
-        exec( "print('      ' + " + vstr + ")" )
+        print( '      ' + nccs_file_str )
         print(' ')
         print('Will write cube stack in generic RT3 format.')
         print(' ')
@@ -691,16 +708,20 @@ def open_new_cs_file(self, file_name, info=None,
     # Always save cube stacks in an RT3 file ?
     #-------------------------------------------
     # MAKE_RT3 = True   #####
+
+    #---------------------------------
+    # Build strings to be used below 
+    #---------------------------------
+##     if (MAKE_RT3):
+##         rt3_unit_str = "self." + var_name + "_rt3_unit"
+##         rt3_file_str = "self." + var_name + "_rt3_file"
+##         cs_file_str  = "self." + var_name + "_cs_file"
     
     #------------------------------------------
     # Open new RTS files to write grid stacks
     #------------------------------------------
 ##    if (MAKE_RT3):
-##        try:
-##            rt3_unit_str = "self." + var_name + "_rt3_unit"
-##            rt3_file_str = "self." + var_name + "_rt3_file"
-##            cs_file_str  = "self." + var_name + "_cs_file"
-##            
+##        try:           
 ##            exec( rt3_file_str + "= file_utils.replace_extension(" +
 ##                  cs_file_str + ", '.rt3')" )
 ##            exec( rt3_unit_str + " = rt3_files.rt3_file()" )
@@ -710,13 +731,12 @@ def open_new_cs_file(self, file_name, info=None,
 ##                  "MAKE_BOV=True)" )
 ##        except:
 ##            print('ERROR: Unable to open new RT3 file:')
-##            vstr = 'self.' + var_name + '_rt3_file'
-##            exec( "print('      ' + " + vstr + ")" )
+##            print('      ' + rt3_file_str )
 ##            print(' ')
     
-#   open_new_gs_file()
+#   open_new_cs_file()
 #-------------------------------------------------------------------
-def add_cube(self, var, var_name, time=None):
+def add_cube(self, var, var_name, time=None, SILENT=True):
              ## USE_NC=True, USE_RT3=False ):
 
     #--------------------------------------------------------
@@ -732,12 +752,8 @@ def add_cube(self, var, var_name, time=None):
         nccs_unit_str = "self." + var_name + "_nccs_unit"
         exec( nccs_unit_str + ".add_grid( var, var_name, time )")
     except:
-        pass
-        #------------------------------------------------
-        # Don't want to print this every time.
-        # Could use "self.SAVE_CDF = False" to disable.
-        #------------------------------------------------
-        # print 'ERROR: Unable to add cube to netCDF file.'
+        if not(SILENT):
+            print('ERROR: Unable to add cube to netCDF file.')
 
     ## if (USE_RT3):
     try:

@@ -77,7 +77,7 @@ def unit_test(nx=4, ny=5, VERBOSE=False,
         print('ERROR during open_new_file().')
         return
     
-    grid = np.arange(nx * ny, dtype='Float32')
+    grid = np.arange(nx * ny, dtype='float32')
     grid = grid.reshape( (ny, nx) )
     ### print 'AT START: (nx, ny) =', nx, ny
     
@@ -561,8 +561,8 @@ def read_xyz_as_grid(XYZ_file, RTG_file):
     #--------------------------------
     # Read XYZ data into a 2D array
     #--------------------------------
-    data = np.zeros([n_lines, 3], dtype='Float32')
-    xyz  = np.zeros([3], dtype='Float32')
+    data = np.zeros([n_lines, 3], dtype='float32')
+    xyz  = np.zeros([3], dtype='float32')
     k    = np.int32(0)
     file_unit = open( XYZ_file, 'r' )
     while not(idl_func.eof(file_unit)):

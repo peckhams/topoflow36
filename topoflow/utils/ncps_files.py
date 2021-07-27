@@ -1,7 +1,11 @@
 
-# S.D. Peckham
-# May 2010
-# Jan 2020.   Added new "MINT netCDF" metadata.
+# Copyright (c) 2021, Scott D. Peckham
+# Jul. 2021.  Changes to support MINT netCDF and datetimes.
+#             Mostly in open_new_file() and add_profile().
+# Jan. 2020.  Added new "MINT netCDF" metadata.
+# May  2010.  First version?
+#
+#-------------------------------------------------------------------
 
 import os
 import sys
@@ -13,6 +17,7 @@ from . import file_utils
 # from . import rti_files   # (not used for unit_test() yet.
 from . import svo_names
 from . import tf_utils
+from . import time_utils
 
 import netCDF4 as nc
 
@@ -68,7 +73,7 @@ def unit_test(n_times=5, nz=10, VERBOSE=False,
     #-------------------------------------
     ncps = ncps_file()
     var_names = ['theta']
-    z_values = np.arange( nz, dtype='Float64' )
+    z_values = np.arange( nz, dtype='float64' )
     z_units  = 'm'
     
     OK = ncps.open_new_file( file_name,
@@ -90,7 +95,7 @@ def unit_test(n_times=5, nz=10, VERBOSE=False,
         return
 
     profile  = np.exp(-0.1 * z_values)
-    times    = np.arange( n_times, dtype='Float64') * 0.1
+    times    = np.arange( n_times, dtype='float64') * 0.1
     
     #-----------------------------------
     # Add a series of profiles to file
@@ -152,7 +157,7 @@ def unit_test2(n_times=5, nz=10, VERBOSE=False,
     ncps = ncps_file()
 
     var_name   = 'theta'
-    z_values   = np.arange( nz, dtype='Float64' )
+    z_values   = np.arange( nz, dtype='float64' )
     z_units    = 'm'
     IDs        = ([1,2,3], [1,2,3])
     var_names  = ['theta_1_1', 'theta_2_2', 'theta_3_3']
@@ -182,7 +187,7 @@ def unit_test2(n_times=5, nz=10, VERBOSE=False,
         return
 
     profile = np.exp(-0.1 * z_values)
-    times   = np.arange( n_times, dtype='Float64') * 0.1
+    times   = np.arange( n_times, dtype='float64') * 0.1
     print('z_values =', z_values)
     print('profile  =', profile)
     print('times    =', times)
@@ -273,12 +278,12 @@ def get_dtype_map():
     #-------------------------------------------------
     # These one-char codes are used for Nio in PyNIO
     #-------------------------------------------------
-    # dtype_code = "d"  # (double, Float64)
-    # dtype_code = "f"  # (float,  Float32)
-    # dtype_code = "l"  # (long,   Int64)
-    # dtype_code = "i"  # (int,    Int32)
-    # dtype_code = "h"  # (short,  Int16)
-    # dtype_code = "b"  # (byte,   Int8)
+    # dtype_code = "d"  # (double, float64)
+    # dtype_code = "f"  # (float,  float32)
+    # dtype_code = "l"  # (long,   int64)
+    # dtype_code = "i"  # (int,    int32)
+    # dtype_code = "h"  # (short,  int16)
+    # dtype_code = "b"  # (byte,   int8)
     # dtype_code = "S1" # (char)
     #-------------------------------------------
 #         dtype_map = {'float64':'d', 'float32':'f',
@@ -355,7 +360,7 @@ class ncps_file():
     def open_new_file(self, file_name,
                       grid_info=None,
                       time_info=None,
-                      z_values=np.arange(10),
+                      z_values=[None],
                       z_units='m',
                       var_names=['q_2_3'],
                       long_names=[None],
@@ -391,6 +396,15 @@ class ncps_file():
         self.z_units   = z_units
         nz             = np.size(z_values)
 
+        #-------------------------------------------
+        # We may not need to save these in self.
+        # See how RHS is used in code below.
+        #-------------------------------------------
+        self.var_names   = var_names 
+        self.long_names  = long_names
+        self.units_names = units_names
+        self.dtypes      = dtypes
+        
         #######################################################             
         # Assume for now that var_names only differ by the
         # appended row and column info, so only need one each
@@ -416,16 +430,7 @@ class ncps_file():
         minlon   = grid_info.x_west_edge
         maxlon   = grid_info.x_east_edge
         minlat   = grid_info.y_south_edge
-        maxlat   = grid_info.y_north_edge        
-        
-        #-------------------------------------------
-        # We may not need to save these in self.
-        # I don't think they're used anywhere yet.
-        #-------------------------------------------
-        self.var_names   = var_names 
-        self.long_names  = long_names
-        self.units_names = units_names
-        self.dtypes      = dtypes
+        maxlat   = grid_info.y_north_edge
 
         #---------------------------------------------
         # Create time metadata strings  (2020-01-14)
@@ -442,17 +447,17 @@ class ncps_file():
 #         time_res_sec = factor * int(time_res)
 #         time_res_sec_str = str(time_res_sec)
         #----------------------------------------------------------
-        start_date = time_info.start_date
-        start_time = time_info.start_time
-        end_date   = time_info.end_date
-        end_time   = time_info.end_time
-        #------------------------------------------------
-        start_datetime = start_date + ' ' + start_time
-        end_datetime   = end_date   + ' ' + end_time
+        start_date     = time_info.start_date
+        start_time     = time_info.start_time
+        end_date       = time_info.end_date
+        end_time       = time_info.end_time
+        start_datetime = time_info.start_datetime
+        end_datetime   = time_info.end_datetime
         dur_units      = time_units        
-        duration = tf_utils.get_duration( start_date, start_time,
-                                          end_date, end_time,
-                                          dur_units)
+        duration = time_utils.get_duration( start_date, start_time,
+                                            end_date, end_time,
+                                            dur_units)
+        self.start_datetime = start_datetime  # for add_profile()
 
         #---------------------------------------------
         # Create array of dtype codes from dtypes
@@ -466,8 +471,8 @@ class ncps_file():
         # Open a new netCDF file for writing
         #-------------------------------------
         try:
-            ## format = 'NETCDF4'
-            format = 'NETCDF4_CLASSIC'
+            format = 'NETCDF4'   # better string support
+            ## format = 'NETCDF4_CLASSIC'
             ncps_unit = nc.Dataset(file_name, mode='w', format=format)
             OK = True
         except:
@@ -521,39 +526,76 @@ class ncps_file():
         ncps_unit.geospatial_bounds_crs = '+init=epsg:4979'
         ## bounds = [minlon, minlat, maxlon, maxlat]   #### MINT order
         ## ncps_unit.geospatial_bounds = bounds 
-               
-        #------------------------------------------------
-        # Create an unlimited time dimension (via None)
-        #------------------------------------------------
+ 
+        #----------------------------------------------
+        # Create z-profile dimensions Z and time
+        #----------------------------------------------
         # Without using "int()" here, we get this:
         #     TypeError: size must be None or integer
-        #------------------------------------------------
-        ncps_unit.createDimension('time', None)
+        #----------------------------------------------
+        ncps_unit.createDimension('Z', int(nz))
+        ncps_unit.createDimension('time', None)  # (unlimited dim)
+        nccs_unit.createDimension('bnds', 1)
 
+        #-----------------------------------
+        # Create coordinate variable, time
+        #---------------------------------------------------
+        #('f8' = float32; must match in add_profile()
+        #------------------------------------------------------------
+        # If using the NETCDF4 format (vs. NETCDF4_CLASSIC),
+        # then for a fixed-length string (e.g. 2021-07-01 00:00:00)
+        # the 2nd argument here can be 'S19', and for a variable-
+        # length string it can just be 'str'.
+        # Otherwise, you must use: netCDF4.stringtochar() to
+        # convert the string array to a character array.
+        #------------------------------------------------------------               
+        tvar  = ncps_unit.createVariable('time', 'f8', ('time',))   
+        dtvar = ncps_unit.createVariable('datetime', 'S19', ('time',))
+   
         #------------------------------------------
         # Save attributes of coordinate var, time
-        #---------------------------------------------------
-        #('f' = float32; must match in add_values_at_IDs()
-        #---------------------------------------------------
-        # NB! Can't use "time" vs. "tvar" here unless we
-        #     add "import time" inside this function.
-        #---------------------------------------------------
-        tvar = ncps_unit.createVariable('time', 'f8', ("time",))
+        #----------------------------------------------------
+        # Note!  add_values_at_IDs() builds a time vector
+        #        but starts at 0 and doesn't include dates.
+        #        Recall time is an unlimited dimension.
+        #----------------------------------------------------
+        ncgs_unit.variables['time'].long_name = 'time'
         ncps_unit.variables['time'].units = time_units
-        ncps_unit.variables['time'].time_coverage_resolution = time_res    
-        ncps_unit.variables['time'].time_coverage_start = start_datetime 
-        ncps_unit.variables['time'].time_coverage_end = end_datetime 
+        ncps_unit.variables['time'].time_units = time_units
+        ncps_unit.variables['time'].time_coverage_resolution = time_res  
+        ncps_unit.variables['time'].time_coverage_start = start_datetime
+        ncps_unit.variables['time'].time_coverage_end = end_datetime
         ncps_unit.variables['time'].time_coverage_duration = duration
 
-        #--------------------------------------
-        # Create an "z" dimension.
-        # Create a distance/depth variable, z
-        #--------------------------------------
-        ncps_unit.createDimension('z', int(nz))
-        zvar = ncps_unit.createVariable('z', 'f4', ('z',))
-        zvar[ : ] = z_values  # (store the z-values)
-        ncps_unit.variables['z'].units = z_units
-        
+        #-----------------------------------------
+        # Save attributes of extra var, datetime
+        #-------------------------------------------------------------
+        # Note: The duration is determined from start_datetime,
+        #       end_datetime and dur_units.  However, if the model
+        #       is run for a shorter time period, then the T_vector
+        #       computed here may be longer than the time var vector.
+        #       This results in nodata values "--" in time vector.
+        #-------------------------------------------------------------
+        # Note!  add_profile() now builds a datetime vector.
+        #        Recall time is an unlimited dimension.
+        #-------------------------------------------------------------
+        time_dtype = time_utils.get_time_dtype( time_units )
+        ncps_unit.variables['datetime'].long_name = 'datetime' 
+        ncps_unit.variables['datetime'].units = time_dtype
+
+        #----------------------------------------------
+        # Create a "Z" variable (depth below surface)
+        #----------------------------------------------
+        Zvar = ncps_unit.createVariable('Z', 'f4', ('Z',))
+
+        #--------------------------------
+        # Save attributes of variable Z
+        #--------------------------------
+        ## Zvar[:] = z_values  # okay, too?
+        ncps_unit.variables['Z'][:] = z_values
+        ncps_unit.variables['Z'].units = z_units
+        ncps_unit.variables['Z'].z_bottom = z_values[-1]
+
         #-----------------------------------
         # Create variables using var_names
         #---------------------------------------------------
@@ -564,7 +606,7 @@ class ncps_file():
         for k in range(len(var_names)):
             var_name = var_names[k]
             var = ncps_unit.createVariable(var_name, dtype_codes[k],
-                                            ("time", "z"))
+                                            ("time", "Z"))
 
             #-----------------------------------------
             # Create attributes of the main variable
@@ -606,7 +648,9 @@ class ncps_file():
             row2 = (row - 0.5)
             lon = minlon + (col2 * xres_deg)
             lat = minlat + ((nrows - 1 - row2) * yres_deg)       
-            #----------------------------------------------------- 
+            #-----------------------------------------------------
+            ncts_unit.variables[var_name].grid_cell_col  = col
+            ncts_unit.variables[var_name].grid_cell_row  = row  
             ncps_unit.variables[var_name].geospatial_lon = lon
             ncps_unit.variables[var_name].geospatial_lat = lat            
             #----------------------------------------------------------------           
@@ -652,24 +696,38 @@ class ncps_file():
         # nc_unit.variables[var_name].assign_value( values )
         #-----------------------------------------------------
 
-
         #-------------------------------------
         # Can use time_index to overwrite an
         # existing grid vs. simple append.
         #-------------------------------------
         if (time_index == -1):
             time_index = self.time_index
-        if (time is None):
-            time = np.float64( time_index )
+        # if (time is None):
+        #     time = np.float64( time_index )
 
+        #----------------------------------------------
+        # Write current time to existing netCDF file
+        # Recall that time has an unlimited dimension
+        #----------------------------------------------
+        times = self.ncps_unit.variables[ 'time' ]
+        times[ time_index ] = time
+
+        #-------------------------------------------------
+        # Write current datetime to existing netCDF file
+        # Recall that time has an unlimited dimension
+        # Datetime strings have netCDF4 type 'S19'
+        #-------------------------------------------------
+        datetime = time_utils.get_current_datetime(
+                              self.start_datetime,
+                              time, time_units='minutes')
+        datetimes = self.ncps_unit.variables[ 'datetime' ]
+        datetimes[ time_index ] = str(datetime)
+        
         #---------------------------------------------
         # Write a data value to existing netCDF file
         #---------------------------------------------
         profiles = self.ncps_unit.variables[ var_name ]
         profiles[ time_index ] = profile
-        #------------------------------------------------
-        times = self.ncps_unit.variables[ 'time' ]
-        times[ time_index ] = time
 
         ######################################################
         # We shouldn't update clock in every add_profile()
@@ -811,11 +869,11 @@ class ncps_file():
     def get_var_lons(self):
         
         var_names = self.get_var_names()
-        var_names = var_names[2:]    # exclude 'time' & 'z'
         lons = []
         for name in var_names:
-            var = self.ncps_unit.variables[ name ]
-            lons.append( var.geospatial_lon )
+            if (name not in ['time', 'datetime', 'Z']):
+                var = self.ncps_unit.variables[ name ]
+                lons.append( var.geospatial_lon )
         return lons
  
     #   get_var_lons()
@@ -823,25 +881,25 @@ class ncps_file():
     def get_var_lats(self):
         
         var_names = self.get_var_names()
-        var_names = var_names[2:]    # exclude 'time' & 'z'
         lats = []
         for name in var_names:
-            var = self.ncps_unit.variables[ name ]
-            lats.append( var.geospatial_lat )
+            if (name not in ['time', 'datetime', 'Z']):
+                var = self.ncps_unit.variables[ name ]
+                lats.append( var.geospatial_lat )
         return lats
  
     #   get_var_lats()
     #-------------------------------------------------------------------
     def close_file(self):
 
-        # self.ncts_unit.sync()  ## (netCDF4 has no "flush")
+        # self.ncps_unit.sync()  ## (netCDF4 has no "flush")
         self.ncps_unit.close()
 
     #   close_file()
     #-------------------------------------------------------------------
     def close(self):
 
-        # self.ncts_unit.sync()  ## (netCDF4 has no "flush")
+        # self.ncps_unit.sync()  ## (netCDF4 has no "flush")
         self.ncps_unit.close()
 
     #   close()

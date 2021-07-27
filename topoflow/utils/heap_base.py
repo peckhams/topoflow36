@@ -9,8 +9,10 @@
 #  built-in package "heapq".
 #------------------------------------------------
 
-from numpy import *
-import numpy
+import numpy as np
+
+## from numpy import *
+## import numpy
 
 import sys
 import time
@@ -50,9 +52,9 @@ def unit_test(nvals=100, REPORT=False):
     # Generate some uniform random numbers
     #---------------------------------------
     seed = 36421
-    numpy.random.seed( seed )
-    ran    = -5 + (random.uniform(low=0.0, high=1.0, size=(nvals)) * 10)
-    ranIDs = numpy.ceil(ran).astype('Int32')
+    np.random.seed( seed )
+    ran    = -5 + (np.random.uniform(low=0.0, high=1.0, size=(nvals)) * 10)
+    ranIDs = np.ceil(ran).astype('int32')
     
     #----------------------------
     # Put random values on heap
@@ -78,8 +80,8 @@ def unit_test(nvals=100, REPORT=False):
     # should result in a sorted array
     #-----------------------------------
     start1 = time.time()
-    a = numpy.zeros([nvals], dtype='Float32')
-    b = numpy.zeros([nvals], dtype='Float32')
+    a = np.zeros([nvals], dtype='float32')
+    b = np.zeros([nvals], dtype='float32')
     for k in range(nvals): 
         a[k] = heap.get_min()
         b[k] = heapq.heappop( fast_heap )[0]
@@ -94,17 +96,17 @@ def unit_test(nvals=100, REPORT=False):
     # Now sort "ran" with IDL's SORT
     #---------------------------------
     start2 = time.time()
-    ## a2 = ran[ numpy.argsort( ran ) ]  # (also works)
-    a2 = numpy.sort(ran)
-    a2 = numpy.float32(a2)
+    ## a2 = ran[ np.argsort( ran ) ]  # (also works)
+    a2 = np.sort(ran)
+    a2 = np.float32(a2)
     stop2 = time.time()
     print('Time for quick sort = ' + str(stop2 - start2))
 
     #-----------------------------------------
     # Now compare the two heap-sorted arrays
     #-----------------------------------------
-    w  = where(a != b)
-    nw = size(w[0])
+    w  = np.where(a != b)
+    nw = np.size(w[0])
     if (nw == 0):    
         print('SUCCESS: The heap-sorted arrays are identical !!')
     else:    
@@ -117,8 +119,8 @@ def unit_test(nvals=100, REPORT=False):
     #-----------------------------
     # Now compare the two arrays
     #-----------------------------
-    w = where(a != a2)
-    nw = size(w[0])
+    w  = np.where(a != a2)
+    nw = np.size(w[0])
     if (nw == 0):    
         print('SUCCESS: Heap-sort and quick-sort arrays are identical !!')
     else:    
@@ -147,29 +149,29 @@ def unit_test(nvals=100, REPORT=False):
 class heap_base():
 
     #-------------------------------------------------------------------    
-    def initialize(self, nx, ny, dtype='Float32'):
+    def initialize(self, nx, ny, dtype='float32'):
 
         self.USE_64_BITS = False
 
         if (self.USE_64_BITS):
-            self.ID_type='Int64'
+            self.ID_type='int64'
         else:
-            self.ID_type='Int32'
+            self.ID_type='int32'
 
         #-------------------------------------------
         # nheap is based on the number of boundary
         # pixels and a factor of safety
         #-------------------------------------------
-        self.size = int64(500) * (nx + ny) + 1
-        self.heap = numpy.zeros(self.size, dtype=dtype)
-        self.IDs  = numpy.zeros(self.size, dtype=self.ID_type)
+        self.size = np.int64(500) * (nx + ny) + 1
+        self.heap = np.zeros(self.size, dtype=dtype)
+        self.IDs  = np.zeros(self.size, dtype=self.ID_type)
         
         #---------------------------
         # Type is important here !
         # Shouldn't be ULONG64.
         #---------------------------
-        self.n      = numpy.int64(0)
-        self.nmax   = numpy.int64(0)
+        self.n      = np.int64(0)
+        self.nmax   = np.int64(0)
         
     #   initialize()
     #------------------------------------------------------------------- 
@@ -197,7 +199,7 @@ class heap_base():
         # If heap[0]=0 and (x lt 0), then we get
         # an infinite while loop if we're not careful
         #----------------------------------------------
-        if (numpy.isfinite(x) == 0):    
+        if (np.isfinite(x) == 0):    
             return -1
             ## sys.exit()
         
@@ -222,7 +224,7 @@ class heap_base():
         #  (even this has a time cost)
         #------------------------------------
         self.n += 1
-        self.nmax = numpy.maximum(self.nmax, self.n)
+        self.nmax = np.maximum(self.nmax, self.n)
 
         #---------------------------
         # Insert value on the heap
@@ -238,8 +240,8 @@ class heap_base():
         # heap ends up looking like [-1, 0, 1, 0, 0,...].
         #--------------------------------------------------
         i = self.n
-        #** n_reps = numpy.int64(0)
-        #** MAX_REPS = numpy.int64(1000)
+        #** n_reps = np.int64(0)
+        #** MAX_REPS = np.int64(1000)
         #---------------------------------------------------
         #** while (heap[i/2] > x) AND (n_reps < MAX_REPS):
         #---------------------------------------------------
@@ -330,7 +332,7 @@ class heap_base():
         #---------------------------------------
         # NB!  Type of i is very important !!
         #---------------------------------------
-        i = int64(1)
+        i = np.int64(1)
         while ((i * 2) <= self.n):
             #------------------------------------
             # Find a smaller child, at position

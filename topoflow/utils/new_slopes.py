@@ -496,7 +496,6 @@ def smooth_dem(site_prefix=None, case_prefix=None,
 #     d82 = copy.copy(d8)
 #     slope = np.zeros([d8.ny, d8.nx], dtype='float64')
     
-
     # a  = 1
     # dt = 10
     # dx = 1800.0 

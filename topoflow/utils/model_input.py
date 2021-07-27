@@ -66,7 +66,7 @@ def open_file(var_type, input_file):
 
 #   open_file()
 #-------------------------------------------------------------------
-def read_next2(self, var_name, rti, dtype='Float32', factor=1.0):
+def read_next2(self, var_name, rti, dtype='float32', factor=1.0):
 
 #     exec( 'file_unit = self.' + var_name + '_unit' )
 #     exec( 'var_type  = self.' + var_name + '_type' )
@@ -310,7 +310,7 @@ def close_file(file_unit):
 ###   open_file()
 ###-------------------------------------------------------------------
 ##def read_next(file_unit, var_type, rti, \
-##              dtype='Float32', factor=1.0):
+##              dtype='float32', factor=1.0):
 ##
 ##    #-------------------------------------------------------
 ##    # (5/7/09) Allow "dtype" to be given using RTI types.

@@ -41,7 +41,7 @@ from . import rtg_files
 
 ## from . import soil_trans_BC as soil
 
-import glob, os
+import glob, os, os.path
 
 # import os.path
 
@@ -222,10 +222,12 @@ def read_soil_grid_files( site_prefix=None, directory=None,
     check_soil_grid_values(C, S, OC, D, REPORT=REPORT)
 
     #------------------------------------------------
-    # Convent units to those needed by Wosten PTFs.
+    # Convert units to those needed by Wosten PTFs.
+    # OM = organic mass fraction,
+    # OC = organic carbon content
     #------------------------------------------------
     (C,S,OM,D) = convert_soil_grid_values(C, S, OC, D)
-        
+ 
     #-------------------------------------------------
     # Replace -9999.0 with another nodata value to
     # avoid NaN or Inf in Wosten PTF equations.
@@ -235,11 +237,11 @@ def read_soil_grid_files( site_prefix=None, directory=None,
     # We have used -9999.0 (ISRIC) up to this point,
     # but that's not good for the wosten PTF equations.
     #---------------------------------------------------
-    nodata = get_nodata_values()
-    C[ C <= 0 ]   = nodata['C']   # [%]
-    S[ S <= 0 ]   = nodata['S']   # [%]
-    OM[ OM <= 0 ] = nodata['OM']  # [%]
-    D[ D <= 0]    = nodata['D']   # [g / cm^3]
+#     nodata = get_nodata_values()
+#     C[ C <= 0 ]   = nodata['C']   # [%]
+#     S[ S <= 0 ]   = nodata['S']   # [%]
+#     OM[ OM <= 0 ] = nodata['OM']  # [%]
+#     D[ D <= 0]    = nodata['D']   # [g / cm^3]
       
     #------------------------------------
     # Return Wosten input vars as tuple
@@ -250,6 +252,11 @@ def read_soil_grid_files( site_prefix=None, directory=None,
 #-------------------------------------------------------------------
 def check_soil_grid_values(C, S, OC, D, REPORT=True):
 
+    #----------------------------------------------------------
+    # Note:  For C and S, nodata value seems to be 255.
+    #        For OC and D, nodata value seems to be -32768.0.
+    #----------------------------------------------------------
+    
     #-----------------------------
     # Get all the mins and maxes
     #-----------------------------
@@ -262,6 +269,36 @@ def check_soil_grid_values(C, S, OC, D, REPORT=True):
     Dmin  = D.min()
     Dmax  = D.max()
 
+    #------------------------------------
+    # What is min & max in valid range?
+    #------------------------------------
+    Cmin2  = C[ C >= 0.0 ].min()
+    Smin2  = S[ S >= 0.0 ].min()
+    OCmin2 = OC[ OC >= 0.0].min()
+    Dmin2  = D[ D >= 0.0].min()
+    #---------------------------------
+    Cmax2  = C[ C <= 100.0 ].max()
+    Smax2  = S[ S <= 100.0 ].max()
+    OCmax2 = OC[ OC <= 1000.0].max()   # Is 1000, not 100
+    Dmax2  = D[ D <= 2650.0].max()
+
+    #--------------------------------------------------
+    # Don't allow a zero value in C, S, OC, or D
+    # since Wosten functions have 1/OC, log(OC), etc.
+    #--------------------------------------------------
+    C[ C == 0 ]   = 1.0
+    S[ S == 0 ]   = 1.0
+    OC[ OC == 0 ] = 1.0
+    D[ D == 0 ]   = 1.0
+    
+    #----------------------------------------------
+    # Replace nodata values with mid-range values
+    #----------------------------------------------        
+    C[ np.logical_or( C<0, C>100) ]     = (Cmin2 + Cmax2)/2.0
+    S[ np.logical_or( S<0, S>100) ]     = (Smin2 + Smax2)/2.0
+    OC[ np.logical_or( OC<0, OC>1000) ] = (OCmin2 + OCmax2)/2.0
+    D[ np.logical_or( D<0, D>2650) ]    = (Dmin2 + Dmax2)/2.0
+                             
     #--------------------------------- 
     # Option to print mins and maxes
     #---------------------------------
@@ -275,18 +312,26 @@ def check_soil_grid_values(C, S, OC, D, REPORT=True):
     #--------------------------------------
     # Check if grid values are reasonable
     #--------------------------------------
+    # if ((Cmin2 < 0.0) or (Cmax > 100.0)):
     if ((Cmin < 0.0) or (Cmax > 100.0)):
         print('WARNING in read_soil_grid_files:')
         print('   Some values in C grid are out of range.')
-        print('   min(C) = ' + str(Cmin) )
-        print('   max(C) = ' + str(Cmax) )
+        print('   Replacing invalid values with mid-range values.')
+        print('   min(C)        = ' + str(Cmin) )
+        print('   min(C >= 0)   = ' + str(Cmin2) )
+        print('   max(C <= 100) = ' + str(Cmax2) )
+        print('   max(C)        = ' + str(Cmax) )
         print()
-    #--------------------------------------------------------
+    #-----------------------------------------------------------
+    # if ((Smin2 < 0.0) or (Smax > 100.0)):
     if ((Smin < 0.0) or (Smax > 100.0)):
         print('WARNING in read_soil_grid_files:')
         print('   Some values in S grid are out of range.')
-        print('   min(S) = ' + str(Smin) )
-        print('   max(S) = ' + str(Smax) )
+        print('   Replacing invalid values with mid-range values.')
+        print('   min(S)        = ' + str(Smin) )
+        print('   min(S >= 0)   = ' + str(Smin2) )
+        print('   max(S <= 100) = ' + str(Smax2) )
+        print('   max(S)        = ' + str(Smax) )
         print()
     #--------------------------------------------------------
     # ISRIC OC units are [g/kg]
@@ -295,12 +340,11 @@ def check_soil_grid_values(C, S, OC, D, REPORT=True):
     if ((OCmin < 0.0) or (OCmax > 1000.0)):
         print('WARNING in read_soil_grid_files:')
         print('   Some values in OC grid are out of range.')
-        if (OCmin < 0.0):
-            print('   min(OC) = ' + str(OCmin) )
-            print('   Possible nodata value.')
-        if (OCmax > 1000.0):
-            print('   max(OC) = ' + str(OCmax) )
-            ## print('   Possible nodata value.')
+        print('   Replacing invalid values with mid-range values.')
+        print('   min(OC)         = ' + str(OCmin) )
+        print('   min(OC >= 0)    = ' + str(OCmin2) )
+        print('   max(OC <= 1000) = ' + str(OCmax2) )
+        print('   max(OC)         = ' + str(OCmax) )
         print()
     #------------------------------------------------
     # Density of water          = 1000  [kg / m^3]
@@ -313,12 +357,11 @@ def check_soil_grid_values(C, S, OC, D, REPORT=True):
     if ((Dmin < 0.0) or (Dmax > 2650)):
         print('WARNING in read_soil_grid_files:')
         print('   Some values in D grid are out of range.')
-        if (Dmin < 0.0):
-            print('   min(D) = ' + str(Dmin) )
-            print('   Possible nodata value.')
-        if (Dmax > 2650.0):
-            print('   max(D) = ' + str(Dmax) )
-            ## print('   Possible nodata value.')
+        print('   Replacing invalid values with mid-range values.')
+        print('   min(D)          = ' + str(Dmin) )
+        print('   min(D >= 0)     = ' + str(Dmin2) )
+        print('   max(D <= 2650)  = ' + str(Dmax2) )
+        print('   max(D)          = ' + str(Dmax) )
         print()
      
 #   check_soil_grid_values()
@@ -342,9 +385,11 @@ def convert_soil_grid_values(C, S, OC, D, VERBOSE=False):
     #--------------------------------------------------
     # (OM/1000) [kg/kg] * 100 = (OM/10) %.
     #--------------------------------------------------
-    w1 = (OC == -9999.0)
+    nodata = -9999.0  ############### CHECK THIS
+    
+    w1 = (OC == nodata)
     OC = (OC / 10.0)
-    OC[w1] = -9999.0   # (preserve nodata value)
+    OC[w1] = nodata   # (preserve nodata value)
     
     #---------------------------------------------------
     # Convert organic carbon to organic matter content
@@ -359,7 +404,7 @@ def convert_soil_grid_values(C, S, OC, D, VERBOSE=False):
     #        100 / 58 = 1.724.
     #---------------------------------------------------------- 
     OM = OC * 1.724   # (Wosten et al (1998), p. 28)
-    OM[w1] = -9999.0
+    OM[w1] = nodata
     
     #-------------------------------------------------
     # Convert ISRIC [kg / m^3] to Wosten [g / cm^3]
@@ -370,9 +415,9 @@ def convert_soil_grid_values(C, S, OC, D, VERBOSE=False):
     # D ---- * -------- * ------------ = ---- ---
     #    m3      1 kg      (100 cm)^3    1000  cm3
     #-------------------------------------------------
-    w1 = (D == -9999.0)
+    w1 = (D == nodata)
     D = (D / 1000.0)
-    D[w1] = -9999.0    # (preserve nodata value)
+    D[w1] = nodata    # (preserve nodata value)
     
     return (C, S, OM, D)
 
@@ -511,8 +556,8 @@ def regrid_isric_soil_grid_files( site_prefix,
     if (in_dir is None):
         return
     os.chdir( in_dir )
-    if (out_dir[-1] != '/'):
-        out_dir = out_dir + '/'
+    if (out_dir[-1] != os.sep):
+        out_dir = out_dir + os.sep
          
     #--------------------------------------------------
     # Get list of all TIFF files in working directory
@@ -521,8 +566,13 @@ def regrid_isric_soil_grid_files( site_prefix,
     # https://stackoverflow.com/questions/6773584/
     #    how-is-pythons-glob-glob-ordered
     #--------------------------------------------------
-    ### tif_file_list = glob.glob( '*.tif' )
-    tif_file_list = glob.glob( '*.tiff' )
+    tif_file_list = glob.glob( '*.tif' )
+    if (len(tif_file_list) == 0):
+        tif_file_list = glob.glob( '*.tiff' )
+    if (len(tif_file_list) == 0):
+        print('ERROR: No TIF files found.')
+        print()
+        return
     tif_file_list = sorted( tif_file_list )  #######
     n_grids = 0
     #----------------------------------------
@@ -580,8 +630,8 @@ def transform_isric_soil_grid_files( site_prefix,
     if (in_dir is None):
         return
     os.chdir( in_dir )
-    if (out_dir[-1] != '/'):
-        out_dir = out_dir + '/'  
+    if (out_dir[-1] != os.sep):
+        out_dir = out_dir + os.sep  
         
     #-----------------------------------------------------------  
     # Typically, out_bounds = DEM_bounds,
@@ -601,8 +651,15 @@ def transform_isric_soil_grid_files( site_prefix,
     #--------------------------------------------------
     # Get list of all TIFF files in working directory
     #--------------------------------------------------
-    tiff_file_list = glob.glob( '*.tiff' )
+    tiff_file_list = glob.glob( '*.tif' )
+    if (len(tiff_file_list) == 0):
+        tiff_file_list = glob.glob( '*.tiff' )
+    if (len(tiff_file_list) == 0):
+        print('ERROR: No TIFF files found.')
+        print()
+        return
     tiff_file_list = sorted( tiff_file_list )   ######
+
     n_grids = 0
     bad_box_count = 0
     out_nodata = -9999.0       #############
@@ -700,7 +757,11 @@ def transform_isric_soil_grid_files( site_prefix,
             rtg_unit.close()
         n_grids += 1
 
-    os.remove( tmp_file )   # Delete the temp tif file.
+    #------------------------------------------------------
+    # Note: Is this necessary?  See "ds_in = None" above.
+    #------------------------------------------------------
+    if (os.path.exists(tmp_file)):
+        os.remove( tmp_file )   # Delete the temp tif file.
     
     print()
     print( 'Finished transforming ISRIC soil grid files.')
@@ -752,11 +813,14 @@ def wosten_theta_s( C, S, OM, D, topsoil, FORCE_RANGE=True):
         qmax = theta_s.max()
         print('WARNING in wosten_theta_s:')
         print('   Some values are not in [0, 1].')
-        if (qmin < 0.0):
-            print('   min(theta_s) = ' + str(qmin) )
-            print('   Possible nodata value.' )
-        if (qmax > 1.0):
-            print('   max(theta_s) = ' + str(qmax) )
+        print('   min(theta_s) = ' + str(qmin) )
+        print('   max(theta_s) = ' + str(qmax) )
+                    
+#         if (qmin < 0.0):
+#             print('   min(theta_s) = ' + str(qmin) )
+#             print('   Possible nodata value.' )
+#         if (qmax > 1.0):
+#             print('   max(theta_s) = ' + str(qmax) )
 
         #-------------------------------
         # Option to replace bad values
@@ -817,12 +881,15 @@ def wosten_K_s( C, S, OM, D, topsoil ):
     if (n1 > 0):
         Ksmin = Ks.min()
         Ksmax = Ks.max()
-        print('ERROR in wosten_K_s:')
-        print('   Some values are out of range.')
-        if (Ksmin < 0.0):
-            print('   min(K_s) = ' + str(Ksmin) )
-        if (Ksmax > Ks_max):
-            print('   max(K_s) = ' + str(Ksmax) )
+        print('WARNING in wosten_K_s:')
+        print('   Some values are out of typical range.')
+        print('   min(K_s) = ' + str(Ksmin) )
+        print('   max(K_s) = ' + str(Ksmax) )
+            
+#         if (Ksmin < 0.0):
+#             print('   min(K_s) = ' + str(Ksmin) )
+#         if (Ksmax > Ks_max):
+#             print('   max(K_s) = ' + str(Ksmax) )
         print()
                     
     #--------------------------------------------
@@ -853,10 +920,10 @@ def wosten_alpha( C, S, OM, D, topsoil, FORCE_RANGE=True ):
     p3 = (0.0449 / OM) + 0.0663*np.log(S) + 0.1482*np.log(OM)
     p4 = (-0.04546 * D * S) - (0.4852 * D * OM)
     #-----------------------    
-    # Wosten et al. (2001)
+    # Wosten et al. (2001)   ######### TEST THIS ONE: 07-13-2021
     #-----------------------
-    ## p3 = (0.449 / OM) + 0.0663*np.log(S) + 0.1482*np.log(OM)
-    ## p4 = (-0.4546 * D * S) - (0.4852 * D * OM)
+    # p3 = (0.449 / OM) + 0.0663*np.log(S) + 0.1482*np.log(OM)
+    # p4 = (-0.4546 * D * S) - (0.4852 * D * OM)
     #-------------------------------
     p5 = 0.00673 * topsoil * C
 
@@ -874,7 +941,7 @@ def wosten_alpha( C, S, OM, D, topsoil, FORCE_RANGE=True ):
     #------------------------------------------------------------
     # According to van Genuchten et al. (1991, p. 50, Table 3),
     # average alpha values range from:
-    # -0.027 (clay) to -0.138 (sand) [1/cm].
+    #  -0.138 (sand) to -0.027 (clay) [1/cm].
     # If psi_B = 1/alpha, then psi_B in (-37.04, -7.25) [cm].
     #------------------------------------------------------------
     # According to van Genuchten et al. (1991, p. 51, Table 4),
@@ -900,25 +967,32 @@ def wosten_alpha( C, S, OM, D, topsoil, FORCE_RANGE=True ):
         print('WARNING in wosten_alpha:')
         print('   Some values are out of typical range.')
         print('   Typical range: -0.15 to -0.004 [1/cm]')
-        if (amin < alpha_min):
-            print('   min(alpha) = ' + str(amin) )
-        if (amax2 > alpha_max):
-            print('   max(alpha) = ' + str(amax2) + ' (excl. zero)')
-        if (amax1 == 0):
-            print('   max(alpha) = ' + str(amax1) + ' (incl. zero)')
+        print('   min(alpha) = ' + str(amin) )
+        print('   max(alpha) = ' + str(amax1))
+        print('   max(alpha) = ' + str(amax2) + ' (excl. zero)')
+
+#         if (amin < alpha_min):
+#             print('   min(alpha) = ' + str(amin) )
+#         if (amax2 > alpha_max):
+#             print('   max(alpha) = ' + str(amax2) + ' (excl. zero)')
+#         if (amax1 == 0):
+#             print('   max(alpha) = ' + str(amax1) + ' (incl. zero)')
 
         #-------------------------------
         # Option to replace bad values
         #-------------------------------
         if (FORCE_RANGE):
             print('   Forcing bad values into range.')
-            wneg = (alpha < 0)
-            wbig = (alpha >= 0)
-            alpha[ wbig ] = alpha[ wneg ].max()
-            #------------------------------------
-            wbad = (alpha < -0.5)   #######################
-            w2   = np.invert( wbad )
-            alpha[ wbad ] = alpha[ w2 ].max()
+            alpha[ alpha < alpha_min ] = alpha_min
+            alpha[ alpha > alpha_max ] = alpha_max
+            #------------------------------------            
+#             wneg = (alpha < 0)
+#             wbig = (alpha >= 0)
+#             alpha[ wbig ] = alpha[ wneg ].max()
+#             #------------------------------------
+#             wbad = (alpha < -0.5)   #######################
+#             w2   = np.invert( wbad )
+#             alpha[ wbad ] = alpha[ w2 ].max()
         print()
 
     #--------------
@@ -982,34 +1056,41 @@ def wosten_n( C, S, OM, D, topsoil, FORCE_RANGE=True):
     if (n1 > 0):
         nmin = n.min()
         nmax = n.max()
-        print('ERROR in wosten_n:')
-        print('   Some values are out of range.')
-        print('   Typical range: 1.0 to 3.0 [unitless].')
-        if (nmin < 1.0):
-            print('   min(n) = ' + str(nmin) )
-        if (nmax > 3.0):
-            print('   max(n) = ' + str(nmax) )
+        print('WARNING in wosten_n:')
+        print('   Some values are out of typical range.')
+        print('   Typical range: 1.01 to 3.0 [unitless].')
+        print('   min(n) = ' + str(nmin) )
+        print('   max(n) = ' + str(nmax) ) 
+          
+#         if (nmin < 1.0):
+#             print('   min(n) = ' + str(nmin) )
+#         if (nmax > 3.0):
+#             print('   max(n) = ' + str(nmax) )
+
         #-------------------------------
         # Option to replace bad values
         #-------------------------------
         if (FORCE_RANGE):
             print('   Forcing bad values into range.')
-            w1 = (n <= 1.0)
-            n[ w1 ] = 1.001
-            ## w2 = np.invert( w1 )
-            ## n[ w1 ] = n[ w2 ].min()
-            #------------------------------------
-            w3 = (n > 3.0)   ########### MAYBE 2.0 ??
-            n[ w3 ] = 1.3    ###########
-            ## w4 = np.invert( w3 )
-            ## n[ w3 ] = n[ w4 ].max()
+            n[ n < 1.0 ] = 1.01
+            n[ n > 3.0 ] = 3.0
+            #------------------------------------           
+#             w1 = (n <= 1.0)
+#             n[ w1 ] = 1.001
+#             ## w2 = np.invert( w1 )
+#             ## n[ w1 ] = n[ w2 ].min()
+#             #------------------------------------
+#             w3 = (n > 3.0)   ########### MAYBE 2.0 ??
+#             n[ w3 ] = 1.3    ###########
+#             ## w4 = np.invert( w3 )
+#             ## n[ w3 ] = n[ w4 ].max()
         print()
                        
     return n
 
 #   wosten_n()
 #-------------------------------------------------------------------
-def wosten_L( C, S, OM, D, topsoil ):
+def wosten_L( C, S, OM, D, topsoil, FORCE_RANGE=True):
 
     #-------------------------------------------------------    
     # From Wosten (1998). R^2 = 12%. 
@@ -1037,15 +1118,28 @@ def wosten_L( C, S, OM, D, topsoil ):
     if (n1 > 0):
         Lmin = L.min()
         Lmax = L.max()
-        print('ERROR in wosten_L:')
-        print('   Some values are out of range.')
+        print('Warning in wosten_L:')
+        print('   Some values are out of typical range.')
         print('   Typical range: -10 to 10 [unitless].')
-        if (L < -10.0):
-            print('   min(L) = ' + str(Lmin) )
-        if (L > 10.0):
-            print('   max(L) = ' + str(Lmax) )
+        print('   min(L) = ' + str(Lmin) )
+        print('   max(L) = ' + str(Lmax) )
         print()
-            
+                    
+#         if (L < -10.0):
+#             print('   min(L) = ' + str(Lmin) )
+#         if (L > 10.0):
+#             print('   max(L) = ' + str(Lmax) )
+#         print()
+
+        #-------------------------------
+        # Option to replace bad values
+        #-------------------------------
+        if (FORCE_RANGE):
+            print('   Forcing bad values into range.')
+            L[ L < -10 ] = -10.0
+            L[ L > 10 ]  = 10.0
+        print()
+                                
     return L
         
 #   wosten_L()
@@ -1067,7 +1161,8 @@ def get_wosten_vars(C, S, OM, D, topsoil ):
     
 #   get_wosten_vars()
 #-------------------------------------------------------------------
-def capillary_length_G(c, eta, n, inv_alpha, TBC=True):
+def capillary_length_G(c, eta, n, inv_alpha, TBC=True,
+                       FORCE_RANGE=True):
 
     #------------------------------------------
     # Compute the Green-Ampt parameter, G > 0
@@ -1159,12 +1254,23 @@ def capillary_length_G(c, eta, n, inv_alpha, TBC=True):
         print('WARNING in get_tBC_from_vG_vars:')
         print('   Some values in G grid are out of range.')
         print('   Typical range: 0.08 to 2.3 [m].' )
-        if (Gmin < G_min):
-            print('   min(G) = ' + str(Gmin) + ' [m]' )
-        if (Gmax > G_max):
-            print('   max(G) = ' + str(Gmax) + ' [m]' )
+        print('   min(G) = ' + str(Gmin) + ' [m]' )
+        print('   max(G) = ' + str(Gmax) + ' [m]' )
+
+#         if (Gmin < G_min):
+#             print('   min(G) = ' + str(Gmin) + ' [m]' )
+#         if (Gmax > G_max):
+#             print('   max(G) = ' + str(Gmax) + ' [m]' )
+
+        #-------------------------------
+        # Option to replace bad values
+        #-------------------------------
+        if (FORCE_RANGE):
+            print('   Forcing bad values into range.')
+            G[ G < G_min ] = G_min
+            G[ G > G_max ] = G_max
         print()
-     
+             
     return G
    
 #   capillary_length_G()
@@ -1252,8 +1358,8 @@ def save_soil_hydraulic_vars( site_prefix=None,
          RESAMPLE_ALGO='bilinear'):
 
     os.chdir( in_dir )
-    if (out_dir[-1] != '/'):
-        out_dir = out_dir + '/'
+    if (out_dir[-1] != os.sep):
+        out_dir = out_dir + os.sep
  
     #----------------------------------------------------  
     # Apply transformations to all soil layers (*.tiff)
@@ -1267,7 +1373,7 @@ def save_soil_hydraulic_vars( site_prefix=None,
     # Almost ready;  still need to create an RTI file
     #----------------------------------------------------               
     transform_isric_soil_grid_files( site_prefix,
-          in_dir=in_dir, out_dir=out_dir,
+           in_dir=in_dir, out_dir=out_dir,
            out_bounds=out_bounds,
            out_xres_sec=out_xres_sec, out_yres_sec=out_yres_sec,
            RESAMPLE_ALGO='bilinear', REPORT=REPORT)

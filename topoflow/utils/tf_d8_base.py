@@ -239,7 +239,7 @@ class d8_component(BMI_base.BMI_component):
         incs = int32(array([-nx + 1, 1, nx + 1, nx, nx - 1,
                             -1, -nx - 1, -nx]))
         
-        MAP = zeros([129], dtype='Int32')
+        MAP = zeros([129], dtype='int32')
         MAP[self.code_list] = incs
         
         self.inc_map = MAP
@@ -250,7 +250,7 @@ class d8_component(BMI_base.BMI_component):
 
         nx = self.nx
         ny = self.ny
-        ID_grid = reshape(arange(nx*ny, dtype='Int32'), [ny, nx])
+        ID_grid = reshape(arange(nx*ny, dtype='int32'), [ny, nx])
         ## self.ID_grid = ID_grid
         
         #-----------------------------------------------------
@@ -329,9 +329,9 @@ class d8_component(BMI_base.BMI_component):
 ##        #-----------------------------
 ##        # Handle periodic boundaries
 ##        #-----------------------------
-##        T = arange(nx, dtype='Int32')
+##        T = arange(nx, dtype='int32')
 ##        B = T + (nx * (ny - int32(1)))
-##        L = nx * arange(ny, dtype='Int32')
+##        L = nx * arange(ny, dtype='int32')
 ##        R = L + (nx - int32(1))
 ##        #----------------------------------
 ##        #L = nx * (lindgen(ny-2) + 1L)
@@ -392,7 +392,7 @@ class d8_component(BMI_base.BMI_component):
 ##        # with flow code of 0, such as edges
 ##        # and nodata pixels.
 ##        #--------------------------------------- 
-##        base = zeros([ny, nx], dtype='UInt8')
+##        base = zeros([ny, nx], dtype='uint8')
 ##        base[parent_IDs] = 1
 ##
 ##        wbad = no_flow_IDs(flow_grid, rti)
@@ -540,9 +540,9 @@ class d8_component(BMI_base.BMI_component):
         #-------------------------
         # Get IDs of edge pixels
         #-------------------------    
-        T_IDs = arange(nx, dtype='Int32')
+        T_IDs = arange(nx, dtype='int32')
         B_IDs = T_IDs + (ny - int32(1)) * nx
-        L_IDs = (int32(1) + arange(ny - int32(2), dtype='Int32')) * nx
+        L_IDs = (int32(1) + arange(ny - int32(2), dtype='int32')) * nx
         R_IDs = L_IDs + (nx - int32(1))
         edge_IDs = concatenate([T_IDs, B_IDs, L_IDs, R_IDs])
 
@@ -619,9 +619,9 @@ class d8_component(BMI_base.BMI_component):
         # Double or Float type ?
         #-------------------------
         if (DOUBLE):    
-            dw = zeros([self.ny, self.nx], dtype='Float64')
+            dw = zeros([self.ny, self.nx], dtype='float64')
         else:    
-            dw = zeros([self.ny, self.nx], dtype='Float32')
+            dw = zeros([self.ny, self.nx], dtype='float32')
             dx = float32(dx)
             dy = float32(dy)
             dd = float32(dd)
@@ -707,9 +707,9 @@ class d8_component(BMI_base.BMI_component):
         # Double or Float type ?
         #-------------------------
         if (DOUBLE):    
-            ds = zeros([self.ny, self.nx], dtype='Float64')
+            ds = zeros([self.ny, self.nx], dtype='float64')
         else:    
-            ds = zeros([self.ny, self.nx], dtype='Float32')
+            ds = zeros([self.ny, self.nx], dtype='float32')
             dx = float32(dx)
             dy = float32(dy)
             dd = float32(dd)

@@ -232,9 +232,11 @@ def get_short_name_map():
     'snowpack__melt_volume_flux' : 'SM',
     'snowpack__z_mean_of_mass-per-volume_density' : 'rho_snow',
     'snowpack__z_mean_of_mass-specific_isobaric_heat_capacity' : 'Cp_snow',
+    'soil__freeze_depth' : 'd_freeze',  ########
     'soil__porosity' : 'phi',
     'soil__reference_depth_temperature' : 'T_soil_x',   # x -> z, more clear?
     'soil__temperature_reference_depth' : 'soil_x',
+    'soil__thaw_depth': 'd_thaw',       #########    
     'soil__thermal_conductivity' : 'K_soil',
     'soil_surface__temperature' : 'T_surf',
     'soil_surface_water__domain_time_integral_of_infiltration_volume_flux' : 'vol_IN',

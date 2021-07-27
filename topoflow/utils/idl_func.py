@@ -47,14 +47,14 @@ def byte(s):
     if (is_string):
         result = array(list(map(ord, s)), copy=0)
     else:
-        result = array(s, copy=0).astype('UInt8')
+        result = array(s, copy=0).astype('uint8')
         # Is "mod" redundant in next line ??
-        # result = array(mod(s,256), copy=0).astype('UInt8')
+        # result = array(mod(s,256), copy=0).astype('uint8')
         #----------------------------
         # This crashes Python/NumPy
         #----------------------------
-        # result = mod(array(s, copy=0).astype('UInt8'), 256)
-        # result = array(s, copy=0).astype('UInt8') % 256
+        # result = mod(array(s, copy=0).astype('uint8'), 256)
+        # result = array(s, copy=0).astype('uint8') % 256
     return result
 
 
@@ -331,7 +331,7 @@ def reads(line, *args, **keys):
 #--------------------------------------------
 def sindgen(n):
     """Reproduces IDL's SINDGEN function"""
-    a = arange(n, dtype='Int32')
+    a = arange(n, dtype='int32')
     return list(map(str, a))
 
 ##    s = []

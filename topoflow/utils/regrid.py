@@ -1,9 +1,10 @@
 
-#  Copyright (c) 2019-2020, Scott D. Peckham
+#  Copyright (c) 2019-2021, Scott D. Peckham
 #  August, September, October, Nov. 2019
 #  Jun. 2020.  Updated create_rts_from_nc_files() to suppport
 #              non-precip variables.
-
+#  July 2021.  Updates to CHIRPS routines.
+#
 #-------------------------------------------------------------------
 
 #  test1()
@@ -40,7 +41,7 @@
 import numpy as np
 import gdal, osr  ## ogr
 import glob, sys
-import os.path
+import os, os.path
 
 from . import rti_files
 
@@ -398,7 +399,7 @@ def clip_geotiff(in_file=None, out_file=None,
 #         resampleAlg = resample_algo )
 
     #----------------------------------------------------- 
-    # Use gdal.Translate to clip to ouput bounding box.
+    # Use gdal.Translate to clip to output bounding box.
     # See: https://gdal.org/programs/gdal_translate.html
     #-----------------------------------------------------
     # Convert "bounds array" to "projWin array".
@@ -1215,7 +1216,7 @@ def create_rts_from_chirps_files( rts_file='TEST.rts',
            resample_algo='bilinear', BARO_60=False, 
            DEM_bounds=None, DEM_xres_sec=None, DEM_yres_sec=None,
            DEM_ncols=None, DEM_nrows=None,
-           VERBOSE=False, SILENT=False):
+           VERBOSE=False, SILENT=False, NON_NEGATIVE=True):
     
     #------------------------------------------------------
     # Note: See function above for resampling algorithms.
@@ -1284,7 +1285,6 @@ def create_rts_from_chirps_files( rts_file='TEST.rts',
     vmin  = 1e8
     bad_count = 0
     BAD_FILE  = False
-    tif_file  = 'TEMP1.tif'
     tmp_file  = 'TEMP.tif'
         
     #-----------------------------------    
@@ -1318,6 +1318,9 @@ def create_rts_from_chirps_files( rts_file='TEST.rts',
         #------------------------------------        
         # Flip the y-axis to make row-major
         #------------------------------------
+        # Confirmed correct: July 2021;
+        # ocean is in lower-right corner
+        #------------------------------------
         grid = np.flipud( grid )
 
         #---------------------------    
@@ -1334,7 +1337,7 @@ def create_rts_from_chirps_files( rts_file='TEST.rts',
         # Re-save grid as geotiff (for GDAL)
         #-------------------------------------
         if not(SILENT):  print('  resaving as GeoTIFF...')
-        new_tif_file = chirps_file + '.tif'
+        new_tif_file = 'tmp_' + chirps_file + '.tif'
         save_grid_to_geotiff( new_tif_file, grid,
                               chirps_ulx, chirps_uly,
                               chirps_xres_deg, chirps_yres_deg,
@@ -1428,10 +1431,17 @@ def create_rts_from_chirps_files( rts_file='TEST.rts',
         w = (grid2 != chirps_nodata)   # (boolean array)
         grid2[w] = grid2[w] * 3600.0   # (preserve nodata)
 
+        #------------------------------------
+        # Option to remove the new_tif_file
+        #------------------------------------
+        os.remove(new_tif_file)
+        
         #-------------------------  
         # Write grid to RTS file
         #-------------------------
         grid2 = np.float32( grid2 )
+        if (NON_NEGATIVE):
+            grid2[ grid2 < 0 ] = 0.0
         vmax  = max( vmax, grid2.max() )
         vmin  = min( vmin, grid2.min() )
         grid2.tofile( rts_unit )
@@ -1442,6 +1452,7 @@ def create_rts_from_chirps_files( rts_file='TEST.rts',
     # Close the RTS file
     #---------------------
     rts_unit.close()
+    os.remove( tmp_file )   # TEMP.tif
 
     #---------------------------------------
     # Create an RTI file for this RTS file

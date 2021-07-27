@@ -570,13 +570,13 @@ class d8_component(BMI_base.BMI_component):
         ny = self.ny
 
         if (DOUBLE):
-            self.dw = zeros([ny, nx], dtype='Float64')
-            self.ds = zeros([ny, nx], dtype='Float64')
-            self.A  = zeros([ny, nx], dtype='Float64')
+            self.dw = zeros([ny, nx], dtype='float64')
+            self.ds = zeros([ny, nx], dtype='float64')
+            self.A  = zeros([ny, nx], dtype='float64')
         else:
-            self.dw = zeros([ny, nx], dtype='Float32')
-            self.ds = zeros([ny, nx], dtype='Float32')
-            self.A  = zeros([ny, nx], dtype='Float32')
+            self.dw = zeros([ny, nx], dtype='float32')
+            self.ds = zeros([ny, nx], dtype='float32')
+            self.A  = zeros([ny, nx], dtype='float32')
 
     #   initialize_computed_vars() 
     #---------------------------------------------------------------------
@@ -671,7 +671,7 @@ class d8_component(BMI_base.BMI_component):
         #        to set any invalid flow code to 0, which signifies
         #        the the flow direction for that grid cell is undefined.
         #----------------------------------------------------------------
-        self.valid_code_map = zeros([256], dtype='UInt8')
+        self.valid_code_map = zeros([256], dtype='uint8')
         self.valid_code_map[ self.code_list ] = numpy.uint8( self.code_list )
 
     #   get_valid_code_map()
@@ -687,7 +687,7 @@ class d8_component(BMI_base.BMI_component):
         
         nx = self.nx
         ny = self.ny
-        self.ID_grid = reshape(arange(nx*ny, dtype='Int32'), [ny, nx])
+        self.ID_grid = reshape(arange(nx*ny, dtype='int32'), [ny, nx])
         
     #   get_ID_grid() 
     #---------------------------------------------------------------------
@@ -700,7 +700,7 @@ class d8_component(BMI_base.BMI_component):
         incs = int32(array([-nx + 1, 1, nx + 1, nx, nx - 1,
                             -1, -nx - 1, -nx]))
         
-        MAP = zeros([129], dtype='Int32')
+        MAP = zeros([129], dtype='int32')
         MAP[self.code_list] = incs
         
         self.inc_map = MAP
@@ -718,9 +718,9 @@ class d8_component(BMI_base.BMI_component):
         #------------------------------------------
         nx    = self.nx
         ny    = self.ny
-        T_IDs = arange(nx, dtype='Int32')
+        T_IDs = arange(nx, dtype='int32')
         B_IDs = T_IDs + (ny - 1) * nx
-        L_IDs = (1 + arange(ny - 2, dtype='Int32')) * nx
+        L_IDs = (1 + arange(ny - 2, dtype='int32')) * nx
         R_IDs = L_IDs + (nx - 1)
         edge_IDs = concatenate([T_IDs, B_IDs, L_IDs, R_IDs])
 
@@ -744,7 +744,7 @@ class d8_component(BMI_base.BMI_component):
             print('Computing "not_edge" grid...')
 
         self.not_edge_grid = numpy.ones([self.ny, self.nx],
-                                        dtype='UInt8')
+                                        dtype='uint8')
         self.not_edge_grid[ self.edge_IDs ] = 0
         
 ##        self.not_edge_grid[:, 0]      = 0
@@ -780,9 +780,9 @@ class d8_component(BMI_base.BMI_component):
         #---------------------------------------
         # Get IDs for pixels on the four edges
         #---------------------------------------
-        T = arange(nx, dtype='Int32')
+        T = arange(nx, dtype='int32')
         B = T + (nx * (ny - 1))
-        L = nx * arange(ny, dtype='Int32')
+        L = nx * arange(ny, dtype='int32')
         R = L + (nx - 1)
 
         #------------------------------------------------
@@ -869,7 +869,7 @@ class d8_component(BMI_base.BMI_component):
 ##        # with flow code of 0, such as edges
 ##        # and nodata pixels.
 ##        #--------------------------------------- 
-##        base = zeros([ny, nx], dtype='UInt8')
+##        base = zeros([ny, nx], dtype='uint8')
 ##        base[parent_IDs] = 1
 ##
 ##        wbad = no_flow_IDs(flow_grid, rti)
@@ -1351,7 +1351,7 @@ class d8_component(BMI_base.BMI_component):
         if not(SILENT):
             print('Computing "resolve array"...')
             
-        resolve = zeros([256], dtype='UInt8')
+        resolve = zeros([256], dtype='uint8')
         
         #-----------------------------------
         # High-symmetry groups are:
@@ -1840,7 +1840,7 @@ class d8_component(BMI_base.BMI_component):
                 #-----------------------------------------
                 # Initialize all unknown pixels as READY
                 #-----------------------------------------
-                READY = numpy.ones([n_unknown], dtype='UInt8')
+                READY = numpy.ones([n_unknown], dtype='uint8')
             
                 #-------------------------------------------------
                 # Upstream areas of 8 neighbor pixels (periodic)
@@ -2117,7 +2117,7 @@ class d8_component(BMI_base.BMI_component):
                 #-----------------------------------------
                 # Initialize all unknown pixels as READY
                 #-----------------------------------------
-                READY = zeros([n_unknown], dtype='UInt8') + 1
+                READY = zeros([n_unknown], dtype='uint8') + 1
                 
                 #--------------------------------------
                 # Upstream areas of 8 neighbor pixels
@@ -2313,9 +2313,9 @@ class d8_component(BMI_base.BMI_component):
         # Double or Float type ?
         #-------------------------
         if (DOUBLE):    
-            dw = zeros([self.ny, self.nx], dtype='Float64')
+            dw = zeros([self.ny, self.nx], dtype='float64')
         else:    
-            dw = zeros([self.ny, self.nx], dtype='Float32')
+            dw = zeros([self.ny, self.nx], dtype='float32')
             dx = float32(dx)
             dy = float32(dy)
             dd = float32(dd)
@@ -2402,9 +2402,9 @@ class d8_component(BMI_base.BMI_component):
         # Double or Float type ?
         #-------------------------
         if (DOUBLE):    
-            ds = zeros([self.ny, self.nx], dtype='Float64')
+            ds = zeros([self.ny, self.nx], dtype='float64')
         else:    
-            ds = zeros([self.ny, self.nx], dtype='Float32')
+            ds = zeros([self.ny, self.nx], dtype='float32')
             dx = float32(dx)
             dy = float32(dy)
             dd = float32(dd)
