@@ -1107,7 +1107,9 @@ class framework():
         
         for comp_name in self.provider_list:
             bmi = self.comp_set[ comp_name ]
-            bmi.update( -1.0 )
+            if (bmi.comp_status == 'Enabled'):
+                bmi.update( -1.0 )             
+            ## bmi.update( -1.0 )
             
     #   update_all()
     #-------------------------------------------------------------------
@@ -1533,7 +1535,7 @@ class framework():
 ##        self.comp_update_steps = np.zeros( n_comps )
 ##        for k in xrange( n_comps ):
 ##            dt = dt_array[ k ]
-##            self.comp_update_steps[ k ] = np.ceil( dt / dt_min ).astype('Int32')  
+##            self.comp_update_steps[ k ] = np.ceil( dt / dt_min ).astype('int32')  
 ##        self.n_comps = n_comps  # (used by run_model().)
         
     #   initialize_framework_dt()
