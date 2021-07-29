@@ -17,8 +17,13 @@ See also papers by:
 """
 #-----------------------------------------------------------------------
 #
-#  Copyright (c) 2005-2020, Scott D. Peckham
+#  Copyright (c) 2005-2021, Scott D. Peckham
 #
+#  Jul 2021.  Added year keyword to True_Solar_Noon(), which is
+#             then passed to Equation_Of_Time().
+#             Note that met_base.py calls True_Solar_Noon().
+#             New version of Earth_Perihelion that uses Python
+#             dictionary and covers 1981 to 2060.
 #  May 2020.  Fixed small bug in Day_Angle().
 #             Updated Current_Year() to use datetime.
 #  Jul 2010.  Cleaned up, removed old GUI routines)
@@ -31,8 +36,8 @@ See also papers by:
 #
 #------------------------------------------------------------------------
 #
-#  Note:  Earth_Perihelion() uses a series approximation that is
-#         only good for the years 1992 to 2020.  For 2001 to 2100,
+#  Note:  Earth_Perihelion() uses a table of values that only
+#         spans the years 1981 to 2060.  For 2001 to 2100,
 #         as well as other centuries, see:
 #         http://astropixels.com/ephemeris/perap2001.html
 #
@@ -41,7 +46,7 @@ See also papers by:
 #
 #  Nots:  Functions that should be double-checked include:
 #           Vernal_Equinox, Earth_Perihelion and
-#            ET_Radiation_Flux_Slope
+#           ET_Radiation_Flux_Slope
 #------------------------------------------------------------------------
 #
 #----------------
@@ -776,28 +781,50 @@ def Clear_Sky_Radiation( lat_deg, Julian_day, W_p,
 #   Clear_Sky_Radiation()
 #------------------------------------------------------------------------
 def Julian_Day( month_num, day_num, hour_num=None, year=None ):
-                #### year=None )
 
     #-----------------------------------------------------------
     # NB!  month_num is an integer between 1 and 12 inclusive.
     #      This function can handle leap years, given year.
-    #      Check that Julian_Day(1,1,0) = 0.0.
-    #      Check that Julian_Day(2,1,0) = 31.0.
-    #        Online source, Parkin (2017), says:
-    #        JD(Jan. 1) = 1, JD(Feb. 1) = 32.
-    #-----------------------------------------------------------
+    #      This function returns numbers in [1, 365.96].
+    #         Julian_Day(1,1,0)    = 1.0
+    #         Julian_Day(2,1,0)    = 32.0
+    #         Julian_Day(12,31,0)  = 365.0
+    #         Julian_Day(12,31,23) = 365.96
+    #------------------------------------------------------------
+    #  But it seems like we should instead have:
+    #         Julian_Day(1,1,0)= 0.0,
+    #         Julian_Day(12,31,23) = 364.968 (in non-leap years)
+    #------------------------------------------------------------
+    # NB!  For our purposes we need the Julian day of the year,
+    #      not the Julian day from the start of Julian period.
+    #      See:  https://en.wikipedia.org/wiki/Julian_day 
+    #------------------------------------------------------------    
+
     if (year is None) or ((year % 4) == 0):
         month_days = np.array([0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31])        
     else:
         # Leap year     
         month_days = np.array([0, 31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]) 
 
-    # After 2020-05-10
+    #---------------------------------------------------
+    # (2020-05-10) Online source, Parkin (2017), says:
+    #        JD(Jan. 1) = 1, JD(Feb. 1) = 32.
+    #---------------------------------------------------
     JD = np.sum(month_days[:month_num]) + np.maximum(day_num,1)
+ 
+    #-------------------------------------------------------   
+    # This method gives JD in [0,365]
+    # That is, JD < 1 between midnights of 01-01 and 01-02
+    #-------------------------------------------------------
     # JD = np.sum(month_days[:month_num]) + np.maximum(day_num - 1, 0)
     
-    if (hour_num is not None):    
+    if (hour_num is not None):
         JD = JD + (hour_num / np.float64(24))
+
+        #----------------------------------------------------            
+        # Wikipedia says to subtract 12; day starts at noon
+        #----------------------------------------------------
+        # JD = JD + (hour_num - 12) / np.float64(24)   # (2021-07-29)  
 
     return JD
     
@@ -936,34 +963,87 @@ def Earth_Perihelion( year=None ):
     #         returns the time when this event occurs as a
     #         Julian date in the given year.
     #-------------------------------------------------------------
+    # Notes:  New version that goes through 2050 (2021-07-28).
+    # See: http://www.astropixels.com/ephemeris/perap2001.html
+    #-------------------------------------------------------------
     if (year is None):    
         year = Current_Year()
-    if (year < 1992) or (year > 2020):    
+        
+    if (year < 1981) or (year > 2060):
+        print('WARNING: Earth_Perihelion is not available')
+        print('         for the year:', year)
+        print('         Will use current year instead.') 
         year = Current_Year()
-    
-    #------------------------------------
-    # Use published values from a table
-    # for the years 1992 to 2020.
-    #------------------------------------
-    Tp_years = np.arange(29, dtype='int16') + 1992
-    
-    Tp_days  = np.array([3, 4, 2, 4, 4, 2, 4, 3, 3, 4, 2, 4, 4, 2, 4, 3, \
-                      3, 4, 3, 3, 5, 2, 4, 4, 2, 4, 3, 3, 5])
-    
-    Tp_hours = np.array([15, 3, 6, 11, 7, 0, 21, 13, 5, 9, 14, 5, 18, 1, 15, \
-                      20, 0, 15, 0, 19, 0, 5, 12, 7, 23, 14, 6, 5, 8])
-    
+                   
+    #--------------------------------------------    
+    # Store data in a dictionary (1981 to 2060)
+    #--------------------------------------------
+    Tp_dict = {
+    1981:(2,2),  1982:(4,11), 1983:(2,15), 1984:(3,22), 1985:(3,20),
+    1986:(2,5),  1987:(4,23), 1988:(3,0),  1989:(1,22), 1990:(4,17),
+    1991:(3,3),  1992:(3,15), 1993:(4,3),  1994:(2,6),  1995:(4,11),
+    1996:(4,7),  1997:(2,0),  1998:(4,21), 1999:(3,13), 2000:(3,5),
+    2001:(4,9),  2002:(2,14), 2003:(4,5),  2004:(4,18), 2005:(2,1),
+    2006:(4,15), 2007:(3,20), 2008:(3,0),  2009:(4,15), 2010:(3,0),
+    2011:(3,19), 2012:(5,0),  2013:(2,5),  2014:(4,12), 2015:(4,7), 
+    2016:(2,23), 2017:(4,14), 2018:(3,6),  2019:(3,5),  2020:(5,8),
+    2021:(2,14), 2022:(4,7),  2023:(4,16), 2024:(3,1),  2025:(4,13),
+    2026:(3,17), 2027:(3,3),  2028:(5,12), 2029:(2,18), 2030:(3,10),
+    2031:(4,21), 2032:(3,5),  2033:(4,12), 2034:(4,5),  2035:(3,1),
+    2036:(5,14), 2037:(3,4),  2038:(3,5),  2039:(5,7),  2040:(3,12),
+    2041:(3,22), 2042:(4,9),  2043:(2,22), 2044:(5,13), 2045:(3,15),
+    2046:(3,1),  2047:(5,12), 2048:(3,18), 2049:(3,10), 2050:(4,20),
+    2051:(3,6),  2052:(5,9),  2053:(3,22), 2054:(2,18), 2055:(5,12),
+    2056:(4,4),  2057:(3,3),  2058:(5,4),  2059:(3,11), 2060:(4,23) }
+
     #----------------------------------------
     # Get day and hour from table for given
     # year and convert to a Julian day.
     #----------------------------------------
-    w       = np.where( Tp_years == year )
-    Tp_vals = Julian_Day(1, Tp_days, Tp_hours)
-    Tp_JD   = Tp_vals[w]
-    
-    return Tp_JD
+    (Tp_day, Tp_hour) = Tp_dict[ year ]
+    Tp_Julian_Day     = Julian_Day(1, Tp_day, Tp_hour)
+    return Tp_Julian_Day
     
 #   Earth_Perihelion()
+#------------------------------------------------------------------------
+# def Earth_Perihelion_old( year=None ):
+
+    #-------------------------------------------------------------
+    # NOTES:  Perihelion refers to the point along the orbit of
+    #         a planet around the sun where it is closest to the
+    #         sun.  For Earth, this typically occurs between the
+    #         dates of January 2 and January 5.  This function
+    #         returns the time when this event occurs as a
+    #         Julian date in the given year.
+    #-------------------------------------------------------------
+#     if (year is None):    
+#         year = Current_Year()
+#         
+# #     if (year < 1992) or (year > 2020):    
+# #         year = Current_Year()
+#     
+#     #--------------------------------------------------------------
+#     # Use published values from a table for the years 1992-2020.
+#     #-------------------------------------------------------------
+#     Tp_years = np.arange(29, dtype='int16') + 1992
+#     
+#     Tp_days  = np.array([3, 4, 2, 4, 4, 2, 4, 3, 3, 4, 2, 4, 4, 2, 4, 3, \
+#                       3, 4, 3, 3, 5, 2, 4, 4, 2, 4, 3, 3, 5])
+#     
+#     Tp_hours = np.array([15, 3, 6, 11, 7, 0, 21, 13, 5, 9, 14, 5, 18, 1, 15, \
+#                       20, 0, 15, 0, 19, 0, 5, 12, 7, 23, 14, 6, 5, 8])
+#     
+#     #----------------------------------------
+#     # Get day and hour from table for given
+#     # year and convert to a Julian day.
+#     #----------------------------------------
+#     w       = np.where( Tp_years == year )
+#     Tp_vals = Julian_Day(1, Tp_days, Tp_hours)
+#     Tp_JD   = Tp_vals[w]
+#     
+#     return Tp_JD
+#     
+# #   Earth_Perihelion_old()
 #------------------------------------------------------------------------
 def Equation_Of_Time( Julian_day, year=None,
                       DEGREES=False, DMS=False ):
@@ -971,7 +1051,7 @@ def Equation_Of_Time( Julian_day, year=None,
     ############################################################
     # NB!  Should DEGREES and DMS both be False by default ??
     ############################################################
-    
+
     #-----------------------------------------------------
     # Notes: The so-called "equation of time" gives the
     #        time difference between true solar noon and
@@ -996,8 +1076,9 @@ def Equation_Of_Time( Julian_day, year=None,
     #----------------------------------------------------- 
     if (year is None):   
         year = Current_Year()
-    if (year < 1992) or (year > 2020):    
-        year = Current_Year()
+        
+#     if (year < 1981) or (year > 2060):    
+#         year = Current_Year()
     
     #--------------------------------
     # Eccentricity of Earth's orbit
@@ -1049,8 +1130,9 @@ def Equation_Of_Time( Julian_day, year=None,
     # or -77.20 degrees or 282.8 degrees.
     #--------------------------------------------
     ## print '### Computing VE_JD...'
-    year0 = np.int16(2000)
-    VE_JD = Vernal_Equinox(year0)
+    ## year0 = np.int16(2000)
+    ## VE_JD = Vernal_Equinox(year0)
+    VE_JD = Vernal_Equinox( year )
     PT = (np.float64(365) + Tp_JD) - VE_JD    # [days, about 287]
     omega = twopi * (PT / days_per_year)   # [radians]
     
@@ -1097,7 +1179,7 @@ def Equation_Of_Time( Julian_day, year=None,
 #   Equation_of_Time()
 #------------------------------------------------------------------------
 def True_Solar_Noon( Julian_day, longitude, GMT_offset=None,
-                     DST_offset=None ):
+                     DST_offset=None, year=None):
 
     #------------------------------------------------------------
     # Notes: We need to know the local clock time when True
@@ -1124,11 +1206,16 @@ def True_Solar_Noon( Julian_day, longitude, GMT_offset=None,
     #        using the optional DST_offset argument.  Be aware
     #        that different countries use different conventions.
     #------------------------------------------------------------
+    # Notes: Added year keyword on 2021-07-28.
+    #------------------------------------------------------------    
+    if (year is None):
+        year = Current_Year()
+
     time_zone_center_lon = GMT_offset * np.float64(15)  # [degrees]
     lon_diff = (time_zone_center_lon - longitude)    # [degrees]
     LC = (lon_diff / np.float64(15))      # [hours]
     ## print '### Computing TE...'
-    TE = Equation_Of_Time(Julian_day)  # [hours]
+    TE = Equation_Of_Time(Julian_day, year=year)  # [hours]
     T_noon = np.float64(12) + LC + TE     # [hours; 24-hour military time]
     
     #-----------------------------

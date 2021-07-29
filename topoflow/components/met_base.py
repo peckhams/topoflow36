@@ -9,8 +9,11 @@ in BMI_base.py.
 """
 #-----------------------------------------------------------------------
 #
-# Copyright (c) 2001-2020, Scott D. Peckham
+# Copyright (c) 2001-2021, Scott D. Peckham
 #
+#  Jul 2021.  Added start_year to CFG file and also in:
+#             set_missing_cfg_options().  Now passed to functions
+#             in solar_funcs.py that have a "year" keyword.
 #  Jul 2020.  Separate initialize_input_file_vars().
 #             Updated update_bulk_aero_conductance().
 #             Updated read_input_files().
@@ -29,7 +32,7 @@ in BMI_base.py.
 #            so any comp with ref to it can see it change.
 #  Jun 2010. update_net_shortwave_radiation(), etc.  
 #  May 2010. Changes to initialize() and read_cfg_file().
-#  Aug 2009
+#  Aug 2009. Improvements
 #  Jan 2009. Converted from IDL.
 #
 #-----------------------------------------------------------------------
@@ -115,6 +118,7 @@ from topoflow.utils import BMI_base
 from topoflow.utils import model_input
 from topoflow.utils import model_output
 from topoflow.utils import rtg_files
+from topoflow.utils import time_utils
 
 #-----------------------------------------------------------------------
 class met_component( BMI_base.BMI_component ):
@@ -837,6 +841,12 @@ class met_component( BMI_base.BMI_component ):
         if not(hasattr(self, 'SATTERLUND')):
             self.SATTERLUND = False
 
+        #--------------------------------------------
+        # (2021-07-28) Added start_year to CFG file
+        #--------------------------------------------
+        if not(hasattr(self, 'start_year')):
+            self.start_year = solar.Current_Year()
+    
         #-------------------------------------------------
         # Options to save shortwave & longwave radiation
         #-------------------------------------------------
@@ -1138,11 +1148,18 @@ class met_component( BMI_base.BMI_component ):
          
         #------------------------------------
         # Initialize the decimal Julian day
-        #------------------------------------
+        #---------------------------------------
+        # (2021-07-28)  Added year=start_year.
+        #---------------------------------------
+        self.year       = self.start_year.copy()
         self.julian_day = solar.Julian_Day( self.start_month,
                                             self.start_day,
-                                            self.start_hour )
-        ## print '    julian_day =', self.julian_day
+                                            self.start_hour,
+                                            year=self.start_year)
+        self.start_datetime = time_utils.get_datetime_str(
+                                 self.start_year, self.start_month,
+                                 self.start_day,  self.start_hour,
+                                 0, 0)
         
     #   initialize_computed_vars()
     #-------------------------------------------------------------------
@@ -1665,10 +1682,28 @@ class met_component( BMI_base.BMI_component ):
         if (self.DEBUG):
             print('Calling update_julian_day()...')
 
+        #-----------------------------------   
+        # Update the julian_day and year ?
+        #-----------------------------------
+        datetime = time_utils.get_current_datetime(
+                              self.start_datetime,
+                              self.time_min, time_units='minutes')
+        (y,m1,d,h,m2,s) = time_utils.split_datetime_str( datetime, ALL=True )
+        self.year = y
+        ### self.year.fill(y)  # (if year is 0D ndarray, mutable)
+ 
         #----------------------------------
         # Update the *decimal* Julian day
         #----------------------------------
-        self.julian_day += (self.dt / self.secs_per_day) # [days]
+        self.julian_day = solar.Julian_Day( m1, d, hour_num=h, year=y)
+        # print('Julian Day =', self.julian_day)
+     
+        #----------------------------------
+        # Update the *decimal* Julian day
+        #--------------------------------------------------
+        # Before 2021-07-29, but doesn't stay in [1,365].
+        #--------------------------------------------------
+        ## self.julian_day += (self.dt / self.secs_per_day) # [days]
   
         #------------------------------------------
         # Compute the offset from True Solar Noon
@@ -1680,10 +1715,12 @@ class met_component( BMI_base.BMI_component ):
         ## print '    Computing solar_noon...'
         solar_noon = solar.True_Solar_Noon( self.julian_day,
                                             self.lon_deg,
-                                            self.GMT_offset )
+                                            self.GMT_offset,
+                                            DST_offset=None,  #####
+                                            year=self.year)
         ## print '    Computing TSN_offset...'
         self.TSN_offset = (clock_hour - solar_noon)    # [hours]
-    
+
     #   update_julian_day()
     #-------------------------------------------------------------------
     def update_net_shortwave_radiation(self):
