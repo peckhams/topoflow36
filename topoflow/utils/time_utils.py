@@ -20,6 +20,7 @@ import sys
 #  get_duration()
 #  get_current_datetime()
 #
+#  get_datetime_str()   # 2021-07-29
 #  standardize_datetime_str()
 #  get_datetime_obj_from_str()
 #  get_datetime_obj_from_one_str()
@@ -184,6 +185,22 @@ def get_current_datetime( start_datetime, time, time_units ):
     return datetime
 
 #   get_current_datetime()
+#---------------------------------------------------------------------
+def get_datetime_str(y, m1, d, h, m2, s):
+
+    m1_str = pad_with_zeros(m1, 2)
+    d_str  = pad_with_zeros(d, 2)
+    date_str = str(y) + '-' + m1_str + '-' + d_str
+    #-----------------------------------------------
+    h_str  = pad_with_zeros(h, 2)
+    m2_str = pad_with_zeros(m2, 2)
+    s_str  = pad_with_zeros(s, 2)
+    time_str = h_str + ':' + m2_str + ':' + s_str
+    #-----------------------------------------------    
+    datetime_str = date_str + ' ' + time_str
+    return datetime_str
+
+#   get_datetime_str()
 #---------------------------------------------------------------------
 def standardize_datetime_str( datetime_str ):
 
