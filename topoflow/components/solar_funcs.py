@@ -24,9 +24,11 @@ See also papers by:
 #             Note that met_base.py calls True_Solar_Noon().
 #             New version of Earth_Perihelion that uses Python
 #             dictionary and covers 1981 to 2060.
+#             Small changes to Julian_Day() and Day_Angle().
+#             Day_Angle() does not yet handle leap years.
 #  May 2020.  Fixed small bug in Day_Angle().
 #             Updated Current_Year() to use datetime.
-#  Jul 2010.  Cleaned up, removed old GUI routines)
+#  Jul 2010.  Cleaned up, removed old GUI routines.
 #             Replaced T_air & RH as args to radiation routines w/ W_p.
 #  Jan 2009.  Converted from IDL.
 #  Mar 2007.  Updates.
@@ -130,11 +132,22 @@ def Day_Angle( Julian_day, DEGREES=False ):
     # Notes:  The Julian day does not need to be an integer;
     #         decimal values can be used for more precision.
     #---------------------------------------------------------
+
+    #-------------------------------------    
+    # Use this if Julian Day starts at 1
+    #-------------------------------------
     ## angle = (2 * np.pi) * (Julian_day - np.float64(1)) / np.float64(365)
 
-    # APPARENT BUG FIX. 2020-05-10
+    #-------------------------------------    
+    # Use this if Julian Day starts at 0
+    #-------------------------------------
+    # Don't use Days_Per_Year() here.
+    #-----------------------------------------------------------
+    # We should be using 366 vs. 365 for leap years, but would
+    # then need to pass year to every Day_Angle() call.
+    #-----------------------------------------------------------
     angle = (2 * np.pi) * Julian_day / np.float64(365)
-        
+            
     if (DEGREES):    
         angle = angle * (np.float64(180) / np.pi)
     
@@ -789,35 +802,37 @@ def Julian_Day( month_num, day_num, hour_num=None, year=None ):
     #         Julian_Day(1,1,0)    = 1.0
     #         Julian_Day(2,1,0)    = 32.0
     #         Julian_Day(12,31,0)  = 365.0
-    #         Julian_Day(12,31,23) = 365.96
+    #         Julian_Day(12,31,23.99) = 365.999
     #------------------------------------------------------------
     #  But it seems like we should instead have:
-    #         Julian_Day(1,1,0)= 0.0,
-    #         Julian_Day(12,31,23) = 364.968 (in non-leap years)
+    #      Julian_Day(1,1,0)= 0.0,
+    #      Julian_Day(12,31,23.99) = 364.999 (non-leap years)
+    #      Julian_Day(12,31,23.99) = 365.999 (leap years)
+    #  Especially when thinking about Day_Angle().
     #------------------------------------------------------------
     # NB!  For our purposes we need the Julian day of the year,
     #      not the Julian day from the start of Julian period.
     #      See:  https://en.wikipedia.org/wiki/Julian_day 
     #------------------------------------------------------------    
 
-    if (year is None) or ((year % 4) == 0):
+    if (year is None) or ((year % 4) != 0):
         month_days = np.array([0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31])        
     else:
         # Leap year     
         month_days = np.array([0, 31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]) 
 
-    #---------------------------------------------------
-    # (2020-05-10) Online source, Parkin (2017), says:
-    #        JD(Jan. 1) = 1, JD(Feb. 1) = 32.
-    #---------------------------------------------------
-    JD = np.sum(month_days[:month_num]) + np.maximum(day_num,1)
- 
     #-------------------------------------------------------   
     # This method gives JD in [0,365]
     # That is, JD < 1 between midnights of 01-01 and 01-02
     #-------------------------------------------------------
-    # JD = np.sum(month_days[:month_num]) + np.maximum(day_num - 1, 0)
+    JD = np.sum(month_days[:month_num]) + np.maximum(day_num - 1, 0)
     
+    #---------------------------------------------------
+    # (2020-05-10) Online source, Parkin (2017), says:
+    #        JD(Jan. 1) = 1, JD(Feb. 1) = 32.
+    #---------------------------------------------------
+    # JD = np.sum(month_days[:month_num]) + np.maximum(day_num,1)
+ 
     if (hour_num is not None):
         JD = JD + (hour_num / np.float64(24))
 
