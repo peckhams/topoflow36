@@ -182,10 +182,23 @@ def read_grid_from_nc_file( nc_file, time_index=1, REPORT=True ):
     var_name_list = ncgs.get_var_names()
     if (REPORT):
         print('var_names in netCDF file =' )
-        print( var_name_list )    
-    ## var_index = 1   # 0=time, 1=X, 2=Y, 3=V  ###############
-    var_index = 3   # 0=time, 1=X, 2=Y, 3=V  ###############
-    var_name  = var_name_list[ var_index ]
+        print( var_name_list )
+
+    #----------------------------         
+    # Determine valid var_index
+    #-----------------------------------------
+    # Old: 0=time, 1=X, 2=Y, 3=V
+    # New: 0=time, 1=datetime, 2=X, 3=Y, 4=V
+    #-----------------------------------------
+    var_index = 1
+    other_vars = ['time','datetime','X','Y','Z']
+    while (True):
+        var_name = var_name_list[ var_index ]
+        if (var_name not in other_vars):
+            break
+        var_index += 1    
+    ### var_index = 3   # 0=time, 1=X, 2=Y, 3=V  ###############
+    ### var_name  = var_name_list[ var_index ]
     long_name = ncgs.get_var_long_name( var_name )
     var_units = ncgs.get_var_units( var_name )
     n_grids   = ncgs.ncgs_unit.variables[ var_name ].n_grids
