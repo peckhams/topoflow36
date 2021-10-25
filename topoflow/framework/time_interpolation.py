@@ -389,12 +389,19 @@ class time_interpolator():
         # Using (status = 'initialized') works because
         # the initialize() method caused all other
         # components to reach "updated" status.
-        #------------------------------------------------       
-        comp_status = bmi.get_status()
-        # if (comp_status == 'disabled'):  # (not used/ready yet)
-        if (comp_status == 'initialized'):  # (this works)
-            return
-        
+        #-------------------------------------------------------
+        # NOTE:  There is no get_status() method in BMI 2.0.
+        #        So commented code here won't work in general.
+        #-------------------------------------------------------    
+        #comp_status = bmi.get_status()
+        # # if (comp_status == 'disabled'):  # (not used/ready yet)
+        # if (comp_status == 'initialized'):  # (this works)
+        #     return
+        #-------------------------------------------------------
+        if hasattr( bmi, 'comp_status'):
+            if (bmi.comp_status.lower() == 'disabled'):
+                return
+   
         #---------------------------     
         # Case of no interpolation
         #---------------------------

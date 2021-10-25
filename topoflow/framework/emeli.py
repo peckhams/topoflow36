@@ -1159,9 +1159,14 @@ class framework():
         
         for comp_name in self.provider_list:
             bmi = self.comp_set[ comp_name ]
-            if (bmi.comp_status == 'Enabled'):
-                bmi.update( -1.0 )             
-            ## bmi.update( -1.0 )
+            if hasattr(bmi, 'comp_status'):
+                if (bmi.comp_status.lower() == 'enabled'):
+                    bmi.update( -1.0 )
+            else:
+                bmi.update( -1.0 )
+            
+            ## if (bmi.comp_status == 'Enabled'):
+            ##     bmi.update( -1.0 )             
             
     #   update_all()
     #-------------------------------------------------------------------
