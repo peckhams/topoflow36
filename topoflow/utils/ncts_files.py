@@ -860,10 +860,24 @@ class ncts_file():
         
     #   add_series()
     #----------------------------------------------------------
-    def get_var_names(self):
-    
+    def get_var_names(self, no_dim_vars=False):
+
         var_dict = self.ncts_unit.variables
-        return list( var_dict.keys() )
+        names    = list( var_dict.keys() )
+
+        if (no_dim_vars):
+            #---------------------------------------
+            # This works, but 'datetime' is not a
+            # dimension var, so it is returned.
+            #---------------------------------------
+            dim_dict = self.ncts_unit.dimensions
+            dims     = list( dim_dict.keys() )
+            dims.append('datetime')  # (see note)
+            #---------------------------------------------- 
+            # dims  = ['time', 'datetime', 'Z', 'Y', 'X']
+            names = [s for s in names if (s not in dims)]
+           
+        return names
 
     #   get_var_names()
     #----------------------------------------------------------

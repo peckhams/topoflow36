@@ -2,12 +2,14 @@
 #  Copyright (c) 2020, Scott D. Peckham
 #
 #  Note: This file contains a set of functions for visualizing the
-#        contents of TopoFlow output files in netCDF format.
+#        contents of output files in netCDF format
+#        (e.g. TopoFlow or Stochastic Conflict Model)
 #
+#  Oct 2021.  create_visualization_files().
+#  Sep 2021.  Added LAND_SEA_BACKDROP option: show_grid_as_image() 
 #  May 2020.  Moved all routines from Jupyter notebook called
 #             TopoFlow_Visualization.ipynb to here.
-#             Tested all of them in a new Jupyter notebook called
-#             TopoFlow_Visualization2.ipynb.
+#             Tested all of them in the Jupyter notebook.
 #
 #--------------------------------------------------------------------
 #
@@ -42,11 +44,18 @@
 #  plot_data()
 #  plot_soil_profile()
 #
+#  Next function will be called from a Dojo Docker container
+#      after topoflow_driver.finalize() to create images
+#      and movies from netCDF output files.
+#
+#  create_visualization_files()    2021-10
+#  delete_png_files()              2021-10
+#
 #--------------------------------------------------------------------
 # import os.path
 # import shutil
 
-import glob, os
+import glob, os, os.path
 import numpy as np
 
 import matplotlib.pyplot as plt
@@ -166,7 +175,6 @@ def stretch_grid( grid, stretch, a=1, b=2, p=0.5 ):
 #   stretch_grid()
 #--------------------------------------------------------------------
 #--------------------------------------------------------------------
-
 def read_grid_from_nc_file( nc_file, time_index=1, REPORT=True ):
 
     # Typical 2D nc files
@@ -269,6 +277,7 @@ def read_and_show_rtg( rtg_filename, long_name, VERBOSE=True,
 #--------------------------------------------------------------------
 def show_grid_as_image( grid, long_name, extent=None,
                         cmap='rainbow', BLACK_ZERO=False,
+                        LAND_SEA_BACKDROP=False,
                         stretch='power3',
                         a=1, b=2, p=0.5,
                         NO_SHOW=False, im_file=None,
@@ -310,12 +319,28 @@ def show_grid_as_image( grid, long_name, extent=None,
     # cmap arg to imshow can be name (as str) or cmap array
     # 4th entry is opacity, or alpha channel (I think)
     #--------------------------------------------------------
+    # See: "Creating listed colormaps" section at:
+    # https://matplotlib.org/3.1.0/tutorials/colors/
+    #         colormap-manipulation.html
+    #--------------------------------------------------------
+    # "Land green" = #c6e5bc = (198, 229, 188)
+    # "Sea blue"   = #aad3df = (170, 211, 223)
+    #--------------------------------------------------------
     if (BLACK_ZERO):
         n_colors = 256
         color_map  = cm.get_cmap( cmap, n_colors )
-        new_colors = color_map( np.linspace(0, 1, 256) )
+        new_colors = color_map( np.linspace(0, 1, n_colors) )
         black = np.array([0.0, 0.0, 0.0, 1.0])
         new_colors[0,:] = black
+        new_cmap = ListedColormap( new_colors )
+    elif (LAND_SEA_BACKDROP):
+        n_colors = 256
+        color_map  = cm.get_cmap( cmap, n_colors )
+        new_colors = color_map( np.linspace(0, 1, n_colors) )
+        land_green = np.array([198, 229, 188, 256]) / 256.0
+        sea_blue   = np.array([170, 211, 223, 256]) / 256.0
+        new_colors[0,:]   = land_green
+        new_colors[255,:] = sea_blue
         new_cmap = ListedColormap( new_colors )
     else:
         new_cmap = cmap
@@ -370,9 +395,9 @@ def show_grid_as_image( grid, long_name, extent=None,
 #   show_grid_as_image()
 #--------------------------------------------------------------------
 def save_grid_stack_as_images( nc_file, png_dir, extent=None,
-                       stretch='power3', a=1, b=2, p=0.5,
-                       cmap='rainbow', REPORT=True,
-                       xsize=6, ysize=6, dpi=192 ):
+              stretch='power3', a=1, b=2, p=0.5,
+              cmap='rainbow', REPORT=True,
+              xsize=6, ysize=6, dpi=192 ):
 
     # Example nc_files:
     # nc_file = case_prefix + '_2D-Q.nc'
@@ -384,11 +409,11 @@ def save_grid_stack_as_images( nc_file, png_dir, extent=None,
 
     ncgs = ncgs_files.ncgs_file()        
     ncgs.open_file( nc_file )
-    var_name_list = ncgs.get_var_names()
-    var_index = 3   # 0=time, 1=X, 2=Y, 3=V  ###############
+    var_name_list = ncgs.get_var_names( no_dim_vars=True )  ####
+    var_index = 0   # (dim vars are now excluded)
     var_name  = var_name_list[ var_index ]
     long_name = ncgs.get_var_long_name( var_name )
-    n_grids = ncgs.ncgs_unit.variables[var_name].n_grids
+    n_grids   = ncgs.ncgs_unit.variables[var_name].n_grids
 
     im_title = long_name.replace('_', ' ').title()
     im_file_prefix = 'TF_Grid_Movie_Frame_'
@@ -430,7 +455,9 @@ def save_grid_stack_as_images( nc_file, png_dir, extent=None,
                             
     ncgs.close_file()
     tstr = str(time_index)
-    print('Finished saving ' + tstr + ' images to PNG files.')
+    print('Finished saving grid images to PNG files.')
+    print('   Number of files = ' + tstr)
+    print()
 
 #   save_grid_stack_as_images()
 #--------------------------------------------------------------------
@@ -507,12 +534,13 @@ def save_rts_as_images( rts_file, png_dir, extent=None,
     rts.close_file()
     print('min(rts), max(rts) =', rts_min, rts_max)
     tstr = str(time_index)
-    print('Finished saving ' + tstr + ' images to PNG files.')  
+    print('Finished saving grid images to PNG files.')
+    print('   Number of files = ' + tstr)  
     print()
 
 #   save_rts_as_images()
 #--------------------------------------------------------------------
-def plot_time_series(nc_file, output_dir=None, var_index=1,
+def plot_time_series(nc_file, output_dir=None, var_index=0,
                      marker=',', REPORT=True, xsize=11, ysize=6,
                      im_file=None):
 
@@ -539,7 +567,7 @@ def plot_time_series(nc_file, output_dir=None, var_index=1,
 
     ncts = ncts_files.ncts_file()
     ncts.open_file( nc_file )
-    var_name_list = ncts.get_var_names()
+    var_name_list = ncts.get_var_names( no_dim_vars=True )
     lon_list      = ncts.get_var_lons()
     lat_list      = ncts.get_var_lats()
 
@@ -710,7 +738,7 @@ def save_profile_series_as_images(nc_file, png_dir=None,
     # nc_file = case_prefix + '_1D-K.nc'
 
     if (png_dir is None):
-        print('ERROR, PNG directory is not set.')
+        print('ERROR: PNG directory is not set.')
         return
     
     # If ymin or ymax is set, it is used for all plots
@@ -744,7 +772,7 @@ def save_profile_series_as_images(nc_file, png_dir=None,
         z_units   = z.units
         # t_units   = times.units
     except:
-        print('ERROR, Could not read profiles from file:')
+        print('ERROR: Could not read profiles from file:')
         print( nc_file )
         return
                    
@@ -801,8 +829,10 @@ def save_profile_series_as_images(nc_file, png_dir=None,
 
     ncps.close_file()
     tstr = str(time_index)
-    print('Finished saving ' + tstr + ' images to PNG files.')
-
+    print('Finished saving profile images to PNG files.')
+    print('   Number of files = ' + tstr)
+    print()
+    
 #   save_profile_series_as_images()
 #--------------------------------------------------------------------
 #--------------------------------------------------------------------
@@ -817,9 +847,10 @@ def create_movie_from_images( mp4_file, png_dir, fps=10, REPORT=True):
     n_frames = len( im_file_list )
 
     if (REPORT):
-        print('Creating movie from', n_frames, 'PNG files.')
+        print('Creating movie from PNG files.')
+        print('   Number of PNG files =', n_frames)
         ## print('This may take a few minutes.')
-        print('Working...')
+        print('   Working...')
 
     #---------------------------------------------------------------        
     # Note:  The default codec for imageio is "libx264", which
@@ -937,6 +968,145 @@ def plot_soil_profile( z, var, var_name='theta', qs=None,
                    y_name=x_name, y_units=x_units)
 
 #   plot_soil_profile()
+#----------------------------------------------------------------------------
+def create_visualization_files( output_dir=None, topo_dir=None,
+                                site_prefix=None, case_prefix='Test1',
+                                movie_fps=10):
+
+    #------------------------------------------------
+    # Write a separate function to create movies
+    # from the rainfall grid stacks (RTS format) ??
+    #------------------------------------------------
+    if (output_dir is None):
+        print('SORRY, output_dir argument is required.')
+        print()
+        return
+    os.chdir(output_dir)
+
+    if (topo_dir is None):
+        print('SORRY, topo_dir argument is required.')
+        print()
+        return
+        
+    if (site_prefix is None):
+        print('SORRY, site_prefix argument is required.')
+        print()
+        return
+               
+    #-----------------------------
+    # Setup required directories
+    #-----------------------------
+    temp_png_dir = output_dir + 'temp_png/'
+    if not(os.path.exists( temp_png_dir )):
+        os.mkdir( temp_png_dir )
+    #-----------------------------------------
+    movie_dir = output_dir + 'movies/'
+    if not(os.path.exists( movie_dir )):
+        os.mkdir( movie_dir )
+    #-----------------------------------------
+    image_dir = output_dir + 'images/'
+    if not(os.path.exists( image_dir )):
+        os.mkdir( image_dir )
+                
+    #---------------------------------------------
+    # Create time series plot for all "0D" files
+    # e.g. Discharge, Flood Depth, etc.
+    # marker=',' means to use pixel as marker
+    #---------------------------------------------    
+    nc0D_file_list = glob.glob('*0D*nc')
+    for nc_file in nc0D_file_list:
+        im_file = nc_file.replace('.nc', '.png')
+        im_path = (image_dir + im_file)
+        var_index = 0   # (dimension vars are now excluded)
+        plot_time_series(nc_file, output_dir=output_dir,
+                         var_index=var_index, marker=',',
+                         REPORT=True, xsize=11, ysize=6,
+                         im_file=im_path)
+    
+    #-----------------------------------------    
+    # Create images for several single grids
+    #-----------------------------------------
+    rtg_extensions = ['_DEM.rtg', '_slope.rtg', '_d8-area.rtg']
+    rtg_file_list  = [site_prefix + ext for ext in rtg_extensions]
+    long_name_list = ['land_surface_elevation', 'land_surface_slope',
+                      'total_contributing_area']
+    k = 0
+    for rtg_file in rtg_file_list:
+        if (rtg_file.endswith('_d8-area.rtg')):
+            stretch = 'power3'
+        else:
+            stretch = 'hist_equal'
+        #--------------------------------------------------
+        im_file   = rtg_file.replace('.rtg', '.png')
+        im_path   = (image_dir + im_file)
+        rtg_path  = (topo_dir + rtg_file)
+        long_name = long_name_list[k]
+        k += 1
+        read_and_show_rtg( rtg_path, long_name, cmap='jet',
+                           ### BLACK_ZERO=False,
+                           stretch=stretch, VERBOSE=True,
+                           xsize=7, ysize=7, dpi=None,
+                           im_file=im_path)
+        print('Finished saving grid as image.')
+        print('  ' + im_path )
+        print()
+             
+    #----------------------------------------------
+    # Create set of images and movie for all "2D"
+    # files which contain grid stacks
+    # e.g. *_2D-Q.nc, *_2D-d-flood.nc'
+    #----------------------------------------------
+    nc2D_file_list = glob.glob('*2D*nc')
+    for nc_file in nc2D_file_list:
+        #------------------------------------------
+        # Change the stretch for specific files ?
+        #------------------------------------------
+#         if nc_file.endswith('d-flood.nc'):
+#             cur_stretch = 'power3'
+#             stretch = 'hist_equal'
+            
+        #------------------------------------
+        # First, create a set of PNG images
+        #------------------------------------
+        save_grid_stack_as_images( nc_file, temp_png_dir,
+                                   ##### extent=None,  # auto-computed
+                                   stretch='power3', a=1, b=2, p=0.5,
+                                   cmap='rainbow', REPORT=True,
+                                   xsize=8, ysize=8, dpi=192)
+
+        #----------------------------------------------
+        # Create movie from set of images in temp_png
+        #----------------------------------------------
+        # movie_fps = "frames per second"
+        mp4_file = nc_file.replace('.nc', '.mp4')
+        mp4_path = (movie_dir + mp4_file)
+        create_movie_from_images( mp4_path, temp_png_dir,
+                                  fps=movie_fps, REPORT=True)
+
+        #-----------------------------------
+        # Delete all PNG files in temp_png
+        #-----------------------------------
+        ## time.sleep( 0.5 )  # Is this needed?
+        delete_png_files( temp_png_dir )
+  
+
+#   create_visualization_files()
+#----------------------------------------------------------------------------
+def delete_png_files( temp_png_dir ):
+
+    png_files = glob.glob( temp_png_dir + '*.png' )
+    for file in png_files:
+        try:
+           os.remove( file )
+        except OSError as e:
+            print("Error: %s : %s" % (file, e.strerror)) 
+
+    print('Finished deleting PNG files in:')
+    print('  ' + temp_png_dir)
+    print()
+
+#   delete_png_files()
+#----------------------------------------------------------------------------
 #----------------------------------------------------------------------------
 # FOR AN IDEA IN THE VISUALIZATION NOTEBOOK.
 #----------------------------------------------------------------------------

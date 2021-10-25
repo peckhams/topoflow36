@@ -2142,7 +2142,7 @@ class BMI_component:
         #--------------------------------------------------
         in_dir  = os.path.expanduser( self.in_directory  )
         out_dir = os.path.expanduser( self.out_directory )
-                       
+
         #------------------------------------------------------------
         # In CFG files, the input directory is often set to ".",
         # which indicates the directory that contains the CFG file.

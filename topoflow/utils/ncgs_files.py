@@ -20,8 +20,8 @@ from . import bov_files
 from . import file_utils
 from . import rti_files
 from . import svo_names
-from . import tf_utils
 from . import time_utils
+from . import model_info  # New: 2021-10-13 (replace tf_utils)
 
 import netCDF4 as nc
 
@@ -44,6 +44,8 @@ import netCDF4 as nc
 #       get_var_long_name()   # 2019-11-21
 #       get_var_units()       # 2019-11-21
 #       get_grid()
+#       get_grid_info()       # 2021-09-29
+#       get_time_info()       # 2021-09-29
 #       close_file()
 #       close()
 #
@@ -178,17 +180,17 @@ class ncgs_file():
         #-------------------------
         # Open file to read only
         #-------------------------
-        try:
+        #try:
             ncgs_unit = nc.Dataset(file_name, mode='r')
             self.ncgs_unit = ncgs_unit
             ### return ncgs_unit
             return True
-        except:
-            print('ERROR: Could not open file:')
-            print( '   ' + file_name )
-            print( 'Current working directory =')
-            print( '   ' + os.getcwd() )
-            return False
+#         except:
+#             print('ERROR: Could not open file:')
+#             print( '   ' + file_name )
+#             print( 'Current working directory =')
+#             print( '   ' + os.getcwd() )
+#             return False
     
     #   open_file()
     #----------------------------------------------------------
@@ -546,7 +548,7 @@ class ncgs_file():
         ncgs_unit.createDimension('X', ncols)
         ncgs_unit.createDimension('Y', nrows)
         ncgs_unit.createDimension('time', None)   # (unlimited dimension)
-        ncgs_unit.createDimension('bnds', 1)
+        ## ncgs_unit.createDimension('bnds', 1)  ############ OBSOLETE?
 
         #-------------------------------
         # Create X_vector and Y_vector
@@ -625,14 +627,16 @@ class ncgs_file():
         # Create title, summary and other metadata strings
         #---------------------------------------------------
         title = 'Grid stack for variable: ' + long_name
-        tf_version = str(tf_utils.TF_Version_Number())
         summary  = 'This file contains a stack of spatial grids, indexed '
         summary += 'by time for the single variable: ' + long_name + '.'
         email = 'Scott.Peckham@colorado.edu'
         date_created = str( datetime.date.today() )
         naming_authority = 'edu.isi.workflow'
         if (comment == ''):
-            comment = 'Created by TopoFlow version ' + tf_version + '.'
+            model_version = str( model_info.version_number() )
+            model_name    = model_info.name()
+            str1 = 'Created by ' + model_name + ' version '
+            comment = str1 + model_version + '.'
         else:
             history += comment
 
@@ -708,7 +712,7 @@ class ncgs_file():
         time_dtype = time_utils.get_time_dtype( time_units )
         ncgs_unit.variables['datetime'].long_name = 'datetime' 
         ncgs_unit.variables['datetime'].units = time_dtype
-                            
+               
         #---------------------------------------
         # Save attributes of the main variable
         #---------------------------------------
@@ -730,7 +734,7 @@ class ncgs_file():
     #   open_new_file()
     #----------------------------------------------------------
     def add_grid(self, grid, grid_name, time=None,
-                 time_index=-1):
+                 time_units='minutes', time_index=-1):
 
         #---------------------------------
         # Assign a value to the variable
@@ -746,7 +750,7 @@ class ncgs_file():
         if (time_index == -1):
             time_index = self.time_index
         # if (time is None):
-        #     time = np.float64( time_index )
+        #     time = np.float64( time_index )   #############
 
         #----------------------------------------------
         # Write current time to existing netCDF file
@@ -762,7 +766,7 @@ class ncgs_file():
         #-------------------------------------------------
         datetime = time_utils.get_current_datetime(
                               self.start_datetime,
-                              time, time_units='minutes')
+                              time, time_units=time_units)
         datetimes = self.ncgs_unit.variables[ 'datetime' ]
         datetimes[ time_index ] = str(datetime)
         
@@ -803,10 +807,24 @@ class ncgs_file():
         
     #   add_grid()
     #----------------------------------------------------------
-    def get_var_names(self):
+    def get_var_names(self, no_dim_vars=False):
     
         var_dict = self.ncgs_unit.variables
-        return list( var_dict.keys() )
+        names    = list( var_dict.keys() )
+     
+        if (no_dim_vars):
+            #---------------------------------------
+            # This works, but 'datetime' is not a
+            # dimension var, so it is returned.
+            #---------------------------------------
+            dim_dict = self.ncgs_unit.dimensions
+            dims     = list( dim_dict.keys() )
+            dims.append('datetime')  # (see note)
+            #---------------------------------------------- 
+            # dims  = ['time', 'datetime', 'Z', 'Y', 'X']
+            names = [s for s in names if (s not in dims)]
+           
+        return names
 
     #   get_var_names()
     #----------------------------------------------------------
@@ -830,6 +848,74 @@ class ncgs_file():
         return var[ time_index ]
         
     #   get_grid()
+    #----------------------------------------------------------
+    def get_grid_info(self, var_name, nc_file):
+
+        #----------------------------------------------
+        # Transfer metadata from TopoFlow netCDF grid
+        # stack to an RTI structure "grid_info"
+        #----------------------------------------------
+        # open_new_file() has grid_info and time_info
+        # arguments, so can use this to create a new
+        # netCDF file with same metadata as another.
+        #----------------------------------------------        
+        ncgs_unit = self.ncgs_unit
+        # bounds [minlon, minlat, maxlon, maxlat]  # MINT order
+        bounds = ncgs_unit.geospatial_bounds 
+        ncols  = ncgs_unit.variables['X'].size
+        nrows  = ncgs_unit.variables['Y'].size
+        #----------------------------------------------
+        xres   = ncgs_unit.variables['X'].xres_arcsec
+        yres   = ncgs_unit.variables['Y'].yres_arcsec        
+        #----------------------------------------------        
+        minlon = bounds[0]
+        minlat = bounds[1]
+        maxlon = bounds[2]
+        maxlat = bounds[3]
+        units  = ncgs_unit.variables[var_name].units
+
+        grid_info = rti_files.make_info(grid_file=nc_file,
+              ncols=ncols, nrows=nrows,
+              xres=xres, yres=yres, data_type='FLOAT',
+              data_source='TopoFlow 3.6',
+              byte_order=rti_files.get_rti_byte_order(),
+              pixel_geom=0, zres=0.001, z_units=units,
+              y_south_edge=minlat, y_north_edge=maxlat,
+              x_west_edge=minlon, x_east_edge=maxlon,
+              box_units='DEGREES')
+
+        return grid_info
+                      
+    #   get_grid_info()
+    #----------------------------------------------------------
+    def get_time_info(self):
+        
+        ncgs_unit  = self.ncgs_unit
+        time_units = ncgs_unit.variables['time'].units
+        duration   = ncgs_unit.variables['time'].time_coverage_duration
+        time_res   = ncgs_unit.variables['time'].time_coverage_resolution
+        start_datetime = ncgs_unit.variables['time'].time_coverage_start
+        end_datetime   = ncgs_unit.variables['time'].time_coverage_end        
+
+        (start_date, start_time) = time_utils.split_datetime_str(start_datetime) 
+        (end_date,   end_time)   = time_utils.split_datetime_str(end_datetime)
+                
+        class time_info_class:
+            pass
+        #-----------------------------------               
+        time_info = time_info_class()
+        time_info.start_date     = start_date
+        time_info.start_time     = start_time
+        time_info.end_date       = end_date
+        time_info.end_time       = end_time
+        time_info.start_datetime = start_datetime
+        time_info.end_datetime   = end_datetime
+        time_info.duration       = duration
+        time_info.duration_units = time_units
+        
+        return time_info
+        
+    #   get_time_info()
     #-------------------------------------------------------------------
     def close_file(self):
 

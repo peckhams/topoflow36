@@ -15,6 +15,7 @@
 #  bounds_disjoint()
 #  get_raster_cellsize()
 
+#  read_geotiff()
 #  regrid_geotiff()
 #  clip_geotiff()
 #  save_grid_to_geotiff()      2019-10-31
@@ -44,6 +45,7 @@ import glob, sys
 import os, os.path
 
 from . import rti_files
+from . import rtg_files
 
 ## from . import rts_files   # (avoid this extra dependency)
 
@@ -168,6 +170,106 @@ def get_raster_cellsize( gdal_unit ):
 
 #   get_raster_cellsize()
 #-------------------------------------------------------------------
+def read_geotiff(in_file=None, REPORT=True,
+                 MAKE_RTG=False, rtg_file=None ):
+ 
+    # Bounds = [ minlon, minlat, maxlon, maxlat ]'
+
+    if (in_file is None):
+        in_dir  = '/Users/peckhams/Conflict/Data/GPW-v4/'  
+        in_file = 'gpw_v4_population_count_rev11_2020_30_sec.tif'
+        in_file = in_dir + in_file
+
+    if (rtg_file is None):
+        in_dir   = '/Users/peckhams/Conflict/Data/GPW-v4/'
+        rtg_file = 'GPW-v4_global_pop_count.rtg'
+        rtg_file = in_dir + rtg_file
+          
+    #-----------------------------------------    
+    # Open the input GeoTIFF file & get info
+    #-----------------------------------------
+    print('Reading grid from GeoTIFF file...')
+    in_unit     = gdal.Open( in_file, gdal.GA_ReadOnly )
+    (dx, dy)    = get_raster_cellsize( in_unit )
+    in_xres_deg = dx
+    in_yres_deg = dy
+    in_xres_sec = (in_xres_deg * 3600.0)
+    in_yres_sec = (in_yres_deg * 3600.0)
+    in_ncols    = in_unit.RasterXSize
+    in_nrows    = in_unit.RasterYSize
+    in_bounds   = get_raster_bounds( in_unit )   ######
+
+    #------------------------------
+    # Get min & max of input grid
+    #------------------------------
+    band = in_unit.GetRasterBand(1)
+    in_nodata = band.GetNoDataValue()
+    in_grid   = in_unit.ReadAsArray()
+    in_dtype  = in_grid.dtype
+    in_gmin   = in_grid.min()
+    in_gmax   = in_grid.max()
+
+    #----------------
+    # Close in_file
+    #----------------
+    in_unit = None   # Close in_file
+
+    #-----------------------------
+    # Option to save as RTG file
+    #-----------------------------
+    if (MAKE_RTG):
+        rtg_path = in_dir + rtg_file   #####
+        #-------------------------------
+        # Option to create an RTI file
+        #-------------------------------
+        rti = rti_files.make_info(grid_file=rtg_path,
+                  ncols=in_ncols, nrows=in_nrows,
+                  xres=in_xres_sec, yres=in_yres_sec,
+                  #--------------------------------------
+                  data_source='SEDAC',
+                  data_type='FLOAT',  ## Must agree with dtype  #######
+                  byte_order=rti_files.get_rti_byte_order(),
+                  pixel_geom=0,
+                  zres=0.001, z_units='unknown',
+                  y_south_edge=in_bounds[1],
+                  y_north_edge=in_bounds[3],
+                  x_west_edge=in_bounds[0],
+                  x_east_edge=in_bounds[2],
+                  box_units='DEGREES')
+        rti_files.write_info( rtg_path, rti )    
+        rtg = rtg_files.rtg_file() 
+        OK  = rtg.open_new_file( rtg_path, rti )
+        if not(OK):
+            print('ERROR during open_new_file().')
+            return       
+        rtg.write_grid( in_grid, VERBOSE=True )
+        rtg.close_file()
+         
+    #------------------
+    # Optional report
+    #------------------
+    if (REPORT):
+        print('GeoTIFF grid info:')
+        print('   ' + in_file )
+        print('   ncols  =', in_ncols )
+        print('   nrows  =', in_nrows )
+        print('   xres   =', in_xres_sec, ' [arcsecs]' )
+        print('   yres   =', in_yres_sec, ' [arcsecs]' )
+        print('   bounds =', in_bounds )
+        print('   dtype  =', in_dtype )
+        print('   nodata =', in_nodata )
+        print('   gmin   =', in_gmin )
+        print('   gmax   =', in_gmax ) 
+        print('Finished.')
+        print()
+
+    #------------------------------
+    # Return the grid as an array
+    #------------------------------
+    return in_grid
+
+#   read_geotiff()
+#-------------------------------------------------------------------
 def regrid_geotiff(in_file=None, out_file=None, 
                    out_bounds=None,
                    out_xres_sec=None, out_yres_sec=None,
@@ -227,12 +329,38 @@ def regrid_geotiff(in_file=None, out_file=None,
     in_nrows    = in_unit.RasterYSize
     in_bounds   = get_raster_bounds( in_unit )   ######
 
+    #-----------------------------
+    # Double-check the data type
+    #--------------------------------------------
+    # https://gdal.org/java/org/gdal/gdalconst/
+    # gdalconstConstants.html
+    # 'complex64'  = 2 32-bit floats
+    # 'complex128' = 2 64-bit floats
+    #--------------------------------------------
+#     band = in_unit.GetRasterBand(1)
+#     dtype_code = band.DataType
+#     ## print('### dtype_code =', dtype_code)
+#     code_to_dtype_map = {
+#     0:'unknown', 1:'uint8', 2:'uint16', 3:'int16',
+#     4:'uint32', 5:'int32',
+#     6:'float32', 7:'float64',
+#     8:'complexint32', 9:'complexint64',  # no corresponding dtype
+#     10:'complex64',11:'complex128'} 
+#     in_dtype2 = code_to_dtype_map[ dtype_code ]
+
+    #-----------------------
+    # Get the nodata value
+    #-----------------------
+    band = in_unit.GetRasterBand(1)
+    in_nodata = band.GetNoDataValue()
+
     #------------------------------
     # Get min & max of input grid
     #------------------------------
-    in_grid = in_unit.ReadAsArray()
-    in_gmin = in_grid.min()
-    in_gmax = in_grid.max()
+    in_grid  = in_unit.ReadAsArray()
+    in_dtype = in_grid.dtype
+    in_gmin  = in_grid.min()
+    in_gmax  = in_grid.max()
     
     #-------------------------------------------------------------
     # If a spatial resolution has not been specified for output,
@@ -289,9 +417,12 @@ def regrid_geotiff(in_file=None, out_file=None,
     #-------------------------------
     # Get min & max of output grid
     #-------------------------------
-    out_grid = out_unit.ReadAsArray()
-    out_gmin = out_grid.min()
-    out_gmax = out_grid.max()
+    out_band   = out_unit.GetRasterBand(1)
+    out_nodata = out_band.GetNoDataValue()
+    out_grid   = out_unit.ReadAsArray()
+    out_dtype  = out_grid.dtype
+    out_gmin   = out_grid.min()
+    out_gmax   = out_grid.max()
         
     #----------------------------------        
     # Close both in_file and out_file
@@ -310,6 +441,9 @@ def regrid_geotiff(in_file=None, out_file=None,
         print('   xres   =', in_xres_sec, ' [arcsecs]' )
         print('   yres   =', in_yres_sec, ' [arcsecs]' )
         print('   bounds =', in_bounds )
+        print('   dtype  =', in_dtype )
+        # print('   dtype2 =', in_dtype2 )    # for testing
+        print('   nodata =', in_nodata )
         print('   gmin   =', in_gmin )
         print('   gmax   =', in_gmax )
         print()
@@ -320,6 +454,8 @@ def regrid_geotiff(in_file=None, out_file=None,
         print('   xres   =', out_xres_sec, ' [arcsecs]' )
         print('   yres   =', out_yres_sec, ' [arcsecs]' ) 
         print('   bounds =', out_bounds )
+        print('   dtype  =', out_dtype )
+        print('   nodata =', out_nodata )
         print('   gmin   =', out_gmin )
         print('   gmax   =', out_gmax )      
         print('Finished regridding.')
@@ -352,6 +488,7 @@ def clip_geotiff(in_file=None, out_file=None,
 
     #################################################
     # Note.  This is incomplete and not tested yet.
+    #        regrid_geotiff() clips & resamples.
     #################################################
     if (in_file == None):
         #-----------------------------------------------------------

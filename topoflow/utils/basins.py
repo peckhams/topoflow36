@@ -143,7 +143,7 @@ class basins_component( BMI_base.BMI_component ):
     #-------------------------------------------------------------------
     def update(self, Q, time, dt, da, pv):
 
-        self.status = 'updating'  # (OpenMI)
+        self.status = 'updating'
         
         if (self.TRACK_VOLUME):
             self.update_volume_out(Q, dt)
@@ -154,13 +154,13 @@ class basins_component( BMI_base.BMI_component ):
         #------------------------
         # self.update_time()
 
-        self.status = 'updated'  # (OpenMI)
+        self.status = 'updated'
         
     #   update()
     #-------------------------------------------------------------------
     def finalize(self):
 
-        self.status = 'finalized'  # (OpenMI)
+        self.status = 'finalized'
 
     #   finalize()
     #-------------------------------------------------------------------

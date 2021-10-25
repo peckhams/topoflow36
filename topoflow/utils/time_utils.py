@@ -19,8 +19,9 @@ import sys
 #  get_time_letter()     # 2021-07-22
 #  get_duration()
 #  get_current_datetime()
+#  get_end_datetime()    # 2021-10-13
 #
-#  get_datetime_str()   # 2021-07-29
+#  get_datetime_str()    # 2021-07-29
 #  standardize_datetime_str()
 #  get_datetime_obj_from_str()
 #  get_datetime_obj_from_one_str()
@@ -141,6 +142,11 @@ def get_duration(start_date=None, start_time=None,
         duration = (duration_secs / 3600.0)
     elif (dur_units == 'days'):
         duration = (duration_secs / 86400.0)
+    elif (dur_units == 'months'):
+        #----------------------------------------------------
+        # Different months have different number of seconds
+        #----------------------------------------------------
+        duration = get_month_difference(start_obj, end_obj)
     elif (dur_units == 'years'):
         duration = (duration_secs / 31536000.0)
     else:
@@ -185,6 +191,15 @@ def get_current_datetime( start_datetime, time, time_units ):
     return datetime
 
 #   get_current_datetime()
+#--------------------------------------------------------------------
+def get_end_datetime( start_datetime, n_steps, time_units ):
+
+    start_datetime_obj = get_datetime_obj_from_one_str( start_datetime )
+    end_datetime_obj   = get_datetime_from_time_since(start_datetime_obj,
+                             n_steps, units=time_units)
+    return end_datetime_obj
+
+#   get_end_datetime()
 #---------------------------------------------------------------------
 def get_datetime_str(y, m1, d, h, m2, s):
 

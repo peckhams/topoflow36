@@ -281,8 +281,44 @@ def get_short_name_map():
     'sources_water__volume_flow_rate' : 'Q_sources',
     'water__mass-specific_latent_fusion_heat' : 'Lf',
     'water__mass-specific_latent_vaporization_heat' : 'Lv',
-    'water-liquid__mass-per-volume_density' : 'rho_H2O' }
-
+    'water-liquid__mass-per-volume_density' : 'rho_H2O',
+    #-------------------------------------------------------------------------------
+    # New Indicators:  These standard names are just placeholders
+    #-------------------------------------------------------------------------------   
+    'atmosphere_water__monthly_min_of_precipitation_leq-volume_flux'  : 'rainrate_monthly_min',
+    'atmosphere_water__monthly_max_of_precipitation_leq-volume_flux'  : 'rainrate_monthly_max',
+    'atmosphere_water__monthly_mean_of_precipitation_leq-volume_flux' : 'rainrate_monthly_mean',
+    'atmosphere_water__monthly_sdev_of_precipitation_leq-volume_flux' : 'rainrate_monthly_sdev',
+    'atmosphere_water__days_per_month_of_low_value_of_precipitation_leq-volume_flux'  : 'days-per-month-lo-rain',
+    'atmosphere_water__days_per_month_of_high_value_of_precipitation_leq-volume_flux' : 'days-per-month-hi-rain',
+    'people~in-grid-cell-with-one-more-days-per-month-of-low-rainrate__count' : 'pop-1-or-more-dpm-lo-rain',
+    'people~in-grid-cell-with-one-more-days-per-month-of-high-rainrate__count': 'pop-1-or-more-dpm-hi-rain',
+    #-------------------------------------------------------------------------------     
+    'channel_water_x-section__monthly_min_of_volume_flow_rate'  : 'Q_monthly_min',
+    'channel_water_x-section__monthly_max_of_volume_flow_rate'  : 'Q_monthly_max',
+    'channel_water_x-section__monthly_mean_of_volume_flow_rate' : 'Q_monthly_mean',
+    'channel_water_x-section__monthly_sdev_of_volume_flow_rate' : 'Q_monthly_sdev',
+    'channel_water_x-section__days_per_month_of_low_value_of_volume_flow_rate'  : 'days-per-month-lo-Q',
+    'channel_water_x-section__days_per_month_of_high_value_of_volume_flow_rate' : 'days-per-month-hi-Q',
+    'channel_water_x-section__days_per_month_of_rising_value_of_volume_flow_rate'  : 'days-per-month-incr-Q',
+    'channel_water_x-section__days_per_month_of_falling_value_of_volume_flow_rate' : 'days-per-month-decr-Q',
+    'people~in-grid-cell-with-one-more-days-per-month-of-low-discharge__count': 'pop-1-or-more-dpm-lo-Q',
+    'people~in-grid-cell-with-one-more-days-per-month-of-high-discharge__count': 'pop-1-or-more-dpm-hi-Q',
+    'people~in-grid-cell-with-one-more-days-per-month-of-rising-discharge__count': 'pop-1-or-more-dpm-incr-Q',
+    'people~in-grid-cell-with-one-more-days-per-month-of-falling-discharge__count': 'pop-1-or-more-dpm-decr-Q',
+    'population__count' : 'pop_count',
+    ## 'people__count' : 'pop_count',
+    #-------------------------------------------------------------------------------    
+    'land_surface_water__monthly_min_of_depth'  : 'd-flood_monthly_min',
+    'land_surface_water__monthly_max_of_depth'  : 'd-flood_monthly_max',
+    'land_surface_water__monthly_mean_of_depth' : 'd-flood_monthly_mean',
+    'land_surface_water__monthly_sdev_of_depth' : 'd-flood_monthly_sdev',
+    'land_surface_water__days_per_month_of_flooding'  : 'days-per-month-flood',
+    'people~in-grid-cell-with-one-more-days-per-month-of-flooding__count': 'pop-1-or-more-dpm-flood',
+    #------------------------------------------------------------------------------- 
+    'conflict_event__presence' : 'conflict_S',
+    'conflict_event__identification_number' : 'conflict_IDs' } 
+  
     return short_name_map
 
 #   get_short_name_map()

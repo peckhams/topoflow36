@@ -845,10 +845,24 @@ class ncps_file():
 
     #   add_profiles_at_IDs()
     #----------------------------------------------------------
-    def get_var_names(self):
-    
+    def get_var_names(self, no_dim_vars=False):
+
         var_dict = self.ncps_unit.variables
-        return list( var_dict.keys() )
+        names    = list( var_dict.keys() )
+
+        if (no_dim_vars):
+            #---------------------------------------
+            # This works, but 'datetime' is not a
+            # dimension var, so it is returned.
+            #---------------------------------------
+            dim_dict = self.ncps_unit.dimensions
+            dims     = list( dim_dict.keys() )
+            dims.append('datetime')  # (see note)
+            #---------------------------------------------- 
+            # dims  = ['time', 'datetime', 'Z', 'Y', 'X']
+            names = [s for s in names if (s not in dims)]
+           
+        return names
 
     #   get_var_names()
     #----------------------------------------------------------
