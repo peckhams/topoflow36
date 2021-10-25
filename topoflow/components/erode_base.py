@@ -242,7 +242,7 @@ class erosion_component( BMI_base.BMI_component ):
         #----------------------------------
         # Has component been turned off ?
         #----------------------------------
-        if (self.comp_status == 'Disabled'):
+        if (self.comp_status.lower() == 'disabled'):
             if not(self.SILENT):
                 print('Erosion component: Disabled in CFG file.')
             self.SAVE_Z_GRIDS  = False    # (It is True by default.)
@@ -405,7 +405,14 @@ class erosion_component( BMI_base.BMI_component ):
     #-------------------------------------------------------------------
     def finalize(self):
 
-        self.status = 'finalizing'  # (OpenMI)   
+        #--------------------------------
+        # Has component been disabled ?
+        #--------------------------------
+        if (self.comp_status.lower() == 'disabled'):
+            # Note: self.status should be 'initialized'.
+            return
+
+        self.status = 'finalizing'   
         self.close_input_files()   ##  TopoFlow input "data streams"
         self.close_output_files()
 

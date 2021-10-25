@@ -223,10 +223,14 @@ class diversions_component( diversions_base.diversions_component ):
     #   get_var_units()
     #-------------------------------------------------------------------
     def update(self, time_seconds=None):
-  
-        if (self.comp_status == 'Disabled'):
+
+        #--------------------------------
+        # Has component been disabled ?
+        #--------------------------------
+        self.status = 'updating'
+        if (self.comp_status.lower() == 'disabled'):
+            self.status = 'updated'
             return
-        self.status = 'updating'  # (OpenMI 2.0 convention)
         
         #-----------------------------------------------
         # Update self.vol with inputs/outputs from all

@@ -261,16 +261,20 @@ class erosion_component( erode_base.erosion_component ):
     #-------------------------------------------------------------------
     def update(self, dt=-1.0):
 
-##        if (SILENT == None): SILENT=self.SILENT
-##        if (REPORT == None): REPORT=self.REPORT
+        #--------------------------------
+        # Has component been disabled ?
+        #--------------------------------
+        if (self.comp_status.lower() == 'disabled'):
+            # Note: self.status should be 'initialized'.
+            return
 
+        self.status = 'updating'  # (OpenMI 2.0 convention)
         SILENT = self.SILENT
         REPORT = self.REPORT
         
         #### if not(SILENT) and (self.time_index == 0):
         if (self.time_index == 0):
             print('Erosion component: Processing...')
-        self.status = 'updating'  # (OpenMI 2.0 convention)
 
         #---------------------------------
         # Print dz_max to track progress
@@ -428,10 +432,17 @@ class erosion_component( erode_base.erosion_component ):
     #-------------------------------------------------------------------
     def finalize(self):
 
+        #--------------------------------
+        # Has component been disabled ?
+        #--------------------------------
+        if (self.comp_status.lower() == 'disabled'):
+            # Note: self.status should be 'initialized'.
+            return
+
         #--------------------------------------------------------------
         # Note: This overrides finalize() in erode_base.py. (10/4/11)
         #--------------------------------------------------------------
-        self.status = 'finalizing'  # (OpenMI)   
+        self.status = 'finalizing'   
         self.close_input_files()    # Input "data streams"
         self.close_output_files()
 

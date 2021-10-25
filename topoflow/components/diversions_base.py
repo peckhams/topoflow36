@@ -102,7 +102,7 @@ class diversions_component( BMI_base.BMI_component ):
         #-------------------------------
         # Return if no method selected
         #-------------------------------
-        if (self.comp_status == 'Disabled'):
+        if (self.comp_status.lower() == 'disabled'):
             if not(self.SILENT):
                 print('Diversions component: Disabled in CFG file.')
             self.n_canals          = self.initialize_scalar( 0, dtype='int32')  # int
@@ -136,20 +136,24 @@ class diversions_component( BMI_base.BMI_component ):
         # which will override the default above. (2/3/13)
         #--------------------------------------------------
         self.read_input_files()
-        self.status = 'initialized'  # (OpenMI 2.0 convention)
+        self.status = 'initialized'
         
     #   initialize()
     #--------------------------------------------------------------------------
     ## def update(self, dt=-1.0, time_seconds=None):
     def update(self, dt=-1.0):
 
-        if (self.comp_status == 'Disabled'):
+        #--------------------------------
+        # Has component been disabled ?
+        #--------------------------------
+        if (self.comp_status.lower() == 'disabled'):
+            # Note: self.status should be 'initialized'.
             return
-        self.status = 'updating'  # (OpenMI 2.0 convention)
 
         #-----------------------------------------------------
         # Update info from all sources, sinks and diversions
         #-----------------------------------------------------
+        self.status = 'updating'
         # print '### Calling update_sources()...'
         self.update_sources()
         # print '### Calling update_sinks()...'
@@ -166,12 +170,18 @@ class diversions_component( BMI_base.BMI_component ):
     #   update()
     #--------------------------------------------------------------------------
     def finalize(self):
-        
-        self.status = 'finalizing'  # (OpenMI)
-##        if (self.comp_status == 'Enabled'):
-##            self.close_input_files()
-##            self.close_output_files()
-        self.status = 'finalized'  # (OpenMI)
+
+        #--------------------------------
+        # Has component been disabled ?
+        #--------------------------------
+        if (self.comp_status.lower() == 'disabled'):
+            # Note: self.status should be 'initialized'.
+            return
+
+        self.status = 'finalizing'            
+##      self.close_input_files()
+##      self.close_output_files()
+        self.status = 'finalized'
 
         if not(self.SILENT):
             self.print_final_report(comp_name='Diversions component')

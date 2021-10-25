@@ -144,7 +144,7 @@ class evap_component( BMI_base.BMI_component):
         # NB! "Sample steps" must be defined before we return
         #     Check all other process modules.
         #------------------------------------------------------
-        if (self.comp_status == 'Disabled'):
+        if (self.comp_status.lower() == 'disabled'):
             if not(self.SILENT):
                 print('Evaporation component: Disabled in CFG file.')
             self.disable_all_output()
@@ -177,12 +177,13 @@ class evap_component( BMI_base.BMI_component):
     #   initialize()
     #-------------------------------------------------------------------
     def update(self, dt=-1.0):
-        
-        #-------------------------------------------------
-        # Note: self.ET already set to 0 by initialize()
-        #-------------------------------------------------
-        if (self.comp_status == 'Disabled'): return
-        self.status = 'updating'  # (OpenMI)
+
+        #--------------------------------
+        # Has component been disabled ?
+        #--------------------------------
+        if (self.comp_status.lower() == 'disabled'):
+            # Note: self.status should be 'initialized'.
+            return
 
         #---------------------------------------
         # Read next ET vars from input files ?
@@ -192,6 +193,7 @@ class evap_component( BMI_base.BMI_component):
         # used for "update" calls before reading
         # new ones.
         #-------------------------------------------
+        self.status = 'updating'
         if (self.time_index > 0):
             self.read_input_files() 
 
@@ -228,10 +230,16 @@ class evap_component( BMI_base.BMI_component):
     #-------------------------------------------------------------------
     def finalize(self):
 
-        self.status = 'finalizing'  # (OpenMI)
-        if (self.comp_status == 'Enabled'):
-            self.close_input_files()   ##  TopoFlow input "data streams"
-            self.close_output_files()
+        #--------------------------------
+        # Has component been disabled ?
+        #--------------------------------
+        if (self.comp_status.lower() == 'disabled'):
+            # Note: self.status should be 'initialized'.
+            return
+
+        self.status = 'finalizing'             
+        self.close_input_files()   ##  TopoFlow input "data streams"
+        self.close_output_files()
         self.status = 'finalized'  # (OpenMI)
 
         if not(self.SILENT):

@@ -1817,10 +1817,17 @@ class erosion_component( erode_base.erosion_component ):
     #   append_all_now_IDs()
     #-------------------------------------------------------------------
     def update(self, time=None, SILENT=True, REPORT=False):
-     
+
+        #--------------------------------
+        # Has component been disabled ?
+        #--------------------------------
+        if (self.comp_status.lower() == 'disabled'):
+            # Note: self.status should be 'initialized'.
+            return
+
+        self.status = 'updating'                
         if not(SILENT):
             print('Erosion component: Updating...')
-        self.status = 'updating'  # (OpenMI 2.0 convention)
 
         #---------------------------------
         # Print dz_max to track progress
@@ -2147,10 +2154,17 @@ class erosion_component( erode_base.erosion_component ):
     #-------------------------------------------------------------------
     def finalize(self):
 
+        #--------------------------------
+        # Has component been disabled ?
+        #--------------------------------
+        if (self.comp_status.lower() == 'disabled'):
+            # Note: self.status should be 'initialized'.
+            return
+            
         #--------------------------------------------------------------
         # Note: This overrides finalize() in erode_base.py. (10/4/11)
         #--------------------------------------------------------------
-        self.status = 'finalizing'  # (OpenMI)   
+        self.status = 'updating'  
         self.close_input_files()    # Input "data streams"
         self.close_output_files()
 

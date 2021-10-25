@@ -157,7 +157,7 @@ class snow_component( BMI_base.BMI_component ):
         #-----------------------------------------
         self.initialize_time_vars()
    
-        if (self.comp_status == 'Disabled'):
+        if (self.comp_status.lower() == 'disabled'):
             if not(self.SILENT):
                 print('Snow component: Disabled in CFG file.')
             self.disable_all_output()
@@ -205,13 +205,16 @@ class snow_component( BMI_base.BMI_component ):
         #       If the input files don't contain any additional
         #       data, the last data read persists by default.
         #----------------------------------------------------------
-        
+
+        #--------------------------------
+        # Has component been disabled ?
         #-------------------------------------------------
         # Note: self.SM already set to 0 by initialize()
         #-------------------------------------------------
-        if (self.comp_status == 'Disabled'): return
-        self.status = 'updating'  # (OpenMI)
- 
+        if (self.comp_status.lower() == 'disabled'):
+            # Note: self.status should be 'initialized'.
+            return
+
         #-----------------------------------------
         # Read next snow vars from input files ?
         #-----------------------------------------------------       
@@ -219,6 +222,7 @@ class snow_component( BMI_base.BMI_component ):
         # and those values must be used for the "update"
         # calls before reading new ones.
         #-----------------------------------------------------
+        self.status = 'updating'
         if (self.time_index > 0):
             self.read_input_files()
                    
@@ -255,14 +259,20 @@ class snow_component( BMI_base.BMI_component ):
     #-------------------------------------------------------------------
     def finalize(self):
 
-        self.status = 'finalizing'  # (OpenMI)   
+        #--------------------------------
+        # Has component been disabled ?
+        #--------------------------------
+        if (self.comp_status.lower() == 'disabled'):
+            # Note: self.status should be 'initialized'.
+            return
+
+        self.status = 'finalizing' 
         self.close_input_files()   ##  TopoFlow input "data streams"
         self.close_output_files()
-        self.status = 'finalized'  # (OpenMI)
-
         if not(self.SILENT):
             self.print_final_report(comp_name='Snow component')
-       
+        self.status = 'finalized'
+               
     #   finalize()
     #-------------------------------------------------------------------
     def set_computed_input_vars(self):

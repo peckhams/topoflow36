@@ -398,9 +398,9 @@ class ice_component( BMI_base.BMI_component ):
             print(' ')
             print('Ice component: Initializing...')
 
-        self.status     = 'initializing'  # (OpenMI 2.0 convention)
-        self.mode       = mode
-        self.cfg_file   = cfg_file
+        self.status   = 'initializing'  # (OpenMI 2.0 convention)
+        self.mode     = mode
+        self.cfg_file = cfg_file
 
         #--------------------------------
         # Valley glacier or ice sheet ?
@@ -432,7 +432,7 @@ class ice_component( BMI_base.BMI_component ):
         
         self.set_gc2d_parameters()
         
-        if (self.comp_status == 'Disabled'):
+        if (self.comp_status.lower() == 'disabled'):
             if not(self.SILENT):
                 print('Ice component: Disabled in CFG file.')
             self.disable_all_output()
@@ -462,12 +462,15 @@ class ice_component( BMI_base.BMI_component ):
     #   initialize()
     #-------------------------------------------------------------------
     def update(self, dt=-1.0):
-        
+
+        #--------------------------------
+        # Has component been disabled ?
         #-------------------------------------------------
         # Note: self.MR already set to 0 by initialize()
         #-------------------------------------------------
-        if (self.comp_status == 'Disabled'): return
-        self.status = 'updating'  # (OpenMI)
+        if (self.comp_status.lower() == 'disabled'):
+            # Note: self.status should be 'initialized'.
+            return
 
         #----------------------------------------
         # Read next met vars from input files ?
@@ -480,8 +483,9 @@ class ice_component( BMI_base.BMI_component ):
 #             self.read_input_files()
         
         #-------------------------
-        # Update computed values 
+        # Update computed values
         #-------------------------
+        self.status = 'updating'
         # print '### CALLING GC2D.update()...'
         (dt, t, H, Zi, MR, conserveIce) = gc2d.update( self.time, self.H,
                                                self.Zb, self.dx,
@@ -551,18 +555,24 @@ class ice_component( BMI_base.BMI_component ):
     #-------------------------------------------------------------------
     def finalize(self):
 
-        self.status = 'finalizing'  # (OpenMI)
+        #--------------------------------
+        # Has component been disabled ?
+        #--------------------------------
+        if (self.comp_status.lower() == 'disabled'):
+            # Note: self.status should be 'initialized'.
+            return
+
+        self.status = 'finalizing' 
         ## self.close_input_files()   ##  TopoFlow input "data streams"
-        if (self.comp_status == 'Enabled'):
-            self.close_output_files()
-        self.status = 'finalized'  # (OpenMI)
+        self.close_output_files()
 
         if not(self.SILENT):
             self.print_final_report(comp_name='Ice component')
 
         if (self.DEBUG):
             print('Ice: dt_min =', self.dt_min, '### Smallest dt ###')
-        
+        self.status = 'finalized'  # (OpenMI)
+                
     #   finalize()
     #-------------------------------------------------------------------
     def set_computed_input_vars(self):

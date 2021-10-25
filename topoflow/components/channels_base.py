@@ -618,7 +618,7 @@ class channels_component( BMI_base.BMI_component ):
         #----------------------------------
         # Has component been turned off ?
         #----------------------------------
-        if (self.comp_status == 'Disabled'):
+        if (self.comp_status.lower() == 'disabled'):
             if not(self.SILENT):
                 print('Channels component: Disabled in CFG file.')
             self.disable_all_output()   # (04/29/2020)
@@ -697,14 +697,19 @@ class channels_component( BMI_base.BMI_component ):
     #-------------------------------------------------------------------
     def update(self, dt=-1.0):
 
-        ## DEBUG = True
-        DEBUG = False
-        
         #---------------------------------------------
         # Note that u and d from previous time step
         # must be used on RHS of the equations here.
         #---------------------------------------------
-        self.status = 'updating'  # (OpenMI 2.0 convention)
+        ## DEBUG = True
+        DEBUG = False
+
+        #--------------------------------
+        # Has component been disabled ?
+        #--------------------------------
+        if (self.comp_status.lower() == 'disabled'):
+            # Note: self.status should be 'initialized'.
+            return
 
         #-------------------------------------------------------
         # There may be times where we want to call this method
@@ -845,6 +850,13 @@ class channels_component( BMI_base.BMI_component ):
     #-------------------------------------------------------------------
     def finalize(self):
 
+        #--------------------------------
+        # Has component been disabled ?
+        #--------------------------------
+        if (self.comp_status.lower() == 'disabled'):
+            # Note: self.status should be 'initialized'.
+            return
+ 
         #---------------------------------------------------
         # We can compute mins and maxes in the final grids
         # here, but the framework will not then pass them
@@ -853,17 +865,16 @@ class channels_component( BMI_base.BMI_component ):
         #---------------------------------------------------
         # Water flowing to noflow_IDs is tracked while the
         # model is running, not in finalize().
-        #---------------------------------------------------        
+        #---------------------------------------------------
+        self.status = 'finalizing'
         self.update_total_channel_water_volume()  ## (9/17/19)
         self.update_total_land_water_volume()     ## (9/17/19)
         self.update_mins_and_maxes( REPORT=False )  ## (2/6/13)
         if not(self.SILENT):
             self.print_final_report(comp_name='Channels component')
-
-        self.status = 'finalizing'  # (OpenMI)
         self.close_input_files()    # TopoFlow input "data streams"
         self.close_output_files()
-        self.status = 'finalized'   # (OpenMI)
+        self.status = 'finalized'
         
     #   finalize()
     #-------------------------------------------------------------------

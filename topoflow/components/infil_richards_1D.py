@@ -922,14 +922,18 @@ class infil_component(infil_base.infil_component):
     #-------------------------------------------------------------------
     def update(self, time_seconds=None):
 
-        ## self.DEBUG = True
-        
         #-------------------------------------------------
         # Note: self.v0 already set to 0 by initialize()
         #-------------------------------------------------
-        if (self.comp_status == 'Disabled'): return
-        self.status = 'updating'  # (OpenMI 2.0 convention)
- 
+        ## self.DEBUG = True
+
+        #--------------------------------
+        # Has component been disabled ?
+        #--------------------------------
+        if (self.comp_status.lower() == 'disabled'):
+            # Note: self.status should be 'initialized'.
+            return
+
         #----------------------------------------
         # Read next met vars from input files ?
         #-----------------------------------------------------       
@@ -937,6 +941,7 @@ class infil_component(infil_base.infil_component):
         # and those values must be used for the "update"
         # calls before reading new ones.
         #-----------------------------------------------------
+        self.status = 'updating'
         if (self.time_index > 0):
             self.read_input_files()
                      

@@ -2,8 +2,11 @@
 # NB!   update_diversion() in channels_base.py is now COMMENTED OUT.
 #
 #--------------------------------------------------------------------
-# Copyright (c) 2001-2020, Scott D. Peckham
+# Copyright (c) 2001-2021, Scott D. Peckham
 #
+# Oct 2021. Added CREATE_VIZ_FILES, CREATE_INDICATORS.
+#           Added set_missing_cfg_options().
+#           Modified CFG file and finalize().
 # May 2020. Wrote "vol_str()" for print_final_report()          
 # Jan 2013. Revised handling of input/output names.
 # Oct 2012. CSDMS Standard Names and BMI.
@@ -25,6 +28,7 @@
 #      get_var_units()          # (5/16/12, Bolton)
 #      ---------------------
 #      set_constants()
+#      set_missing_cfg_options()  # (2021-10-24)
 #      run_model()
 #      initialize()
 #      update()
@@ -34,6 +38,7 @@
 #      check_steady_state()   ###
 #      check_interrupt()
 #      -----------------------------------
+#      initialize_time_vars()
 #      initialize_stop_vars()
 #      initialize_mass_totals()       # (OBSOLETE ??)
 #      initialize_GUI()               # (commented out)
@@ -56,6 +61,9 @@ import os
 import time
 
 from topoflow.utils import BMI_base
+from topoflow.utils import indicators        # (2021-10-24)
+from topoflow.utils import visualize as vis  # (2021-10-24)
+
 from topoflow.utils.tf_utils import TF_String, TF_Version
 
 #-----------------------------------------------------------------------
@@ -334,7 +342,32 @@ class topoflow_driver( BMI_base.BMI_component ):
         self.VERBOSE      = False
         self.PLOT         = False
        
-    #   set_constants()       
+    #   set_constants() 
+    #-------------------------------------------------------------------
+    def set_missing_cfg_options(self):
+
+        #--------------------------------------------------------
+        # (2021-10-24) Added CREATE_INDICATORS flat to CFG file
+        # to create a set of indicators (netCDF) at end.
+        #--------------------------------------------------------
+        if not(hasattr(self, 'COMPUTE_STAT_GRIDS')):
+            self.COMPUTE_STAT_GRIDS = False
+            
+        #--------------------------------------------------------
+        # (2021-10-24) Added CREATE_INDICATORS flat to CFG file
+        # to create a set of indicators (netCDF) at end.
+        #--------------------------------------------------------
+        if not(hasattr(self, 'CREATE_INDICATORS')):
+            self.CREATE_INDICATORS = False
+            
+        #-------------------------------------------------------
+        # (2021-10-24) Added CREATE_VIZ_FILES flat to CFG file
+        # to create a set of visualization files at end.
+        #-------------------------------------------------------
+        if not(hasattr(self, 'CREATE_VIZ_FILES')):
+            self.CREATE_VIZ_FILES = False  
+   
+    #   set_missing_cfg_options()      
     #-------------------------------------------------------------------
     def initialize(self, cfg_file=None, mode="nondriver",
                    SILENT=False):
@@ -358,18 +391,19 @@ class topoflow_driver( BMI_base.BMI_component ):
         # Load component parameters from a config file
         #-----------------------------------------------
         self.set_constants()
-        self.initialize_config_vars() 
+        self.initialize_config_vars()
+        self.set_missing_cfg_options()  # (2021-10-24)
         # self.read_grid_info()    # NOW IN initialize_config_vars()
         self.initialize_basin_vars()  # (5/14/10)
 
-        #----------------------------------
-        # Has component been turned off ?
-        #----------------------------------
-        if (self.comp_status == 'Disabled'):
+        #--------------------------------
+        # Has component been disabled ?
+        #--------------------------------
+        if (self.comp_status.lower() == 'disabled'):
             if not(self.SILENT):
                 print('TopoFlow Main component: Disabled in CFG file.')
             self.DONE = True
-            self.status = 'initialized.'  # (OpenMI 2.0 convention)
+            self.status = 'initialized.'
             return
         
         dc = (self.out_directory + self.case_prefix)
@@ -429,7 +463,14 @@ class topoflow_driver( BMI_base.BMI_component ):
         #    return
         
         # self.DEBUG = True  ########################
-        
+
+        #--------------------------------
+        # Has component been disabled ?
+        #--------------------------------
+        if (self.comp_status.lower() == 'disabled'):
+            # Note: self.status should be 'initialized'.
+            return
+       
         self.status = 'updating'
         OK = True
         if (self.mode == 'driver') and not(self.SILENT):
@@ -454,6 +495,12 @@ class topoflow_driver( BMI_base.BMI_component ):
     #-------------------------------------------------------------            
     def finalize(self):
 
+        #--------------------------------
+        # Has component been disabled ?
+        #--------------------------------
+        if (self.comp_status.lower() == 'disabled'):
+            # Note: self.status should be 'initialized'.
+            return
         self.status = 'finalizing'
 
         #--------------------------------------------
@@ -493,7 +540,27 @@ class topoflow_driver( BMI_base.BMI_component ):
             print('Finished.' + '  (' + self.case_prefix + ')')
             print()
         self.status = 'finalized'
-   
+
+        #--------------------------------------------------   
+        # Option to create a set of indicator grid stacks
+        #--------------------------------------------------
+        if (self.CREATE_INDICATORS):
+            indicators.create_indicator_grid_stacks(
+                       case_prefix=self.case_prefix,
+                       output_dir=self.out_directory,
+                       compute_stat_grids=self.COMPUTE_STAT_GRIDS )
+                       
+        #------------------------------------------------  
+        # Option to create a set of visualization files
+        #------------------------------------------------            
+        if (self.CREATE_VIZ_FILES):
+            vis.create_visualization_files(
+                output_dir=self.out_directory,
+                topo_dir=self.topo_directory,
+                site_prefix=self.site_prefix,
+                case_prefix=self.case_prefix,
+                movie_fps=10 )        
+
     #   finalize()
     #-------------------------------------------------------------            
     def check_finished(self):

@@ -229,9 +229,14 @@ class satzone_component( infil_base.infil_component ):
         # (2021-07-26) EMELI now only calls bmi.update()
         # in emeli.run_model() if 'Enabled'.
         # But doesn't hurt to leave next line here.
-        #-------------------------------------------------        
-        if (self.comp_status == 'Disabled'): return
-        self.status = 'updating'  # (OpenMI)
+        #-------------------------------------------------
+
+        #--------------------------------
+        # Has component been disabled ?
+        #--------------------------------
+        if (self.comp_status.lower() == 'disabled'):
+            # Note: self.status should be 'initialized'.
+            return
 
         #---------------------------------------
         # Read next GW vars from input files ?
@@ -240,6 +245,7 @@ class satzone_component( infil_base.infil_component ):
         # and those values must be used for the "update"
         # calls before reading new ones.
         #-----------------------------------------------------
+        self.status = 'updating'
         if (self.time_index > 0):
             self.read_input_files()
                     
@@ -279,13 +285,20 @@ class satzone_component( infil_base.infil_component ):
     #-------------------------------------------------------------------
     def finalize(self):
 
+        #--------------------------------
+        # Has component been disabled ?
+        #--------------------------------
+        if (self.comp_status.lower() == 'disabled'):
+            # Note: self.status should be 'initialized'.
+            return
+
+        self.status = 'finalizing'             
         if not(self.SILENT):
             self.print_final_report(comp_name='Groundwater component')
-            
-        self.status = 'finalizing'  # (OpenMI 2.0 convention)
+
         self.close_input_files()   ##  TopoFlow input "data streams"
         self.close_output_files()
-        self.status = 'finalized'  # (OpenMI 2.0 convention)
+        self.status = 'finalized'
 
     #   finalize()
     #-------------------------------------------------------------------
