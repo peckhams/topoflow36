@@ -2,9 +2,9 @@
 # NB!   update_diversion() in channels_base.py is now COMMENTED OUT.
 #
 #--------------------------------------------------------------------
-# Copyright (c) 2001-2021, Scott D. Peckham
+# Copyright (c) 2001-2022, Scott D. Peckham
 #
-# Oct 2021. Added CREATE_VIZ_FILES, CREATE_INDICATORS.
+# Oct 2021. Added CREATE_MEDIA_FILES, CREATE_INDICATORS.
 #           Added set_missing_cfg_options().
 #           Modified CFG file and finalize().
 # May 2020. Wrote "vol_str()" for print_final_report()          
@@ -57,13 +57,14 @@
 #-----------------------------------------------------------------------
 
 import numpy as np
-import os
+import os, os.path
 import time
 
 from topoflow.utils import BMI_base
 from topoflow.utils import indicators        # (2021-10-24)
 from topoflow.utils import visualize as vis  # (2021-10-24)
 
+# These are very old; replace them soon.
 from topoflow.utils.tf_utils import TF_String, TF_Version
 
 #-----------------------------------------------------------------------
@@ -139,10 +140,10 @@ class topoflow_driver( BMI_base.BMI_component ):
         'soil_water__domain_time_integral_of_volume_fraction',                   # vol_soil    
         'soil_water_sat-zone_top__domain_time_integral_of_recharge_volume_flux', # vol_Rg
         #-----------------------------------------------------------
-        'channel_water_x-section__boundary_time_integral_of_volume_flow_rate',   # vol_edge@channels
-        'river-network_channel_water__initial_volume',                           # vol_chan0
-        'river-network_channel_water__volume',                                   # vol_chan@channels
-        'land_surface_water__area_integral_of_depth' ]                           # vol_land@channels
+        'channel_water_x-section__boundary_time_integral_of_volume_flow_rate',   # vol_edge
+        'river-network_channel_water__initial_volume',                           # vol_chan_sum0
+        'river-network_channel_water__volume',                                   # vol_chan_sum
+        'land_surface_water__area_integral_of_depth' ]                           # vol_flood_sum
         
         #----------------------------------------------------------------
         # The TopoFlow driver no longer needs to get the time_steps of
@@ -217,9 +218,9 @@ class topoflow_driver( BMI_base.BMI_component ):
         'model__time_step':                                      'dt',
         #----------------------------------------------------------------------------
         'channel_water_x-section__boundary_time_integral_of_volume_flow_rate': 'vol_edge',   
-        'river-network_channel_water__initial_volume' : 'vol_chan0',
-        'river-network_channel_water__volume':          'vol_chan',
-        'land_surface_water__area_integral_of_depth':   'vol_land' }       
+        'river-network_channel_water__initial_volume' : 'vol_chan_sum0',
+        'river-network_channel_water__volume':          'vol_chan_sum',
+        'land_surface_water__area_integral_of_depth':   'vol_flood_sum' }       
 
             
     _var_units_map = {
@@ -347,25 +348,32 @@ class topoflow_driver( BMI_base.BMI_component ):
     def set_missing_cfg_options(self):
 
         #--------------------------------------------------------
-        # (2021-10-24) Added CREATE_INDICATORS flat to CFG file
+        # (2021-10-24) Added CREATE_INDICATORS flag to CFG file
         # to create a set of indicators (netCDF) at end.
         #--------------------------------------------------------
         if not(hasattr(self, 'COMPUTE_STAT_GRIDS')):
             self.COMPUTE_STAT_GRIDS = False
             
         #--------------------------------------------------------
-        # (2021-10-24) Added CREATE_INDICATORS flat to CFG file
+        # (2021-10-24) Added CREATE_INDICATORS flag to CFG file
         # to create a set of indicators (netCDF) at end.
         #--------------------------------------------------------
         if not(hasattr(self, 'CREATE_INDICATORS')):
             self.CREATE_INDICATORS = False
             
-        #-------------------------------------------------------
-        # (2021-10-24) Added CREATE_VIZ_FILES flat to CFG file
-        # to create a set of visualization files at end.
-        #-------------------------------------------------------
-        if not(hasattr(self, 'CREATE_VIZ_FILES')):
-            self.CREATE_VIZ_FILES = False  
+        #-----------------------------------------------------
+        # (2021-10-24) Added CREATE_MEDIA_FILES flag to CFG
+        # file to create a set of media files at the end.
+        #-----------------------------------------------------
+        if not(hasattr(self, 'CREATE_MEDIA_FILES')):
+            self.CREATE_MEDIA_FILES = False  
+
+        #--------------------------------------------------------
+        # (2021-11-18) Added media_directory due to Dojo issue.
+        #--------------------------------------------------------
+        if not(hasattr(self, 'media_directory')):
+            self.media_directory = os.path.expanduser('~/media/') 
+
    
     #   set_missing_cfg_options()      
     #-------------------------------------------------------------------
@@ -545,22 +553,41 @@ class topoflow_driver( BMI_base.BMI_component ):
         # Option to create a set of indicator grid stacks
         #--------------------------------------------------
         if (self.CREATE_INDICATORS):
+            ## print('#### misc_directory =', self.misc_directory )
+            ## print('#### COMPUTE_STAT_GRIDS = ', self.COMPUTE_STAT_GRIDS )
             indicators.create_indicator_grid_stacks(
                        case_prefix=self.case_prefix,
                        output_dir=self.out_directory,
-                       compute_stat_grids=self.COMPUTE_STAT_GRIDS )
-                       
+                       pop_dir=self.misc_directory,
+                       compute_stat_grids=self.COMPUTE_STAT_GRIDS,
+                       OVERWRITE_OK=self.OVERWRITE_OK)
+
         #------------------------------------------------  
         # Option to create a set of visualization files
         #------------------------------------------------            
-        if (self.CREATE_VIZ_FILES):
-            vis.create_visualization_files(
+        if (self.CREATE_MEDIA_FILES):
+            vis.create_media_files(
                 output_dir=self.out_directory,
+                media_dir=self.media_directory,  # 2021-11-18
                 topo_dir=self.topo_directory,
+                met_dir=self.met_directory,
+                misc_dir=self.misc_directory,
                 site_prefix=self.site_prefix,
                 case_prefix=self.case_prefix,
-                movie_fps=10 )        
-
+                DEM_ncols=self.grid_info.nx,   ######
+                DEM_nrows=self.grid_info.ny,   ######
+                movie_fps=10,
+                start_date=self.time_info.start_date,
+                end_date=self.time_info.end_date,
+                time_interval_hours=6)   # Assuming CHIRPS 6hr rain.        
+                #### OVERWRITE_OK=self.OVERWRITE_OK)
+ 
+    #----------------------------------------------------------------   
+    # Note:  There is a Jupyter notebook that can be used after a
+    #        successful model run to re-create the indicator and
+    #        media files: TopoFlow_Redo_Indicators_and_Media.ipynb.
+    #----------------------------------------------------------------
+                     
     #   finalize()
     #-------------------------------------------------------------            
     def check_finished(self):
@@ -1014,9 +1041,9 @@ class topoflow_driver( BMI_base.BMI_component ):
         # vol_soil0 = self.vol_soil0   # (2020-05-08)
         vol_soil0 = 0.0  ##### placeholder        
         vol_soil  = self.vol_soil    # (2020-05-08)
-        vol_chan0 = self.vol_chan0   # (2020-06-15)
-        vol_chan  = self.vol_chan    # (2019-09-17)
-        vol_land  = self.vol_land    # (2019-09-17)
+        vol_chan_sum0 = self.vol_chan_sum0   # (2020-06-15)
+        vol_chan_sum  = self.vol_chan_sum    # (2019-09-17)
+        vol_flood_sum = self.vol_flood_sum   # (2019-09-17)
         # vol_swe0  = self.vol_swe0    # (2020-05-05)
         vol_swe0  = 0.0  ##### placeholder
         vol_swe   = self.vol_swe       # (2020-05-05)
@@ -1139,12 +1166,12 @@ class topoflow_driver( BMI_base.BMI_component ):
         # Print various forms of storage
         #---------------------------------
         report.append('Total accumulated volumes over entire DEM: (storage)')
-        report.append('vol_soil  (infiltration):  ' + self.vol_str(vol_soil) + '  (change in storage)') 
-        report.append('vol_chan0 (channels):      ' + self.vol_str(vol_chan0) + '  (initial)')
-        report.append('vol_chan  (channels):      ' + self.vol_str(vol_chan))
-        report.append('vol_land  (surface):       ' + self.vol_str(vol_land))
-        report.append('vol_edge  (boundary):      ' + self.vol_str(vol_edge))
-        report.append('vol_swe   (snowpack):      ' + self.vol_str(vol_swe))
+        report.append('vol_soil_sum  (infiltration): ' + self.vol_str(vol_soil) + '  (change in storage)') 
+        report.append('vol_chan_sum0 (channels):  ' + self.vol_str(vol_chan_sum0) + '  (initial)')
+        report.append('vol_chan_sum  (channels):  ' + self.vol_str(vol_chan_sum))
+        report.append('vol_flood_sum  (surface):  ' + self.vol_str(vol_flood_sum))
+        report.append('vol_edge_sum  (boundary):  ' + self.vol_str(vol_edge))
+        report.append('vol_swe_sum   (snowpack):  ' + self.vol_str(vol_swe))
         report.append(' ')
 
         #---------------------------------------------
@@ -1152,10 +1179,10 @@ class topoflow_driver( BMI_base.BMI_component ):
         #---------------------------------------------
         vol_in      = (vol_P + vol_SM + vol_MR + vol_GW)
         vol_out     = (vol_IN + vol_ET + vol_edge)
-        vol_stored  = (vol_chan - vol_chan0)  # change in storage
+        vol_stored  = (vol_chan_sum - vol_chan_sum0)  # change in storage
         vol_stored += (vol_soil - vol_soil0)
         vol_stored += (vol_swe  - vol_swe0)
-        vol_stored += vol_land   # (due to flood water depth)
+        vol_stored += vol_flood_sum   # (due to flood water depth)
         vol_error   = (vol_out + vol_stored) - vol_in
         report.append('Mass balance check:')
         report.append('volume in         = ' + self.vol_str(vol_in) )
@@ -1245,60 +1272,60 @@ class topoflow_driver( BMI_base.BMI_component ):
         
     #   print_mins_and_maxes()
     #-------------------------------------------------------------
-    def print_uniform_precip_data(self):
-
-        ## precip_method = self.pp.method
-        precip_method = 2
-        
-        #---------------------------------------------------
-        # Precip method 1 is special and spatially uniform
-        #---------------------------------------------------
-        if (precip_method == 1):
-            rates = (self.pp.method1_rates * self.mps_to_mmph)    #[m/s] -> [mm/hr]
-            durs  = self.pp.method1_durations      
-            nr    = np.size(rates)
-
-            if (nr > 1): 
-                rstr = str(rates[0])
-                dstr = str(durs[0])
-                for m in range(1, nr):
-                    rstr += ('  ' + str(rates[m]))
-                    dstr += ('  ' + str(durs[m]))
-            else:
-                rstr = TF_String(rates)
-                dstr = TF_String(durs)
-        elif (precip_method == 2) and \
-             (self.pp.rate_type == 0) and \
-             (self.pp.duration_type == 0):
-                rstr = TF_String(self.pp.rate * self.mps_to_mmph)
-                dstr = TF_String(self.pp.duration)
-        else:
-            #------------------------------------------------
-            # Could have uniform precip with method 2 where
-            # values are stored in a text file and read in
-            # one by one.  Could read that file here.
-            #------------------------------------------------
-            return
-            
-        #-------------------------------------
-        # This is too verbose in most cases?
-        #------------------------------------- 
-        # print('Uniform precip. rate information: ')
-        # print('Precip. rate:     ' + rstr + ' [mm/hr]' )
-        # print('Duration:         ' + dstr + ' [min]' )
-        # print()
-        
-        #----------------------
-        # Write to log file ?
-        #----------------------
-        if (self.WRITE_LOG):
-            log_unit = self.log_unit
-            log_unit.write("Uniform precip. rate information: \n")
-            log_unit.write('Precip. rate:     ' + rstr + " [mm/hr]\n")
-            log_unit.write('Duration:         ' + dstr + " [min]\n")
-            log_unit.write("\n")
-        
-    #   print_uniform_precip_data()
+#     def print_uniform_precip_data(self):
+# 
+#         ## precip_method = self.pp.method
+#         precip_method = 2
+#         
+#         #---------------------------------------------------
+#         # Precip method 1 is special and spatially uniform
+#         #---------------------------------------------------
+#         if (precip_method == 1):
+#             rates = (self.pp.method1_rates * self.mps_to_mmph)    #[m/s] -> [mm/hr]
+#             durs  = self.pp.method1_durations      
+#             nr    = np.size(rates)
+# 
+#             if (nr > 1): 
+#                 rstr = str(rates[0])
+#                 dstr = str(durs[0])
+#                 for m in range(1, nr):
+#                     rstr += ('  ' + str(rates[m]))
+#                     dstr += ('  ' + str(durs[m]))
+#             else:
+#                 rstr = TF_String(rates)
+#                 dstr = TF_String(durs)
+#         elif (precip_method == 2) and \
+#              (self.pp.rate_type == 0) and \
+#              (self.pp.duration_type == 0):
+#                 rstr = TF_String(self.pp.rate * self.mps_to_mmph)
+#                 dstr = TF_String(self.pp.duration)
+#         else:
+#             #------------------------------------------------
+#             # Could have uniform precip with method 2 where
+#             # values are stored in a text file and read in
+#             # one by one.  Could read that file here.
+#             #------------------------------------------------
+#             return
+#             
+#         #-------------------------------------
+#         # This is too verbose in most cases?
+#         #------------------------------------- 
+#         # print('Uniform precip. rate information: ')
+#         # print('Precip. rate:     ' + rstr + ' [mm/hr]' )
+#         # print('Duration:         ' + dstr + ' [min]' )
+#         # print()
+#         
+#         #----------------------
+#         # Write to log file ?
+#         #----------------------
+#         if (self.WRITE_LOG):
+#             log_unit = self.log_unit
+#             log_unit.write("Uniform precip. rate information: \n")
+#             log_unit.write('Precip. rate:     ' + rstr + " [mm/hr]\n")
+#             log_unit.write('Duration:         ' + dstr + " [min]\n")
+#             log_unit.write("\n")
+#         
+#     #   print_uniform_precip_data()
     #-------------------------------------------------------------
     def print_dimless_number_data(self, basin_length):
  

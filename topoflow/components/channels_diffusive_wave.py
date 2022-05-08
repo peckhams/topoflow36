@@ -111,34 +111,30 @@ class channels_component(channels_base.channels_component):
         #-----------------------------------------------------
         ### self.update_free_surface_slope()
 
-        #-------------------------------------------
+        #------------------------------------------
         # Compute velocity using S_free vs. S_bed
-        #-------------------------------------------
-        # NB! This involves computing sqrt(S_free)
-        # so disallow "backflow" this way ?
-        #-------------------------------------------
-        self.S_free = np.maximum(self.S_free, 0.0)        ############
+        #----------------------------------------------------
+        # NB! The velocity formulas involve computing
+        # sqrt(S_free).  When (S_free < 0), we should have
+        # a negative velocity and backflow.  The velocity
+        # functions (channel_base.py) now handle this case.
+        #----------------------------------------------------
+        # np.maximum( self.S_free, 0, self.S_free )   # (in place)
+        ### self.S_free = np.maximum(self.S_free, 0.0)
         
         #------------------------
         # Use Manning's formula
-        #------------------------
-        if (self.MANNING):    
-            self.u = self.manning_formula()
+        #--------------------------
+        # Added [:] on 2022-05-06
+        #--------------------------
+        if (self.MANNING):
+            self.u[:] = self.manning_formula()
         
         #--------------------------------------
         # Use the Logarithmic Law of the Wall
         #--------------------------------------
         if (self.LAW_OF_WALL):    
-            self.u = self.law_of_the_wall()
-
-        #----------------------------------------
-        # Allow negative velocity (backflow) ??
-        # But to which child pixel ??
-        #----------------------------------------
-        # wn  = np.where( S_free < 0 )
-        # nwn = np.size( wn[0] )
-        # self.S_free = np.abs(self.S_free)
-        # if (nwn > 0): self.u[wn] = -1.0 * self.u[wn]
+            self.u[:] = self.law_of_the_wall()
         
     #    update_velocity()                       
     #-------------------------------------------------------------------

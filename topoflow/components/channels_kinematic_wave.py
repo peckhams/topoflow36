@@ -103,15 +103,17 @@ class channels_component(channels_base.channels_component):
             
         #------------------------
         # Use Manning's formula
-        #------------------------
+        #--------------------------
+        # Added [:] on 2022-05-06
+        #--------------------------
         if (self.MANNING):    
-            self.u = self.manning_formula()
+            self.u[:] = self.manning_formula()
         
         #--------------------------------------
         # Use the Logarithmic Law of the Wall
         #--------------------------------------
         if (self.LAW_OF_WALL):    
-            self.u = self.law_of_the_wall()
+            self.u[:] = self.law_of_the_wall()
 
         #------------------------------------------
         # Use a constant velocity (test: 5/18/15)

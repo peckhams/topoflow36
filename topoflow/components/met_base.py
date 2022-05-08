@@ -811,7 +811,7 @@ class met_component( BMI_base.BMI_component ):
         #-----------------------------
         self.update_time( dt )
         self.status = 'updated'  # (OpenMI)
-        
+
     #   update()
     #-------------------------------------------------------------------
     def finalize(self):
@@ -845,7 +845,9 @@ class met_component( BMI_base.BMI_component ):
         if not(hasattr(self, 'PRECIP_ONLY')):
             # See: set_computed_input_vars()
             self.PRECIP_ONLY = 'No'
-
+        if not(hasattr(self, 'P_factor')):
+            self.P_factor = 1.0    # (2022-02-15)
+            
         #----------------------------------------------------
         # Toggle to use SATTERLUND or BRUTSAERT methods
         # for computing e_air and em_air. (Not in GUI yet.)
@@ -2049,9 +2051,12 @@ class met_component( BMI_base.BMI_component ):
             ## print('read_next() returned P is None.')
             self.set_rain_to_zero()  # (2020-05-05)
         else:
+            #---------------------------------------------
+            # Added 3rd "factor" argument on 2022-02-15.
+            #---------------------------------------------
             ## print('read_next() returned P is NOT None.')
             ## print('P.min, P.max =', P.min(), P.max() )   
-            self.update_var( 'P', P )  ## (In BMI_base.py, 11/15/16)
+            self.update_var( 'P', P, self.P_factor )  # (In BMI_base.py)
 
             if not(self.SILENT):
                 if (self.DEBUG or (self.time_index == 0)):
