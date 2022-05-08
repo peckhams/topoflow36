@@ -213,7 +213,8 @@ class BMI_component:
         self.case_prefix      = None
         self.cfg_prefix       = None       ###### (9/18/14)
         self.comp_status      = 'Enabled'
-        
+        self.OVERWRITE_OK     = False   # Now in path_info.cfg; 2022-02-16
+              
         # NB! This probably won't work here, because a driver
         #     may be instantiated later that then changes the
         #     current working directory.
@@ -678,7 +679,6 @@ class BMI_component:
 
         var_name = self.get_var_name( long_var_name )  # (2/20/12)
 
-
         try:
             itemsize = eval( "self." + var_name + ".itemsize" )
 #             itemsize = -1  # (For exec in Python 3.x.)
@@ -692,7 +692,6 @@ class BMI_component:
     def get_var_nbytes(self, long_var_name):
 
         var_name = self.get_var_name( long_var_name )
-
 
         try:
             nbytes = eval( "self." + var_name + ".nbytes" )
@@ -1136,6 +1135,18 @@ class BMI_component:
     #-------------------------------------------------------------------
     def initialize_time_vars(self, units='seconds'):
 
+        #--------------------------------------------------------
+        # NOTE:  Since time is not an input or output variable
+        #        passed between components, it may not be a
+        #        a good idea to use "initialize_scalar()" here.
+        #        The data type is then "ndarray" (0D).
+        #        See notes for:  initialize_scalar()
+        #        This may be the cause of a strange problem
+        #        when "time" is written to a netCDF file.
+        #        Now, np.float64() is applied before writing.
+        #        CHECK if this affects time interpolation.
+        #--------------------------------------------------------
+        
         #------------------
         # Start the clock
         #------------------
@@ -1148,6 +1159,13 @@ class BMI_component:
         self.time_index = np.int32(0)
         self.time       = self.initialize_scalar(0, dtype='float64') 
         self.DONE       = False
+
+        #--------------------------------------------------------
+        # 2022-04-08.  Result is: <class> 'ndarray' (0D array)
+        # See notes for: BMI.initialize_scalar().
+        #--------------------------------------------------------
+        ## print('In BMI.initialize_time_vars:')
+        ## print('    type(self.time) =', type(self.time))
 
         #-------------------------------------------
         # (2/5/12) Set default stopping method:
@@ -1214,6 +1232,8 @@ class BMI_component:
         # Compute and store the current time in seconds
         # (time_sec) and in minutes (time_min).
         #------------------------------------------------
+        # Added 'weeks' and 'months': 2022-02-17
+        #------------------------------------------------
         if (self.time_units == 'seconds'):
             self.time_sec = self.time         # [seconds]
         elif (self.time_units == 'minutes'):
@@ -1223,11 +1243,21 @@ class BMI_component:
             self.time_sec = self.time * np.float64(3600)
         elif (self.time_units == 'days'):
             self.time_sec = self.time * np.float64(3600) * 24
+        elif (self.time_units == 'weeks'):
+            self.time_sec = self.time * np.float64(3600) * 24 * 7
+        elif (self.time_units == 'months'):
+            #---------------------------------------
+            # NOTE!  This is just an approximation
+            #---------------------------------------
+            self.time_sec = self.time * self.sec_per_year / 12
         elif (self.time_units == 'years'):
             #-----------------------------------
             # Used by GC2D and Erode (12/4/09)
             #-----------------------------------
             self.time_sec = self.time * self.sec_per_year  ####
+        else:
+            print('### WARNING: time_units =', self.time_units, 'not recognized.')
+            self.time_sec = self.time
 
         #------------------------------------------
         # Compute & store current time in minutes
@@ -2192,14 +2222,21 @@ class BMI_component:
         topo_dir = in_dir + '__topo' + os.sep
         soil_dir = in_dir + '__soil' + os.sep
         met_dir  = in_dir + '__met'  + os.sep
-        #-------------------------------------
+        misc_dir = in_dir + '__misc' + os.sep
+        #----------------------------------------
         if not(os.path.exists( topo_dir )):
             topo_dir = in_dir
         if not(os.path.exists( soil_dir )):
             soil_dir = in_dir
         if not(os.path.exists( met_dir )):
-            # Not static, so use cfg_dir not in_dir
-            met_dir = cfg_dir
+            met_dir  = in_dir  # (see note below)
+        if not(os.path.exists( misc_dir )):
+            misc_dir = in_dir
+        #------------------------------------------
+        # Not static, so use cfg_dir not in_dir ?
+        #------------------------------------------       
+        # if not(os.path.exists( met_dir )):
+        #     met_dir = cfg_dir
 
         #---------------------------------------------------- 
         # These could also be set in the path_info CFG file    
@@ -2221,7 +2258,7 @@ class BMI_component:
         self.topo_directory = topo_dir
         self.soil_directory = soil_dir
         self.met_directory  = met_dir
-                                         
+        self.misc_directory = misc_dir                                         
         if (REPORT):
             print('After calling set_directories()...')
             print('cfg_directory  =', cfg_dir)
@@ -2230,6 +2267,7 @@ class BMI_component:
             print('topo_directory =', topo_dir)
             print('soil_directory =', soil_dir)
             print('met_directory  =', met_dir)
+            print('misc_directory =', misc_dir)
 #             print('site_prefix   =', self.site_prefix)
 #             print('case_prefix   =', self.case_prefix)
             print()
@@ -2327,8 +2365,10 @@ class BMI_component:
 
     #   initialize_var()
     #-------------------------------------------------------------------
-    def update_var(self, var_name, value):
+    def update_var(self, var_name, value, factor=1.0):
 
+        #---------------------------------------------------------------
+        # Note:  Added factor keyword on 2022-02-15.
         #---------------------------------------------------------------
         # Note:  Vars must be initialized first, e.g. using either
         #        initialize_scalar() or initialize_grid() in BMI_base.
@@ -2336,6 +2376,14 @@ class BMI_component:
         if (value is None):
             return
 
+        #--------------------------------------------------
+        # Support for new "factor" keyword (2022-02-15)
+        # This function is called from read_input_files()
+        # and it is okay to modify the passed "value".
+        #--------------------------------------------------
+        if (factor != 1.0):
+            value *= factor
+        
         if (self.is_scalar( var_name )):
             #----------------------------------------------------
             # Update the value of a scalar without breaking the
@@ -2353,6 +2401,33 @@ class BMI_component:
             exec( 'self.' + var_name + '[:] = value', {}, locals() )
 
     #   update_var()
+    #-------------------------------------------------------------------
+#     def update_var_LAST(self, var_name, value):
+# 
+#         #---------------------------------------------------------------
+#         # Note:  Vars must be initialized first, e.g. using either
+#         #        initialize_scalar() or initialize_grid() in BMI_base.
+#         #---------------------------------------------------------------
+#         if (value is None):
+#             return
+# 
+#         if (self.is_scalar( var_name )):
+#             #----------------------------------------------------
+#             # Update the value of a scalar without breaking the
+#             # reference so other components will see it change.
+#             #----------------------------------------------------
+#             # See Notes for initialize_scalar() above.
+#             # This is needed for type "Time Series".
+#             #----------------------------------------------------
+#             exec( 'self.' + var_name + '.fill( value )', {}, locals() )
+#         else:
+#             #----------------------------------------------
+#             # Update the value of a grid (2D, 3D) without
+#             # breaking the reference (or making a copy).
+#             #----------------------------------------------
+#             exec( 'self.' + var_name + '[:] = value', {}, locals() )
+# 
+#     #   update_var_LAST()
     #-------------------------------------------------------------------
     # These are for convenience;  not part of BMI.
     #-------------------------------------------------------------------

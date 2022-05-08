@@ -453,13 +453,14 @@ class ncgs_file():
                       dtype='float32',
                       ### dtype='float64'
                       time_units='minutes', time_res='60.0',
-                      comment='',
+                      comment='', OVERWRITE_OK=False,
                       MAKE_RTI=True, MAKE_BOV=False):
 
         #----------------------------
         # Does file already exist ?
         #----------------------------
-        file_name = file_utils.check_overwrite( file_name )
+        if not(OVERWRITE_OK):
+            file_name = file_utils.check_overwrite( file_name )
         self.file_name = file_name
         
         #---------------------------------------
@@ -471,6 +472,8 @@ class ncgs_file():
         self.long_name  = long_name
         self.units_name = units_name
         self.dtype      = dtype
+        self.time_units = time_units   ####
+        self.time_res   = time_res     ####
 
         #---------------------------------------------
         # Create time metadata strings  (2020-01-14)
@@ -582,7 +585,9 @@ class ncgs_file():
         #-----------------------------------
         # Create coordinate variable, time
         #---------------------------------------------------
-        #('f8' = float32; must match in add_grid()
+        # 'f8' = 8-byte = float64; 'f4' = 4-byte = float32
+        # See: https://unidata.github.io/netcdf4-python/
+        # Data type must match in add_grid().
         #------------------------------------------------------------
         # If using the NETCDF4 format (vs. NETCDF4_CLASSIC),
         # then for a fixed-length string (e.g. 2021-07-01 00:00:00)
@@ -696,6 +701,14 @@ class ncgs_file():
         ncgs_unit.variables['time'].time_coverage_start = start_datetime 
         ncgs_unit.variables['time'].time_coverage_end = end_datetime 
         ncgs_unit.variables['time'].time_coverage_duration = duration
+        
+#         print('type(time_units)     =', type(time_units))
+#         print('type(time_res)       =', type(time_res))
+#         print('type(start_datetime) =', type(start_datetime))
+#         print('type(end_datetime)   =', type(end_datetime))
+#         print('type(duration)       =', type(duration))
+#         print()
+#         print()
 
         #-----------------------------------------
         # Save attributes of extra var, datetime
@@ -709,10 +722,18 @@ class ncgs_file():
         # Note!  add_profile() now builds a datetime vector.
         #        Recall time is an unlimited dimension.
         #-------------------------------------------------------------
+        # Note: Must use ".numpy_dtype" vs. ".dtype" (already used).
+        #------------------------------------------------------------- 
         time_dtype = time_utils.get_time_dtype( time_units )
-        ncgs_unit.variables['datetime'].long_name = 'datetime' 
-        ncgs_unit.variables['datetime'].units = time_dtype
-               
+        time_delta = str(time_res) + ' ' + time_units
+        ncgs_unit.variables['datetime'].long_name  = 'datetime'
+        ncgs_unit.variables['datetime'].time_delta = time_delta         
+        ncgs_unit.variables['datetime'].numpy_dtype = time_dtype 
+        ncgs_unit.variables['datetime'].units = 'none'
+        ## time_dtype = time_utils.get_time_dtype( time_units )
+        ## ncgs_unit.variables['datetime'].long_name = 'datetime' 
+        ## ncgs_unit.variables['datetime'].units = time_dtype
+
         #---------------------------------------
         # Save attributes of the main variable
         #---------------------------------------
@@ -734,8 +755,16 @@ class ncgs_file():
     #   open_new_file()
     #----------------------------------------------------------
     def add_grid(self, grid, grid_name, time=None,
-                 time_units='minutes', time_index=-1):
+                 time_units=None, time_index=-1):
+                 ### time_units='minutes', time_index=-1):
 
+        #-------------------------------------------------
+        # NOTE: time_units is set by open_new_file() and
+        #       saved into self. Setting a default above
+        #       will override that setting and datetimes
+        #       will be incorrect.
+        #-------------------------------------------------
+        
         #---------------------------------
         # Assign a value to the variable
         #-------------------------------------------
@@ -749,21 +778,28 @@ class ncgs_file():
         #-------------------------------------
         if (time_index == -1):
             time_index = self.time_index
-        # if (time is None):
-        #     time = np.float64( time_index )   #############
+        if (time_units is None):
+            time_units = self.time_units   ## See NOTE above.   
+        if (time is None):
+            print('### WARNING: time is set to None.')
+            time = np.float64( time_index )   #############
 
-        #----------------------------------------------
+        #-----------------------------------------------
         # Write current time to existing netCDF file
         # Recall that time has an unlimited dimension
-        #----------------------------------------------
+        # Note: "time" is initialized as "0D ndarray".
+        #-----------------------------------------------
+        ## print('NCGS: type(time) =', type(time))
         times = self.ncgs_unit.variables[ 'time' ]
-        times[ time_index ] = time
+        times[ time_index ] = np.float64( time )
+        ### times[ time_index ] = time
 
-        #-------------------------------------------------
+        #--------------------------------------------------
         # Write current datetime to existing netCDF file
         # Recall that time has an unlimited dimension
         # Datetime strings have netCDF4 type 'S19'
-        #-------------------------------------------------
+        # datetime here is a datetime object; apply str()
+        #--------------------------------------------------
         datetime = time_utils.get_current_datetime(
                               self.start_datetime,
                               time, time_units=time_units)
@@ -775,6 +811,9 @@ class ncgs_file():
         #---------------------------------------
         var = self.ncgs_unit.variables[ grid_name ]
         var.n_grids += 1
+        ## print('#### grid_name =', grid_name)
+        ## print('#### n_grids   =', var.n_grids )
+        ## print()
         if (np.ndim(grid) == 0):
             #-----------------------------------------------
             # "grid" is actually a scalar (dynamic typing)

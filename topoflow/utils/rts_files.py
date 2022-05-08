@@ -311,13 +311,14 @@ class rts_file():
     def open_new_file(self, file_name, info=None,
                       var_name='UNKNOWN',
                       dtype='float32',
-                      VERBOSE=False,
+                      VERBOSE=False, OVERWRITE_OK=False,
                       MAKE_RTI=True, MAKE_BOV=False):
 
         #----------------------------
         # Does file already exist ?
         #----------------------------
-        file_name = file_utils.check_overwrite( file_name )
+        if not(OVERWRITE_OK):
+            file_name = file_utils.check_overwrite( file_name )
         self.file_name = file_name
         
         #---------------------------------------
@@ -480,7 +481,7 @@ class rts_file():
     def number_of_grids(self):
 
         file_size = os.path.getsize( self.file_name )
-        n_grids   = (file_size / self.grid_size)
+        n_grids   = np.int32(file_size / self.grid_size)
 
         # self.file_size = file_size
         # self.n_grids   = n_grids

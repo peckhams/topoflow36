@@ -1,5 +1,7 @@
 
 # Copyright (c) 2021, Scott D. Peckham
+
+# Feb. 2022.  Added OVERWRITE_OK to open_new_file().
 # Jul. 2021.  Changes to support MINT netCDF and datetimes.
 #             Mostly in open_new_file() and add_values_at_IDs().
 # Nov. 2019   MINT netCDF compliance.
@@ -354,12 +356,14 @@ class ncts_file():
                       ### dtypes=['float64'],
                       time_units='minutes',
                       time_res='60.0',
-                      comment=''):
+                      comment='',
+                      OVERWRITE_OK=False):
               
         #----------------------------
         # Does file already exist ?
         #----------------------------
-        file_name = file_utils.check_overwrite( file_name )
+        if not(OVERWRITE_OK):
+            file_name = file_utils.check_overwrite( file_name )
                 
         #---------------------------------------
         # Check and store the time series info
@@ -511,8 +515,10 @@ class ncts_file():
 
         #-----------------------------------
         # Create coordinate variable, time
-        #----------------------------------------------------
-        #('f8' = float32; must match in add_values_at_IDs()
+        #---------------------------------------------------
+        # 'f8' = 8-byte = float64; 'f4' = 4-byte = float32
+        # See: https://unidata.github.io/netcdf4-python/
+        # Data type must match in add_grid().
         #------------------------------------------------------------
         # If using the NETCDF4 format (vs. NETCDF4_CLASSIC),
         # then for a fixed-length string (e.g. 2021-07-01 00:00:00)
@@ -539,6 +545,14 @@ class ncts_file():
         ncts_unit.variables['time'].time_coverage_end = end_datetime 
         ncts_unit.variables['time'].time_coverage_duration = duration
  
+#         print('type(time_units)     =', type(time_units))
+#         print('type(time_res)       =', type(time_res))
+#         print('type(start_datetime) =', type(start_datetime))
+#         print('type(end_datetime)   =', type(end_datetime))
+#         print('type(duration)       =', type(duration))
+#         print()
+#         print()
+
         #-----------------------------------------
         # Save attributes of extra var, datetime
         #-------------------------------------------------------------
@@ -563,9 +577,15 @@ class ncts_file():
 #         ncts_unit.variables['datetime'][:] = T_vector
         #--------------------------------------------------------------------
         time_dtype = time_utils.get_time_dtype( time_units )
-        ncts_unit.variables['datetime'].long_name = 'datetime' 
-        ncts_unit.variables['datetime'].units = time_dtype
- 
+        time_delta = str(time_res) + ' ' + time_units
+        ncts_unit.variables['datetime'].long_name = 'datetime'
+        ncts_unit.variables['datetime'].time_delta = time_delta 
+        ncts_unit.variables['datetime'].numpy_dtype = time_dtype
+        ncts_unit.variables['datetime'].units = 'none'
+        ## time_dtype = time_utils.get_time_dtype( time_units )
+        ## ncts_unit.variables['datetime'].long_name = 'datetime' 
+        ## ncts_unit.variables['datetime'].units = time_dtype
+     
         #-----------------------------------
         # Create variables using var_names
         #---------------------------------------------------
@@ -674,11 +694,13 @@ class ncts_file():
         if (time is None):
             time = np.float64( time_index )
             
-        #---------------------------------------
+        #-----------------------------------------------
         # Write a time to existing netCDF file
-        #---------------------------------------
+        # Note: "time" is initialized as "0D ndarray".
+        #-----------------------------------------------
         times = self.ncts_unit.variables[ 'time' ]
-        times[ time_index ] = time
+        times[ time_index ] = np.float64( time )
+        ## times[ time_index ] = time
         
         #---------------------------------------------
         # Write a data value to existing netCDF file
@@ -773,18 +795,22 @@ class ncts_file():
         if (time_index == -1):
             time_index = self.time_index
 
-        #----------------------------------------------
+        #-----------------------------------------------
         # Write current time to existing netCDF file
         # Recall that time has an unlimited dimension
-        #----------------------------------------------
+        # Note: "time" is initialized as "0D ndarray".
+        #-----------------------------------------------
+        ## print('NCTS: type(time) =', type(time))
         times = self.ncts_unit.variables[ 'time' ]
-        times[ time_index ] = time
+        times[ time_index ] = np.float64( time )
+        ## times[ time_index ] = time
 
-        #-------------------------------------------------
+        #--------------------------------------------------
         # Write current datetime to existing netCDF file
         # Recall that time has an unlimited dimension
         # Datetime strings have netCDF4 type 'S19'
-        #-------------------------------------------------
+        # datetime here is a datetime object; apply str()
+        #--------------------------------------------------
         datetime = time_utils.get_current_datetime(
                               self.start_datetime,
                               time, time_units='minutes')

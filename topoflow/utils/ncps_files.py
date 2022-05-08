@@ -535,12 +535,14 @@ class ncps_file():
         #----------------------------------------------
         ncps_unit.createDimension('Z', int(nz))
         ncps_unit.createDimension('time', None)  # (unlimited dim)
-        nccs_unit.createDimension('bnds', 1)
+        ncps_unit.createDimension('bnds', 1)
 
         #-----------------------------------
         # Create coordinate variable, time
         #---------------------------------------------------
-        #('f8' = float32; must match in add_profile()
+        # 'f8' = 8-byte = float64; 'f4' = 4-byte = float32
+        # See: https://unidata.github.io/netcdf4-python/
+        # Data type must match in add_grid().
         #------------------------------------------------------------
         # If using the NETCDF4 format (vs. NETCDF4_CLASSIC),
         # then for a fixed-length string (e.g. 2021-07-01 00:00:00)
@@ -559,7 +561,7 @@ class ncps_file():
         #        but starts at 0 and doesn't include dates.
         #        Recall time is an unlimited dimension.
         #----------------------------------------------------
-        ncgs_unit.variables['time'].long_name = 'time'
+        ncps_unit.variables['time'].long_name = 'time'
         ncps_unit.variables['time'].units = time_units
         ncps_unit.variables['time'].time_units = time_units
         ncps_unit.variables['time'].time_coverage_resolution = time_res  
@@ -580,9 +582,15 @@ class ncps_file():
         #        Recall time is an unlimited dimension.
         #-------------------------------------------------------------
         time_dtype = time_utils.get_time_dtype( time_units )
-        ncps_unit.variables['datetime'].long_name = 'datetime' 
-        ncps_unit.variables['datetime'].units = time_dtype
-
+        time_delta = str(time_res) + ' ' + time_units
+        ncps_unit.variables['datetime'].long_name = 'datetime'
+        ncps_unit.variables['datetime'].time_delta = time_delta 
+        ncps_unit.variables['datetime'].numpy_dtype = time_dtype
+        ncps_unit.variables['datetime'].units = 'none'   
+        ## time_dtype = time_utils.get_time_dtype( time_units )
+        ## ncps_unit.variables['datetime'].long_name = 'datetime' 
+        ## ncps_unit.variables['datetime'].units = time_dtype
+   
         #----------------------------------------------
         # Create a "Z" variable (depth below surface)
         #----------------------------------------------
@@ -649,8 +657,8 @@ class ncps_file():
             lon = minlon + (col2 * xres_deg)
             lat = minlat + ((nrows - 1 - row2) * yres_deg)       
             #-----------------------------------------------------
-            ncts_unit.variables[var_name].grid_cell_col  = col
-            ncts_unit.variables[var_name].grid_cell_row  = row  
+            ncps_unit.variables[var_name].grid_cell_col  = col
+            ncps_unit.variables[var_name].grid_cell_row  = row  
             ncps_unit.variables[var_name].geospatial_lon = lon
             ncps_unit.variables[var_name].geospatial_lat = lat            
             #----------------------------------------------------------------           
@@ -705,18 +713,21 @@ class ncps_file():
         # if (time is None):
         #     time = np.float64( time_index )
 
-        #----------------------------------------------
+        #-----------------------------------------------
         # Write current time to existing netCDF file
         # Recall that time has an unlimited dimension
-        #----------------------------------------------
+        # Note: "time" is initialized as "0D ndarray".
+        #-----------------------------------------------
         times = self.ncps_unit.variables[ 'time' ]
-        times[ time_index ] = time
+        times[ time_index ] = np.float64( time )
+        ## times[ time_index ] = time
 
-        #-------------------------------------------------
+        #--------------------------------------------------
         # Write current datetime to existing netCDF file
         # Recall that time has an unlimited dimension
         # Datetime strings have netCDF4 type 'S19'
-        #-------------------------------------------------
+        # datetime here is a datetime object; apply str()
+        #--------------------------------------------------
         datetime = time_utils.get_current_datetime(
                               self.start_datetime,
                               time, time_units='minutes')
@@ -805,11 +816,13 @@ class ncps_file():
         if (time is None):
             time = np.float64( time_index )
                       
-        #---------------------------------------------
+        #-----------------------------------------------
         # Write current time to existing netCDF file
-        #---------------------------------------------
+        # Note: "time" is initialized as "0D ndarray".
+        #-----------------------------------------------
         times = self.ncps_unit.variables[ 'time' ]
-        times[ time_index ] = time
+        times[ time_index ] = np.float64( time )
+        ## times[ time_index ] = time
         
         #--------------------------------------------
         # Write data values to existing netCDF file

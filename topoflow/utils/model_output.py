@@ -1,14 +1,15 @@
 
-# Copyright (c) 2001-2019, Scott D. Peckham
+# Copyright (c) 2001-2022, Scott D. Peckham
 #
-# Oct 2019      Updated for Python 3.
-# Jan 2012      Fixed "print," bug and fixed "dtype" support.
-# June 2010     Reorganized & streamlined with "exec", etc.
-# October 2009  routines to allow more output file formats)
-# August 2009
-# January 2009  Converted from IDL.
-# Nov. 2019     Minor changes for MINT netCDF compliance
-
+# Feb 2022.  Added OVERWRITE_OK to all "open_new_file..."
+# Nov 2019.  Minor changes for MINT netCDF compliance
+# Oct 2019.  Updated for Python 3.
+# Jan 2012.  Fixed "print," bug and fixed "dtype" support.
+# Jun 2010.  Reorganized & streamlined with "exec", etc.
+# Oct 2009.  Routines to allow more output file formats)
+# Aug 2009.
+# Jan 2009.  Converted from IDL.
+#
 #-------------------------------------------------------------------
 #  Functions:
 #
@@ -183,9 +184,10 @@ def open_new_gs_file(self, file_name, info=None,
     exec( ncgs_unit_str + "=" + "ncgs_files.ncgs_file()" )
     exec( ncgs_unit_str + ".open_new_file(" + ncgs_file_str +
           ", self.rti, self.time_info, " +
-          "var_name, long_name, units_name, dtype=dtype," +
-          "time_units=time_units, time_res=time_res_min)" )
-          
+          "var_name, long_name, units_name, dtype=dtype, " +
+          "time_units=time_units, time_res=time_res_min, " +
+          "OVERWRITE_OK=self.OVERWRITE_OK)")  # (2022-02-16)
+
     #--------------------------------------------
     # Open new netCDF file to write grid stacks
     # using var_name to build variable names
@@ -203,8 +205,9 @@ def open_new_gs_file(self, file_name, info=None,
 #         exec( ncgs_unit_str + "=" + "ncgs_files.ncgs_file()" )
 #         exec( ncgs_unit_str + ".open_new_file(" + ncgs_file_str +
 #               ", self.rti, self.time_info, " +
-#               "var_name, long_name, units_name, dtype=dtype," +
-#               "time_units=time_units, time_res=time_res_min)" )
+#               "var_name, long_name, units_name, dtype=dtype, " +
+#               "time_units=time_units, time_res=time_res_min, " +
+#               "OVERWRITE_OK=self.OVERWRITE_OK)")  # (2022-02-16)
             #----------------------------------------
             # (2019-10-03)  This isn't needed here.
             #----------------------------------------
@@ -254,9 +257,9 @@ def open_new_gs_file(self, file_name, info=None,
                   gs_file_str + ", '.rts')" )
             exec( rts_unit_str + " = rts_files.rts_file()" )
             exec( rts_unit_str + ".open_new_file(" + rts_file_str +
-                  ", self.rti, var_name, " +
-                  "dtype=dtype, " +
-                  "MAKE_BOV=True)" )
+                  ", self.rti, var_name, dtype=dtype, MAKE_BOV=True," +
+                  "OVERWRITE_OK=self.OVERWRITE_OK)" )
+
             #----------------------------------------
             # (2019-10-03)  This isn't needed here.
             #----------------------------------------                    
@@ -285,9 +288,12 @@ def add_grid(self, var, var_name, time=None, SILENT=True):
     #--------------------------------------------------------
 ##    ncgs_unit_str = "self." + var_name + "_ncgs_unit"
 ##    exec( ncgs_unit_str + ".add_grid( var, var_name, time )")
-    
+         
     ## if (USE_NC):
     try:
+        # print('###### var_name =', var_name)
+        # print('###### time = ', time)
+        # print()
         ncgs_unit_str = "self." + var_name + "_ncgs_unit"
         exec( ncgs_unit_str + ".add_grid( var, var_name, time )")
     except:
@@ -306,16 +312,18 @@ def add_grid(self, var, var_name, time=None, SILENT=True):
 #-------------------------------------------------------------------
 def close_gs_file(self, var_name): 
 
-    try:
-        exec( "self." + var_name + "_ncgs_unit.close()" )
-    except:
-        pass
+    exec( "self." + var_name + "_ncgs_unit.close()" )
+        
+    #try:
+    #    exec( "self." + var_name + "_ncgs_unit.close()" )
+    #except:
+    #    pass
 
     try:
         exec( "self." + var_name + "_rts_unit.close()" )
     except:
         pass
-    
+
 #   close_gs_file()
 #-------------------------------------------------------------------
 #-------------------------------------------------------------------
@@ -373,8 +381,9 @@ def open_new_ts_file(self, file_name, IDs, ####
     exec( ncts_unit_str + "=" + "ncts_files.ncts_file()" )
     exec( ncts_unit_str + ".open_new_file(" + ncts_file_str +
           ", self.rti, self.time_info," +
-          "var_names, long_names, units_names, dtypes=dtypes," +
-          "time_units=time_units, time_res=time_res_min)" )
+          "var_names, long_names, units_names, dtypes=dtypes, " +
+          "time_units=time_units, time_res=time_res_min, " +
+          "OVERWRITE_OK=self.OVERWRITE_OK)" )  # (2022-02-16)
     #------------------------------------------------------------- 
     MAKE_TTS = False
 #     except:
@@ -403,9 +412,8 @@ def open_new_ts_file(self, file_name, IDs, ####
                   ts_file_str + ", '.txt')" )
             exec( tts_unit_str + " = text_ts_files.ts_file()" )
             exec( tts_unit_str + ".open_new_file(" + tts_file_str +
-                  ", var_names, " +
-                  "dtype=dtype, " +  ## (11/5/13)
-                  "time_units=time_units)" )
+                  ", var_names, dtype=dtype, time_units=time_units, " +
+                  "OVERWRITE_OK=self.OVERWRITE_OK)")
         except:
             print('ERROR: Unable to open new text file:')
             vstr = 'self.' + var_name + '_tts_file'
@@ -541,7 +549,8 @@ def open_new_ps_file(self, file_name, IDs, ####
           ", self.rti, self.time_info, " +
           "z_values, z_units, " +
           "var_names, long_names, units_names, dtypes=dtypes," +
-          "time_units=time_units, time_res=time_res_min)" )
+          "time_units=time_units, time_res=time_res_min, " +
+          "OVERWRITE_OK=self.OVERWRITE_OK)" )  # (2022-02-16)
     MAKE_TPS = False
 #     except:
 #         # pass
@@ -694,7 +703,8 @@ def open_new_cs_file(self, file_name, info=None,
         exec( nccs_unit_str + ".open_new_file(" + nccs_file_str +
               ", self.rti, self.time_info, " +
               "var_name, long_name, units_name, dtype=dtype, " +
-              "time_units=time_units, time_res=time_res_min)" )
+              "time_units=time_units, time_res=time_res_min, " +
+              "OVERWRITE_OK=self.OVERWRITE_OK)" )  # (2022-02-16)
         MAKE_RT3 = False
     except:
         print('ERROR: Unable to open new netCDF file:')

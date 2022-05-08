@@ -11,6 +11,7 @@
 #------------------------------------------------------------------------
 
 import datetime
+from dateutil.relativedelta import relativedelta   ## 2022-02-18
 import numpy as np
 import sys
 
@@ -93,7 +94,7 @@ def get_duration(start_date=None, start_time=None,
     if (start_time is None): start_time = '00:00:00'
     if (end_date is None):   end_date   = '2015-01-01'
     if (end_time is None):   end_time   = '00:00:00'
-    if (dur_units is None):  dur_units = 'days'
+    if (dur_units is None):  dur_units  = 'days'
     #------------------------------------------------          
 #     if (end_date is None):   end_date   = '2014-12-31'
 #     if (end_time is None):   end_time   = '23:30:00'
@@ -181,13 +182,24 @@ def get_duration(start_date=None, start_time=None,
 #               
 #     return (duration, dur_units)
      
-#   get_duration()
+#   get_duration()   
 #--------------------------------------------------------------------
 def get_current_datetime( start_datetime, time, time_units ):
-
+    
     start_datetime_obj = get_datetime_obj_from_one_str( start_datetime )
+    #-----------------------------------------------------------
+    # Modified next function to use dateutil.relativedelta vs.
+    # datetime.timedelta to get support for months and years.
+    # This was needed to write datetimes to netCDF when
+    # time_units was equal to 'months'. (2022-02-18)
+    #-----------------------------------------------------------
     datetime = get_datetime_from_time_since(start_datetime_obj,
                             time, units=time_units)
+                            
+    #-----------------------------------------------------
+    # The return type is: <class 'datetime.datetime'>
+    # Wrap result with "str()" before writing to netCDF.
+    #-----------------------------------------------------
     return datetime
 
 #   get_current_datetime()
@@ -341,12 +353,47 @@ def get_time_since_from_datetime(origin_datetime_obj,
 #--------------------------------------------------------------------                       
 def get_datetime_from_time_since(origin_datetime_obj,
                            time_since, units='days'):
-                                         
+
     # For testing
 #         print('## type(times_since) =', type(time_since) )
 #         print('## time_since =', time_since )
 #         print('## int(time_since) =', int(time_since) )
-    
+
+    #---------------------------------------------------   
+    # Note: Use: dateutil.relativedelta.relativedelta:
+    #       https://dateutil.readthedocs.io/en/stable/
+    #-----------------------------------------------------------
+    # Note: Unlike datetime.timedelta, dateutil.relativedelta
+    #       accepts numpy types (e.g. np.int16, np.float32),
+    #       and supports weeks, months, & years.  A month is
+    #       not a fixed length of time, unlike most other
+    #       date/time units.
+    #-----------------------------------------------------------
+    delta = None
+    time_since2 = float(time_since)  # (may not be needed)
+    #------------------------------------------------------
+    if (units == 'years'):
+        delta = relativedelta( years=time_since2 )  
+    if (units == 'months'):
+        delta = relativedelta( months=time_since2 )  
+    if (units == 'weeks'):
+        delta = relativedelta( weeks=time_since2 )    
+    if (units == 'days'):
+        delta = relativedelta( days=time_since2 )
+    if (units == 'hours'):
+        delta = relativedelta( hours=time_since2 )
+    if (units == 'minutes'):
+        delta = relativedelta( minutes=time_since2 )
+    if (units == 'seconds'):
+        delta = relativedelta( seconds=time_since2 )
+    #-----------------------------------------------------------
+    # This should also work.
+    # delta = eval("relativedelta(" + units + "=timesince2""))
+    #-----------------------------------------------------------
+    if (delta is None):
+        msg = '### ERROR: Units: ' + units + ' not supported.'
+        return origin_obj
+        
     #---------------------------------------------------   
     # Note: datetime.timedelta() can take integer or
     #       float arguments, and the arguments can be
@@ -355,28 +402,35 @@ def get_datetime_from_time_since(origin_datetime_obj,
     #       int (e.g. np.int16, np.float32).
     #  https://docs.python.org/3/library/datetime.html
     #---------------------------------------------------
-    delta = None
-    time_since2 = float(time_since)  ## No numpy types
-    #------------------------------------------------------    
-    if (units == 'days'):
-        delta = datetime.timedelta( days=time_since2 )
-    if (units == 'hours'):
-        delta = datetime.timedelta( hours=time_since2 )
-    if (units == 'minutes'):
-        delta = datetime.timedelta( minutes=time_since2 )
-    if (units == 'seconds'):
-        delta = datetime.timedelta( seconds=time_since2 )
-    #------------------------------------------------------
-    if (delta is None):
-        msg = 'ERROR: Units: ' + units + ' not supported.'
-        return
+    # Note: This routine doesn't work for 'months' &
+    #       'years', but see get_current_datetime()
+    #---------------------------------------------------
+#     delta = None
+#     time_since2 = float(time_since)  ## No numpy types
+#     #------------------------------------------------------    
+#     if (units == 'days'):
+#         delta = datetime.timedelta( days=time_since2 )
+#     if (units == 'hours'):
+#         delta = datetime.timedelta( hours=time_since2 )
+#     if (units == 'minutes'):
+#         delta = datetime.timedelta( minutes=time_since2 )
+#     if (units == 'seconds'):
+#         delta = datetime.timedelta( seconds=time_since2 )
+#     #------------------------------------------------------
+#     if (delta is None):
+#         msg = '### ERROR: Units: ' + units + ' not supported.'
+#         return origin_obj
 
     # For testing
     ## print('#### delta =', delta)
     
     #---------------------------------------------        
     # Create new datetime object from time_since
+    # This is used by: get_current_datetime().
     #---------------------------------------------
+    # The return type is:
+    # <class 'datetime.datetime'>
+    #---------------------------------------------    
     origin_obj = origin_datetime_obj
     new_dt_obj = (origin_obj + delta)
     return new_dt_obj
@@ -407,7 +461,7 @@ def get_month_difference(start_datetime_obj, end_datetime_obj ):
     months = months + end_month
     ## months = months + 1  # (no: get 1 if dates same)
     ## print('month difference =', months)
-    return months
+    return float(months)   # see get_duration() re: float()
 
 #   get_month_difference()
 #--------------------------------------------------------------------

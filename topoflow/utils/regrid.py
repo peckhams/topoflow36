@@ -396,15 +396,24 @@ def regrid_geotiff(in_file=None, out_file=None,
             in_unit  = None   # Close in_file
             return
 
-    #------------------------------------------------  
+    #-------------------------------------------------  
     # Resample & clip and write new grid to GeoTIFF
-    #------------------------------------------------
+    #-------------------------------------------------
+    # It seems SRTM and MERIT DEMs both use a nodata
+    # value of -9999.0, but "in_nodata" is set to 
+    # None in the source TIF DEM.  Next line fixes
+    # an issue for NE corner of Awash River DEM, and
+    # out_nodata becomes same as in_nodata.
+    #-------------------------------------------------
+    if (in_nodata is None):
+        in_nodata = -9999.0
+    ## print('##### in_nodata =', in_nodata)
     out_unit = gdal.Warp( out_file, in_unit,
         format = 'GTiff',  # (output format string)
         outputBounds=out_bounds,
         xRes=out_xres_deg, yRes=out_yres_deg,
-        # srcNodata = in_nodata,      ########  FUTURE
-        # dstNodata = out_nodata,     ########  FUTURE
+        srcNodata = in_nodata, #### 2022-05-02
+        # dstNodata = out_nodata,    ## equals in_nodata, by default
         resampleAlg = resample_algo )
 
     #-----------------------
@@ -1354,7 +1363,7 @@ def create_rts_from_chirps_files( rts_file='TEST.rts',
            DEM_bounds=None, DEM_xres_sec=None, DEM_yres_sec=None,
            DEM_ncols=None, DEM_nrows=None,
            VERBOSE=False, SILENT=False, NON_NEGATIVE=True):
-    
+
     #------------------------------------------------------
     # Note: See function above for resampling algorithms.
     #------------------------------------------------------
@@ -1585,11 +1594,12 @@ def create_rts_from_chirps_files( rts_file='TEST.rts',
         count += 1
         if not(SILENT):  print('count =', count)
 
-    #---------------------
-    # Close the RTS file
-    #---------------------
+    #----------------------------------
+    # Close the RTS file and tmp_file
+    #----------------------------------
     rts_unit.close()
-    os.remove( tmp_file )   # TEMP.tif
+    if (os.path.exists( tmp_file )):
+        os.remove( tmp_file )   # TEMP.tif
 
     #---------------------------------------
     # Create an RTI file for this RTS file

@@ -1,10 +1,11 @@
 #   
-#  Copyright (c) 2020, Scott D. Peckham
+#  Copyright (c) 2020-2022, Scott D. Peckham
 #
 #  Note: This file contains a set of functions for visualizing the
 #        contents of output files in netCDF format
 #        (e.g. TopoFlow or Stochastic Conflict Model)
 #
+#  Feb 2022.  create_visualization_files -> create_media_files.
 #  Oct 2021.  create_visualization_files().
 #  Sep 2021.  Added LAND_SEA_BACKDROP option: show_grid_as_image() 
 #  May 2020.  Moved all routines from Jupyter notebook called
@@ -22,6 +23,7 @@
 #  power_stretch3()
 #  log_stretch()
 #  linear_stretch()
+#  tanh_stretch()     # (2022-05-02, for slope grids)
 #  stretch_grid()
 #
 #  Define functions to show grids as color images:
@@ -48,19 +50,26 @@
 #      after topoflow_driver.finalize() to create images
 #      and movies from netCDF output files.
 #
-#  create_visualization_files()    2021-10
-#  delete_png_files()              2021-10
+#  get_image_dimensions()   2022-05
+#  create_media_files()     2021-10
+#  create_output_movies()   2022-02-23  (separate function)
+#  create_stat_movies()     2022-02-23  (separate function)
+#  create_met_movies()      2022-02-17  (separate function)
+#  delete_png_files()       2021-10
 #
 #--------------------------------------------------------------------
 # import os.path
 # import shutil
 
-import glob, os, os.path
+import glob, os, os.path, time
+import datetime as dt  #########
 import numpy as np
 
 import matplotlib.pyplot as plt
+import matplotlib.dates as mdates   ##### 2022-04-30
 from matplotlib import cm
 from matplotlib.colors import ListedColormap
+from mpl_toolkits.axes_grid1 import make_axes_locatable  #########
 import imageio
 
 from topoflow.utils import ncgs_files
@@ -68,6 +77,7 @@ from topoflow.utils import ncts_files
 from topoflow.utils import ncps_files
 from topoflow.utils import rtg_files
 from topoflow.utils import rts_files
+from topoflow.utils import time_utils as tu
 
 #--------------------------------------------------------------------
 def normalize_grid( grid ): 
@@ -93,14 +103,19 @@ def histogram_equalize( grid, PLOT_NCS=False):
 
     cs  = hist.cumsum()
     ncs = (cs - cs.min()) / (cs.max() - cs.min())
-    ncs.astype('uint8');
-    ############## ncs.astype('uint8') # no semi-colon at end ??????????
+    ncs.astype('uint8')
+
     if (PLOT_NCS):
         plt.plot( ncs )
 
     flat = grid.flatten()
-    flat2 = np.uint8( 255 * (flat - flat.min()) / (flat.max() - flat.min()) )
-    grid2 = ncs[ flat2 ].reshape( grid.shape )
+    if (flat.max() != flat.min()):
+        flat2 = np.uint8( 255 * (flat - flat.min()) / (flat.max() - flat.min()) )
+        grid2 = ncs[ flat2 ].reshape( grid.shape )
+    else:
+        flat2 = np.zeros( flat.size, dtype='uint8' )
+        grid2 = ncs[ flat2 ].reshape( grid.shape )
+
     return grid2
 
 #   histogram_equalize()
@@ -146,6 +161,19 @@ def linear_stretch( grid ):
    
 #   linear_stretch()
 #--------------------------------------------------------------------
+def tanh_stretch( grid, a=2 ):
+
+    # Seems good for slope grids
+    #-----------------------------------
+    # This stretch maps [0,1] to [0,1]
+    # and has y[0]=0, y[1]=1.
+    #-----------------------------------
+    norm = normalize_grid( grid )
+    denom = np.tanh( a )
+    return np.tanh( a * norm ) / denom
+       
+#   tanh_stretch()
+#--------------------------------------------------------------------
 def stretch_grid( grid, stretch, a=1, b=2, p=0.5 ):
 
     name = stretch
@@ -166,6 +194,8 @@ def stretch_grid( grid, stretch, a=1, b=2, p=0.5 ):
     elif (name == 'power3'):        
         # Try:  a=1, b=2.
         grid2 = power_stretch3( grid, a=a, b=b)
+    elif (name == 'tanh'):
+        grid2 = tanh_stretch( grid, a=a)
     else:
         print('### SORRY, Unknown stretch =', name)
         return grid
@@ -175,7 +205,7 @@ def stretch_grid( grid, stretch, a=1, b=2, p=0.5 ):
 #   stretch_grid()
 #--------------------------------------------------------------------
 #--------------------------------------------------------------------
-def read_grid_from_nc_file( nc_file, time_index=1, REPORT=True ):
+def read_grid_from_nc_file( nc_file, time_index=0, REPORT=True ):
 
     # Typical 2D nc files
     # nc_file = case_prefix + '_2D-Q.nc'
@@ -192,21 +222,26 @@ def read_grid_from_nc_file( nc_file, time_index=1, REPORT=True ):
         print('var_names in netCDF file =' )
         print( var_name_list )
 
+    var_name_list = ncgs.get_var_names( no_dim_vars=True )  ####
+    var_index = 0   # (dim vars are now excluded)
+    var_name  = var_name_list[ var_index ]
+    
     #----------------------------         
     # Determine valid var_index
     #-----------------------------------------
     # Old: 0=time, 1=X, 2=Y, 3=V
     # New: 0=time, 1=datetime, 2=X, 3=Y, 4=V
     #-----------------------------------------
-    var_index = 1
-    other_vars = ['time','datetime','X','Y','Z']
-    while (True):
-        var_name = var_name_list[ var_index ]
-        if (var_name not in other_vars):
-            break
-        var_index += 1    
+    # var_index = 1
+    # other_vars = ['time','datetime','X','Y','Z']
+    # while (True):
+    #     var_name = var_name_list[ var_index ]
+    #     if (var_name not in other_vars):
+    #         break
+    #     var_index += 1    
     ### var_index = 3   # 0=time, 1=X, 2=Y, 3=V  ###############
     ### var_name  = var_name_list[ var_index ]
+    
     long_name = ncgs.get_var_long_name( var_name )
     var_units = ncgs.get_var_units( var_name )
     n_grids   = ncgs.ncgs_unit.variables[ var_name ].n_grids
@@ -278,39 +313,64 @@ def read_and_show_rtg( rtg_filename, long_name, VERBOSE=True,
 def show_grid_as_image( grid, long_name, extent=None,
                         cmap='rainbow', BLACK_ZERO=False,
                         LAND_SEA_BACKDROP=False,
-                        stretch='power3',
-                        a=1, b=2, p=0.5,
+                        stretch='power3', a=1, b=2, p=0.5,
+                        subtitle=None, nodata=-9999.0,  ####
+                        ## units='unknown units',
                         NO_SHOW=False, im_file=None,
-                        xsize=8, ysize=8, dpi=None): 
+                        xsize=4, ysize=4, dpi=None): 
+                        #### xsize=8, ysize=8, dpi=None): 
 
+    #-------------------------------------------------------------
+    # Note:  Seem to have a memory issue while creating movies.
+    #        Crashes with message: "zsh: killed python ..."
+    #        Changed xsize & ysize from 8 to 4. (2021-11-18).
+    #        If problem is with ffmpeg, may be able to use
+    #        indexmem and rtbufsize flags to increase memory.
+    #        Actually seems due to issue just below.
+    #-------------------------------------------------------------
+    # Note:  When an image is used to make a movie, then size of
+    #        image in pixels MUST be a multiple of the so-called
+    #        macro_block_size = 16. Image_xsize = dpi * xsize2D.
+    #        Image_ysize = dpi * ysize2D.  Note:  192 = 16 * 12.
+    #        If dpi=192, xsize=4 and ysize=3.3333=(10/3), then:
+    #        Image_xsize = 192 * 4 = 768 = 16 * 48,
+    #        Image_ysize = 192 * (10/3) = 640 = 16 * 40, 
+    #        4/(10/3) = 1.2 and 768/640 = 1.2.
+    #        See: show_grid_as_image().
+    #-------------------------------------------------------------                        
+    # Note:  xsize=4, ysize=3.3333 works pretty well for:
+    #        Baro River (Eth.):  ncols = 134, nrows = 129.
+    #        Tana River (Kenya): ncols = 131, nrows = 115.
+    #        Awash River (Eth.): ncols = 163, nrows = 141.
+    #        Must accommodate, axes labels and colorbar. 
+    #-------------------------------------------------------------
     # Note:  extent = [minlon, maxlon, minlat, maxlat]
-    
+    #-------------------------------------------------------------
+        
     #-------------------------
     # Other color map names
     #--------------------------------------------
     # hsv, jet, gist_rainbow (reverse rainbow),
     # gist_ncar, gist_stern
-    #--------------------------------------------    
+    #--------------------------------------------
 
-    #--------------------------
-    # Other stretch functions
-    #--------------------------
+    #------------------------------------   
+    # Record locations of nodata values
+    #---------------------------------------------------------
+    # Remove nodata values so they don't affect the stretch.
+    # Will later change nodata values to NaNs in grid2,
+    # and they will be colored white.
+    #---------------------------------------------------------
+    w_nodata = (grid <= nodata)  # boolean array
+    emin = grid[ grid > nodata ].min()
+    grid[ w_nodata ] = emin
+     
+    #-----------------------------
+    # Apply a "stretch function"
+    #-----------------------------
     grid2 = stretch_grid( grid, stretch, a=a, b=b, p=p )
-#     if (stretch == 'power_stretch3'):
-#         grid2 = power_stretch3( grid, a=0.5 )
-#     elif (stretch == 'power_stretch1a'):   
-#         grid2 = power_stretch1( grid, 0.5)
-#     elif (stretch == 'power_stretch1b'):
-#         grid2 = power_stretch1( grid, 0.2)
-#     elif (stretch == 'power_stretch2'):
-#         grid2 = power_stretch2( grid )
-#     elif (stretch == 'log_stretch'):
-#         grid2 = log_stretch( grid )
-#     elif (stretch == 'hist_equal'):
-#         grid2 = histogram_equalize( grid, PLOT_NCS=True)
-#     else:
-#         print('SORRY, Unknown stretch =', stretch)
-#         return 
+    if ('float' in str(grid2.dtype)):
+        grid2[ w_nodata ] = np.nan  # won't work for ints
 
     #---------------------------------------
     # Modify the colormap (0 = black) ?
@@ -343,31 +403,146 @@ def show_grid_as_image( grid, long_name, extent=None,
         new_colors[255,:] = sea_blue
         new_cmap = ListedColormap( new_colors )
     else:
-        new_cmap = cmap
-    
+        # Note that cmap keyword is a string.
+        n_colors = 256
+        color_map  = cm.get_cmap( cmap, n_colors )
+        new_colors = color_map( np.linspace(0, 1, n_colors) )
+        new_cmap = ListedColormap( new_colors )
+    #------------------------------------------------------
+    # Also see "set_under" and "set_over":
+    # https://matplotlib.org/3.5.0/api/_as_gen/matplotlib.colors.Colormap.html
+    #------------------------------------------------------
+    new_cmap.set_bad( color = 'white')  # to color Nans white
+
+    #--------------------
+    # Set the fontsizes
+    #------------------------------------------------------------------
+    # fontsizes = ['xx-small', 'x-small', 'small', 'medium', 'large', 
+    #              'x-large', 'xx-large', 'larger', 'smaller']
+    #------------------------------------------------------------------
+#     fontsize1 = 'large'
+#     fontsize2 = 'medium'
+#     fontsize3 = 'small'
+    #---------------------
+#     fontsize1 = 12
+#     fontsize2 = 10
+#     fontsize3 = 8
+    #------------
+    # Use these
+    #------------    
+    fontsize1 = 10
+    fontsize2 = 8
+    fontsize3 = 6
+
+    #-----------------------------------------------
+    # Compute best ysize for a given xsize, taking
+    # ncols, nrows, labels, colorbar into account
+    #-----------------------------------------------
+    # ncols = 131, nrows = 115
+    # Best xsize = 4, ysize = 3.1 (but 3.1 bad for movie)
+    #-----------------------------------------------------
+    # im_xsize / im_ysize = ncols / nrows
+    # fig_xsize = im_xsize + left_margin + right_margin 
+    # fig_ysize = im_ysize + bottom_margin + top_margin
+    #-----------------------------------------------------
+    # aspect_ratio = 131.0 / 115  # (ncols / nrows)
+    # ysize = xsize / aspect_ratio
+
+    #-------------------------------------------------    
+    # For Tana River basin, use xsize=4, ysize=3.333
+    #-------------------------------------------------
+    if (ysize > 3.3) and (ysize < 3.334):
+        ysize = 10/3.0
+        
     #----------------------------
     # Set up and show the image
     #----------------------------
-    # figure = plt.figure(1, figsize=(xsize, ysize))
+    # figure = plt.figure(1, figsize=(xsize, ysize), dpi=dpi)
     fig, ax = plt.subplots( figsize=(xsize, ysize), dpi=dpi)
     im_title = long_name.replace('_', ' ').title()
-    ax.set_title( im_title )
-    ax.set_xlabel('Longitude [deg]')
-    ax.set_ylabel('Latitude [deg]')
+    acronyms = ['Chirps', 'Gpm', 'Gldas', 'Dem']
+    for word in acronyms:
+        if (word in im_title):
+            im_title = im_title.replace(word, word.upper())
+    ax.set_xlabel('Longitude [deg]', fontsize=fontsize2)
+    ax.set_ylabel('Latitude [deg]', fontsize=fontsize2)
+    ax.tick_params(axis='both', labelsize=fontsize2)
 
-    gmin = grid2.min()
-    gmax = grid2.max()
-
+    #---------------------    
+    # Adjust the margins
+    #---------------------
+    # plt.margins(x=0.25, y=0.05)  # doesn't work??
+    # This works well for xsize=4, ysize=3.1
+    plt.subplots_adjust(left=0.15, bottom=0.05, right=0.85, top=0.95)
+    
+    #-------------------------
+    # Add title and subtitle
+    #-------------------------
+    ## subtitle = '2021-01-10'  # for testing
+    if (subtitle is not None):
+        # Spacing is affected by image ysize
+        #plt.suptitle(im_title, fontsize=fontsize1)
+        #plt.title( subtitle, fontsize=fontsize2 )
+        ## plt.suptitle(im_title, fontsize=fontsize1, y=0.925)
+        #---------------------------------------
+        # This method does better with margins
+        #---------------------------------------
+        new_title = im_title + '\n' + subtitle
+        plt.title( new_title, fontsize=fontsize2 )
+    else:
+        plt.title( im_title, fontsize=fontsize1 )
+        # plt.title( im_title )
+        # plt.title( im_title, fontsize=14)
+        # ax.set_title( im_title )     
+    gmin = np.nanmin( grid2 )  # ignore NaNs
+    gmax = np.nanmax( grid2 )
     im = ax.imshow(grid2, interpolation='nearest', cmap=new_cmap,
                    vmin=gmin, vmax=gmax, extent=extent)
 
+    #----------------------------------------------
+    # Compute tick labels (in unstretched values)
+    #---------------------------------------------
+    # Change NaN back to nodata for this to work
+    #---------------------------------------------
+    grid2[ w_nodata ] = -9999.0   ## Need this!
+    ## tickLocs = np.linspace(gmin, gmax, 8)
+    tickLocs = np.linspace(gmin, gmax, 10)
+    cbarLabels = []
+    unStretched = grid
+    for val in tickLocs:
+        idx = np.abs(grid2.flatten() - val).argmin()
+        # print(idx, unStretched.flatten()[idx])
+        if ('int' in str(grid.dtype)):
+            cbarLabels.append("%d"%(unStretched.flatten()[idx]))    ####### TEST THIS!
+        else:
+            cbarLabels.append("%.3f"%(unStretched.flatten()[idx]))
+        ## cbarLabels.append("%.2f"%(unStretched.flatten()[idx]))
+   
+    #----------------
+    # Add a colorbar
+    #----------------
+    # https://matplotlib.org/stable/tutorials/colors/colorbar_only.html
+    # https://stackoverflow.com/questions/32462881/add-colorbar-to-existing-axis
+    divider = make_axes_locatable(ax)
+    cax = divider.append_axes("right", size="5%", pad=0.1)
+    cbar = fig.colorbar(im, cax=cax, ticks=tickLocs)
+    cax.set_yticklabels(cbarLabels, fontsize=fontsize3)
+    #------------------------------------
+    # Similar, but can't add cbarLabels
+    #------------------------------------
+    # cbar = fig.colorbar(im, ax=ax, ticks=tickLocs, pad=0.03,
+    #                     shrink=0.8, label='units')
+                        # yticklabels=cbarLabels)  # doesn't work
+    ## cbar.cax.set_yticklabels(cbarLabels)  # doesn't work  
+             
     #--------------------------------------------------------        
     # NOTE!  Must save before "showing" or get blank image.
     #        File format is inferred from extension.
     #        e.g. TMP_Image.png, TMP_Image.jpg.
     #--------------------------------------------------------
-    if (im_file is not None):  
-        plt.savefig( im_file )
+    if (im_file is not None):
+        plt.savefig( im_file, dpi=dpi )
+        ## plt.savefig( im_file )  # dpi defaults to "figure"
     else:
         plt.show()   # Ignore NO_SHOW arg for now.   
     #-----------------------------------------------
@@ -397,8 +572,17 @@ def show_grid_as_image( grid, long_name, extent=None,
 def save_grid_stack_as_images( nc_file, png_dir, extent=None,
               stretch='power3', a=1, b=2, p=0.5,
               cmap='rainbow', REPORT=True,
-              xsize=6, ysize=6, dpi=192 ):
+              BLACK_ZERO=False, LAND_SEA_BACKDROP=False,
+              xsize=4, ysize=4, dpi=192 ):
 
+    #------------------------------------------------------------
+    # Note:  Seem to have a memory issue while creating movies.
+    #        Crashes with message: "zsh: killed python ..."
+    #        Changed xsize & ysize from 6 to 4. (2021-11-18).
+    #        If problem is with ffmpeg, may be able to use
+    #        indexmem and rtbufsize flags to increase memory.
+    #------------------------------------------------------------
+    
     # Example nc_files:
     # nc_file = case_prefix + '_2D-Q.nc'
     # nc_file = case_prefix + '_2D-d-flood.nc'
@@ -410,10 +594,28 @@ def save_grid_stack_as_images( nc_file, png_dir, extent=None,
     ncgs = ncgs_files.ncgs_file()        
     ncgs.open_file( nc_file )
     var_name_list = ncgs.get_var_names( no_dim_vars=True )  ####
-    var_index = 0   # (dim vars are now excluded)
-    var_name  = var_name_list[ var_index ]
-    long_name = ncgs.get_var_long_name( var_name )
-    n_grids   = ncgs.ncgs_unit.variables[var_name].n_grids
+    var_index  = 0   # (dim vars are now excluded)
+    var_name   = var_name_list[ var_index ]
+    long_name  = ncgs.get_var_long_name( var_name )
+    n_grids    = ncgs.ncgs_unit.variables[var_name].n_grids
+    datetimes  = ncgs.ncgs_unit.variables[ 'datetime' ]  ########
+    #---------------------------------------
+    start_year = str(datetimes[0])[:4]
+    # end_year   = str(datetimes[-1])[:4]     # Is also 2005 for stats...
+    end_year   = '2015'                       ##### TEMP FIX #####
+    years_str  = start_year + '-' + end_year
+    month_map  = {1:'Jan', 2:'Feb', 3:'Mar', 4:'Apr', 5:'May', 6:'Jun',
+                  7:'Jul', 8:'Aug', 9:'Sep', 10:'Oct', 11:'Nov', 12:'Dec'}
+
+    #-----------------------------------------------
+    # MINT netCDF conventions:
+    #    bounds = [minlon, minlat, maxlon, maxlat]
+    # For matplotlib.pyplot.imshow():
+    #    extent = [minlon, maxlon, minlat, maxlat]
+    #-----------------------------------------------
+    if (extent is None):
+        bounds = ncgs.ncgs_unit.geospatial_bounds 
+        extent = [ bounds[0], bounds[2], bounds[1], bounds[3]]
 
     im_title = long_name.replace('_', ' ').title()
     im_file_prefix = 'TF_Grid_Movie_Frame_'
@@ -436,6 +638,24 @@ def save_grid_stack_as_images( nc_file, png_dir, extent=None,
             grid = ncgs.get_grid( var_name, time_index )
         except:
             break
+
+        #-------------------------------------            
+        # Prepare subtitle w/ date for image
+        #-------------------------------------
+        datetime = datetimes[ time_index ]
+        if ('2D-month' in nc_file):
+            month_num = int(str(datetime)[5:7])
+            month_str = month_map[ month_num ] + ': '
+            subtitle = 'Average for ' + month_str + years_str
+        elif ('days-per-month' in nc_file):
+            datetime = datetime[:10]   # (just the date)
+            subtitle = str(datetime)
+        elif ('pop-1-or-more' in nc_file):
+            datetime = datetime[:10]   # (just the date)
+            subtitle = str(datetime)
+        else:
+            subtitle = str(datetime)
+        #-----------------------------
         time_index += 1
 
         #----------------------------------------    
@@ -450,8 +670,12 @@ def save_grid_stack_as_images( nc_file, png_dir, extent=None,
         show_grid_as_image( grid, long_name, cmap=cmap,
                             stretch=stretch, a=a, b=b, p=p, 
                             extent=extent,
+                            BLACK_ZERO=BLACK_ZERO,
+                            LAND_SEA_BACKDROP=LAND_SEA_BACKDROP,
                             NO_SHOW=True, im_file=im_file,
-                            xsize=xsize, ysize=ysize, dpi=dpi )
+                            subtitle=subtitle,
+                            xsize=xsize, ysize=ysize,
+                            dpi=dpi )  ## dpi=None
                             
     ncgs.close_file()
     tstr = str(time_index)
@@ -466,7 +690,10 @@ def save_rts_as_images( rts_file, png_dir, extent=None,
                         stretch='power3', a=1, b=2, p=0.5,
                         cmap='rainbow', BLACK_ZERO=False,
                         REPORT=True,
-                        xsize=6, ysize=6, dpi=192):
+                        start_datetime='2015-10-01 00:00:00',
+                        time_interval_hours=6,
+                        xsize=4, ysize=4, dpi=192 ):
+                        ### xsize=6, ysize=6, dpi=192):
 
     # Example rts_files:
     # rts_file = case_prefix + '_2D-Q.rts'
@@ -501,6 +728,7 @@ def save_rts_as_images( rts_file, png_dir, extent=None,
         print('Working...')
         
     time_index = 0
+    time_units = 'hours'
     rts_min = 1e12
     rts_max = 1e-12
 
@@ -514,21 +742,29 @@ def save_rts_as_images( rts_file, png_dir, extent=None,
             rts_max = max( rts_max, gmax )
         except:
             break
-        time_index += 1
 
         #----------------------------------------    
         # Build a filename for this image/frame
         #----------------------------------------
-        tstr = str(time_index)
+        tstr = str(time_index + 1)
         pad = time_pad_map[ len(tstr) ]
         time_str = (pad + tstr)
         im_file = im_file_prefix + time_str + '.png' 
         im_file = (png_dir + '/' + im_file)
-                
+
+        #---------------------------------------------
+        # Create a timestamp subtitle for this image
+        #---------------------------------------------
+        time = (time_index * time_interval_hours)
+        current_datetime = tu.get_current_datetime( start_datetime, time, time_units )
+        subtitle = str(current_datetime)
+        time_index += 1
+
         show_grid_as_image( grid, long_name, cmap=cmap,
                             stretch=stretch, a=a, b=b, p=p,
                             BLACK_ZERO=BLACK_ZERO, extent=extent,
                             NO_SHOW=True, im_file=im_file,
+                            subtitle=subtitle,
                             xsize=xsize, ysize=ysize, dpi=dpi )
 
     rts.close_file()
@@ -542,7 +778,8 @@ def save_rts_as_images( rts_file, png_dir, extent=None,
 #--------------------------------------------------------------------
 def plot_time_series(nc_file, output_dir=None, var_index=0,
                      marker=',', REPORT=True, xsize=11, ysize=6,
-                     im_file=None):
+                     im_file=None, start_date=None, end_date=None,
+                     time_interval_hours=6):
 
     # Example nc_files:
     # nc_file = case_prefix + '_0D-Q.nc'
@@ -568,10 +805,10 @@ def plot_time_series(nc_file, output_dir=None, var_index=0,
     ncts = ncts_files.ncts_file()
     ncts.open_file( nc_file )
     var_name_list = ncts.get_var_names( no_dim_vars=True )
+    var_index     = 0  # now dim vars are excluded
+    var_name      = var_name_list[ var_index ]
     lon_list      = ncts.get_var_lons()
     lat_list      = ncts.get_var_lats()
-
-    var_name = var_name_list[ var_index ]
 
     if (REPORT):
         print( 'var_names in netCDF file =' )
@@ -620,10 +857,47 @@ def plot_time_series(nc_file, output_dir=None, var_index=0,
 
     y_name = long_name.replace('_', ' ').title()
 
-    plt.plot( times, values, marker=marker)
-    plt.xlabel( 'Time' + ' [' + t_units + ']' )
-    plt.ylabel( y_name + ' [' + v_units + ']' )
-    plt.ylim( np.array(ymin, ymax) )
+    ### start_date = '2005-01-01'  # for testing
+    ### end_date   = '2015-01-01'  # for testing
+    if (start_date is not None):
+        #--------------------------------------------
+        # Tick labels on x-axis are dates
+        # Plot a tick every 2 months w/ MonthLocator
+        #   if time range is 3 years.
+        #---------------------------------------------
+        times = np.arange(np.datetime64( start_date ),
+                          np.datetime64( end_date),
+                          np.timedelta64( time_interval_hours, 'h'))
+        n_times = len(times)
+        #-------------------------------------------------------------------
+        start_date_obj = dt.datetime.strptime( start_date, '%Y-%m-%d' )
+        end_date_obj   = dt.datetime.strptime( end_date,   '%Y-%m-%d' )
+        n_months = tu.get_month_difference( start_date_obj, end_date_obj )
+        n_ticks  = 20
+        interval = np.int16( np.ceil( n_months / n_ticks ) )
+        print('interval =', interval)
+        #-------------------------------------------------------------------
+        # print('len(times)  =', n_times)
+        # print('len(values) =', len(values))
+        values = values[:n_times]  ###############
+        #---------------------------------------------
+        plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
+        plt.gca().xaxis.set_major_locator(mdates.MonthLocator( interval=interval ))
+        ## plt.gca().xaxis.set_major_locator(mdates.MonthLocator())  ## too crowded  
+        plt.plot( times, values, marker=marker)
+        plt.gcf().autofmt_xdate()  # Rotate the dates  ########
+        plt.xlabel( 'Date' )
+        plt.ylabel( y_name + ' [' + v_units + ']' )
+        plt.ylim( np.array(ymin, ymax) )
+    
+    #--------------------------------------------------       
+    # Tick labels on x-axis are elapsed time, in days
+    #--------------------------------------------------
+    else:    
+        plt.plot( times, values, marker=marker)
+        plt.xlabel( 'Time' + ' [' + t_units + ']' )
+        plt.ylabel( y_name + ' [' + v_units + ']' )
+        plt.ylim( np.array(ymin, ymax) )
 
     #--------------------------------------------------------        
     # NOTE!  Must save before "showing" or get blank image.
@@ -669,12 +943,11 @@ def plot_z_profile(nc_file, time_index=50,
  
     ncps = ncps_files.ncps_file()
     ncps.open_file( nc_file )
-    var_name_list = ncps.get_var_names()
-    lon_list      = ncps.get_var_lons()
-    lat_list      = ncps.get_var_lats()
-
-    var_index = 2  #### 0 = time, 1 = z, 2 = var
-    var_name = var_name_list[ var_index ]
+    var_name_list = ncgs.get_var_names( no_dim_vars=True )  ####
+    var_index = 0   # (dim vars are now excluded)
+    var_name  = var_name_list[ var_index ]
+    lon_list  = ncps.get_var_lons()
+    lat_list  = ncps.get_var_lats()
 
     if (REPORT):
         print( 'var_names in netCDF file =' )
@@ -747,9 +1020,10 @@ def save_profile_series_as_images(nc_file, png_dir=None,
          
     ncps = ncps_files.ncps_file()
     ncps.open_file( nc_file )
-    var_name_list = ncps.get_var_names()
-    var_index = 2   #### 0 = time, 1 = z, 2 = var
-    var_name  = var_name_list[ var_index ]
+
+    var_name_list = ncgs.get_var_names( no_dim_vars=True )  ####
+    var_index = 0   # (dim vars are now excluded)
+    var_name  = var_name_list[ var_index ]   
     long_name = ncps.get_var_long_name( var_name )
     ##  svo_name = ncps.get_var_svo_name( var_name )
 
@@ -969,50 +1243,149 @@ def plot_soil_profile( z, var, var_name='theta', qs=None,
 
 #   plot_soil_profile()
 #----------------------------------------------------------------------------
-def create_visualization_files( output_dir=None, topo_dir=None,
-                                site_prefix=None, case_prefix='Test1',
-                                movie_fps=10):
+def get_image_dimensions( ncols, nrows, dpi=192 ):
 
-    #------------------------------------------------
-    # Write a separate function to create movies
-    # from the rainfall grid stacks (RTS format) ??
-    #------------------------------------------------
+    #-------------------------------------------------------------
+    # Note:  When an image is used to make a movie, then size of
+    #        image in pixels must be a multiple of the so-called
+    #        macro_block_size = 16. Image_xsize = dpi * xsize2D.
+    #        Image_ysize = dpi * ysize2D.  Note:  192 = 16 * 12.
+    #        If dpi=192, xsize=4 and ysize=3.3333=(10/3), then:
+    #        Image_xsize = 192 * 4 = 768 = 16 * 48,
+    #        Image_ysize = 192 * (10/3) = 640 = 16 * 40, 
+    #        4/(10/3) = 1.2 and 768/640 = 1.2.
+    #        See: show_grid_as_image().
+    #-------------------------------------------------------------                        
+    # Note:  xsize=4, ysize=3.3333 works pretty well for:
+    #        Baro River (Eth.):  ncols = 134, nrows = 129.
+    #        Tana River (Kenya): ncols = 131, nrows = 115.
+    #        Awash River (Eth.): ncols = 163, nrows = 141.
+    #        NOT for Omo River (Eth.): nc = 99, nr = 151.
+    #        Must accommodate, axes labels and colorbar. 
+    #-------------------------------------------------------------
+    # xsize / ysize = (ncols / nrows)    # roughly
+    # ysize = xsize * (nrows / ncols)    # roughly
+    # im_xsize = xsize * dpi   # (must be multiple of 16)
+    # im_ysize = ysize * dpi   # (must be multiple of 16)
+    # If xsize = 4.0, and dpi=192, then
+    #    im_xsize = 768 = 48 * 16
+    # Possible im_ysizes = n * 16, and 48/n ~ ncols/nrows
+    # n = floor( float(nrows) / ncols) * 48 )
+    # im_ysize = n * 16
+    # ysize    = im_ysize / 192
+    #--------------------------------------------------------------
+    # Example: xsize = 4, n1 = 48, ncols = 131, nrows = 115.
+    #          n2 = 42, im_ysize = 42 * 16 = 672, ysize = 3.5
+    #--------------------------------------------------------------
+    # Example: xsize = 4, n1 = 48, ncols = 134, nrows = 129.
+    #          n2 = 46, im_ysize = 46 * 16 = 736, ysize = 3.83333
+    #--------------------------------------------------------------
+    # Example: xsize = 4, n1 = 48, ncols = 99, nrows = 151.
+    #          n2 = 73, im_ysize = 73 * 16 = 1168, ysize = 6.083333
+    #--------------------------------------------------------------
+    # Note:  fac is to adjust for width of color bar, etc.
+    #        ncols_pad is, too, and seems better.
+    #-------------------------------------------------------------- 
+    # ncols_pad = ncols
+    # fac = 0.87  # (0.85 is too low, 0.9 is too high)
+    #---------------------------------------------------
+    ncols_pad = (ncols + 20)
+    fac   = 1.0
+    xsize = 4.0
+    im_xsize = (xsize * dpi)
+    n1 = np.int16( im_xsize / 16 )
+    n2 = np.int16( np.floor( fac * n1 * nrows / ncols_pad) )
+    im_ysize = (n2 * 16)
+    ysize = (im_ysize / dpi)
+    
+    return (xsize, ysize)
+
+#   get_image_dimensions()
+#----------------------------------------------------------------------------
+def create_media_files( output_dir=None, media_dir=None,
+                        topo_dir=None, met_dir=None, misc_dir=None,
+                        site_prefix=None, case_prefix='Test1',
+                        movie_fps=10, dpi=192,
+                        DEM_ncols=None, DEM_nrows=None, ####
+                        xsize2D=4, ysize2D=3.333,
+                        start_date=None, end_date=None,  #####
+                        time_interval_hours=6):          #####
+
+    #-------------------------------------------------------------
+    # Note:  When an image is used to make a movie, then size of
+    #        image in pixels must be a multiple of the so-called
+    #        macro_block_size = 16. Image_xsize = dpi * xsize2D.
+    #        Image_ysize = dpi * ysize2D.  Note:  192 = 16 * 12.
+    #        If dpi=192, xsize=4 and ysize=3.3333=(10/3), then:
+    #        Image_xsize = 192 * 4 = 768 = 16 * 48,
+    #        Image_ysize = 192 * (10/3) = 640 = 16 * 40, 
+    #        4/(10/3) = 1.2 and 768/640 = 1.2.
+    #        See: show_grid_as_image().
+    #-------------------------------------------------------------                        
+    # Note:  xsize=4, ysize=3.3333 works pretty well for:
+    #        Baro River (Eth.):  ncols = 134, nrows = 129.
+    #        Tana River (Kenya): ncols = 131, nrows = 115.
+    #        Awash River (Eth.): ncols = 163, nrows = 141.
+    #        NOT for Omo River (Eth.): nc = 99, nr = 151.
+    #        Must accommodate, axes labels and colorbar. 
+    #-------------------------------------------------------------
     if (output_dir is None):
         print('SORRY, output_dir argument is required.')
         print()
         return
-    os.chdir(output_dir)
 
+    if (media_dir is None):
+        print('SORRY, media_dir argument is required.')
+        print()
+        return
+        
     if (topo_dir is None):
         print('SORRY, topo_dir argument is required.')
         print()
         return
-        
+
+    if (met_dir is None):
+        print('SORRY, met_dir argument is required.')
+        print()
+        return
+
+    if (misc_dir is None):
+        print('SORRY, misc_dir argument is required.')
+        print()
+        return
+              
     if (site_prefix is None):
         print('SORRY, site_prefix argument is required.')
         print()
         return
                
-    #-----------------------------
-    # Setup required directories
-    #-----------------------------
-    temp_png_dir = output_dir + 'temp_png/'
+    #------------------------------------
+    # Setup required output directories
+    #------------------------------------
+    temp_png_dir = media_dir + 'temp_png/'
     if not(os.path.exists( temp_png_dir )):
         os.mkdir( temp_png_dir )
     #-----------------------------------------
-    movie_dir = output_dir + 'movies/'
+    movie_dir = media_dir + 'movies/'
     if not(os.path.exists( movie_dir )):
         os.mkdir( movie_dir )
     #-----------------------------------------
-    image_dir = output_dir + 'images/'
+    image_dir = media_dir + 'images/'
     if not(os.path.exists( image_dir )):
         os.mkdir( image_dir )
-                
+
+    #---------------------------------
+    # Compute best xsize and ysize ?
+    #---------------------------------
+    if (DEM_ncols is not None) and (DEM_nrows is not None):
+        (xsize2D, ysize2D) = get_image_dimensions( DEM_ncols, DEM_nrows )
+              
     #---------------------------------------------
     # Create time series plot for all "0D" files
     # e.g. Discharge, Flood Depth, etc.
     # marker=',' means to use pixel as marker
-    #---------------------------------------------    
+    #---------------------------------------------
+    os.chdir( output_dir )    
     nc0D_file_list = glob.glob('*0D*nc')
     for nc_file in nc0D_file_list:
         im_file = nc_file.replace('.nc', '.png')
@@ -1021,8 +1394,10 @@ def create_visualization_files( output_dir=None, topo_dir=None,
         plot_time_series(nc_file, output_dir=output_dir,
                          var_index=var_index, marker=',',
                          REPORT=True, xsize=11, ysize=6,
-                         im_file=im_path)
-    
+                         im_file=im_path,
+                         start_date=start_date, end_date=end_date,  ####
+                         time_interval_hours=time_interval_hours)   ####
+                         
     #-----------------------------------------    
     # Create images for several single grids
     #-----------------------------------------
@@ -1034,6 +1409,8 @@ def create_visualization_files( output_dir=None, topo_dir=None,
     for rtg_file in rtg_file_list:
         if (rtg_file.endswith('_d8-area.rtg')):
             stretch = 'power3'
+        elif (rtg_file.endswith('_slope.rtg')):
+            stretch = 'tanh'
         else:
             stretch = 'hist_equal'
         #--------------------------------------------------
@@ -1045,34 +1422,183 @@ def create_visualization_files( output_dir=None, topo_dir=None,
         read_and_show_rtg( rtg_path, long_name, cmap='jet',
                            ### BLACK_ZERO=False,
                            stretch=stretch, VERBOSE=True,
-                           xsize=7, ysize=7, dpi=None,
+                           xsize=xsize2D, ysize=ysize2D, dpi=dpi,
                            im_file=im_path)
         print('Finished saving grid as image.')
         print('  ' + im_path )
         print()
-             
+
+    #-----------------------------------------    
+    # Create image for GPW-v4 pop count grid
+    #-----------------------------------------
+    os.chdir( misc_dir ) 
+    nc_file_list = glob.glob('*gpw*nc')
+    for nc_file in nc_file_list:
+        (grid, long_name, extent) = read_grid_from_nc_file( nc_file )
+                                       ### time_index=1, REPORT=True )
+        if ('gpw_v4' in nc_file):
+            im_file = site_prefix + '_gpw-v4-popcount.png'
+        else:
+            im_file = nc_file.replace('.nc', '.png')
+        
+        im_path = (image_dir + im_file)
+        show_grid_as_image( grid, long_name, extent=extent,
+                    cmap='rainbow',
+                    ## BLACK_ZERO=False,
+                    ## stretch='log', a=10,
+                    ## stretch='log', a=0.2,  # (best yet)
+                    stretch='log', a=0.1,  # (best yet)
+                    ## stretch='power2', a=1000, b=0.5,  # (not bad)
+                    ## stretch='power3', a=1, b=2, p=0.5,
+                    ## stretch='hist_equal', a=1, b=2, p=0.5,
+                    im_file=im_path,
+                    xsize=xsize2D, ysize=ysize2D, dpi=dpi)
+        print('Finished saving grid as image.')
+        print('  ' + im_path )
+        print()
+
+    ## return #######################################################
+      
+    #----------------------------------------------
+    # Create set of images and movie for all "2D"
+    # output files which contain grid stacks
+    # e.g. *_2D-Q.nc, *_2D-d-flood.nc'
+    #----------------------------------------------
+    create_output_movies(output_dir=output_dir, movie_dir=movie_dir,
+                         temp_png_dir=temp_png_dir,
+                         movie_fps=movie_fps, dpi=dpi, 
+                         xsize2D=xsize2D, ysize2D=ysize2D )
+
+    #----------------------------------------------
+    # Create set of images and movie for all "2D"
+    # stat files which contain grid stacks
+    #----------------------------------------------
+    create_stat_movies(stat_dir=None, movie_dir=movie_dir,
+                       temp_png_dir=temp_png_dir,
+                       movie_fps=movie_fps, dpi=dpi, 
+                       xsize2D=xsize2D, ysize2D=ysize2D )
+                                                    
+#     os.chdir( output_dir ) 
+#     nc2D_file_list = glob.glob('*2D*nc')
+#     for nc_file in nc2D_file_list:
+#         #------------------------------------------
+#         # Change the stretch for specific files ?
+#         #------------------------------------------
+#         # Use 'linear' for:
+#         # ('days-per-month' in nc_file)
+#         # nc_file.endswith('-d-flood.nc')
+#         # nc_file.endswith('-u.nc')
+#         #------------------------------------------
+#         stretch = 'linear'
+#         a=1;   b=2;   p=0.5
+#         if (nc_file.endswith('-Q.nc')):
+#             stretch = 'power3'
+#             a=1;  b=2
+#         elif (nc_file.endswith('-d.nc')):
+#             stretch = 'power3'
+#             a=1;  b=2
+#         elif ('pop-1-or-more' in nc_file):
+#             stretch = 'log'
+#             a = 0.2
+#   
+#         #------------------------------------
+#         # First, create a set of PNG images
+#         #------------------------------------
+#         save_grid_stack_as_images( nc_file, temp_png_dir,
+#                                    ##### extent=None,  # auto-computed
+#                                    stretch=stretch, a=a, b=b, p=p,
+#                                    cmap='rainbow', REPORT=True,
+#                                    xsize=xsize2D, ysize=ysize2D, dpi=dpi)
+# 
+#         #----------------------------------------------
+#         # Create movie from set of images in temp_png
+#         #----------------------------------------------
+#         # movie_fps = "frames per second"
+#         mp4_file = nc_file.replace('.nc', '.mp4')
+#         mp4_path = (movie_dir + mp4_file)
+#         create_movie_from_images( mp4_path, temp_png_dir,
+#                                   fps=movie_fps, REPORT=True)
+# 
+#         #-----------------------------------
+#         # Delete all PNG files in temp_png
+#         #-----------------------------------
+#         delete_png_files( temp_png_dir )
+
+    #-----------------------------------------------------
+    # Create set of images and movie for CHIRPS rainfall
+    # (or other meteorology) grid stacks in RTS format
+    #------------------------------------------------------
+    # Note: The problem with doing this here is that the
+    # met_dir may have many other RTS files for different
+    # time periods.  Calling create_met_movies() from
+    # met_base.finalize() is an option, but takes a long
+    # time and will affect model runtime, etc.
+    # Also, it doesn't need to be done after each run
+    # since those files don't change.
+    #------------------------------------------------------    
+    RAIN_MOVIES = False   # Movies can be very large
+    if (RAIN_MOVIES):
+        create_met_movies( met_dir=met_dir, media_dir=media_dir,
+                           movie_fps=10,
+                           xsize=xsize2D, ysize=ysize2D, dpi=dpi)
+                           ## xsize2D=4, ysize2D=4, dpi=192)
+
+#   create_media_files()
+#----------------------------------------------------------------------------
+def create_output_movies(output_dir=None, movie_dir=None,
+                         temp_png_dir=None,
+                         movie_fps=10,
+                         xsize2D=4, ysize2D=3.333, dpi=192):
+
+    if (output_dir is None):
+        print('SORRY, output_dir argument is required.')
+        print()
+        return
+    if (movie_dir is None):
+        print('SORRY, output_dir argument is required.')
+        print()
+        return
+    if (temp_png_dir is None):
+        print('SORRY, output_dir argument is required.')
+        print()
+        return
+        
     #----------------------------------------------
     # Create set of images and movie for all "2D"
     # files which contain grid stacks
     # e.g. *_2D-Q.nc, *_2D-d-flood.nc'
     #----------------------------------------------
+    os.chdir( output_dir ) 
     nc2D_file_list = glob.glob('*2D*nc')
     for nc_file in nc2D_file_list:
         #------------------------------------------
         # Change the stretch for specific files ?
         #------------------------------------------
-#         if nc_file.endswith('d-flood.nc'):
-#             cur_stretch = 'power3'
-#             stretch = 'hist_equal'
-            
+        # Use 'linear' for:
+        # ('days-per-month' in nc_file)
+        # nc_file.endswith('-d-flood.nc')
+        # nc_file.endswith('-u.nc')
+        #------------------------------------------
+        stretch = 'linear'
+        a=1;   b=2;   p=0.5
+        if (nc_file.endswith('-Q.nc')):
+            stretch = 'power3'
+            a=1;  b=2
+        elif (nc_file.endswith('-d.nc')):
+            stretch = 'power3'
+            a=1;  b=2
+        elif ('pop-1-or-more' in nc_file):
+            stretch = 'log'
+            a = 0.2
+  
         #------------------------------------
         # First, create a set of PNG images
         #------------------------------------
         save_grid_stack_as_images( nc_file, temp_png_dir,
                                    ##### extent=None,  # auto-computed
-                                   stretch='power3', a=1, b=2, p=0.5,
+                                   stretch=stretch, a=a, b=b, p=p,
                                    cmap='rainbow', REPORT=True,
-                                   xsize=8, ysize=8, dpi=192)
+                                   xsize=xsize2D, ysize=ysize2D, dpi=dpi)
 
         #----------------------------------------------
         # Create movie from set of images in temp_png
@@ -1086,11 +1612,121 @@ def create_visualization_files( output_dir=None, topo_dir=None,
         #-----------------------------------
         # Delete all PNG files in temp_png
         #-----------------------------------
-        ## time.sleep( 0.5 )  # Is this needed?
         delete_png_files( temp_png_dir )
-  
+        
+#   create_output_movies()
+#----------------------------------------------------------------------------
+def create_stat_movies(stat_dir=None, movie_dir=None,
+                       temp_png_dir=None,
+                       movie_fps=10, dpi=192, 
+                       xsize2D=4.0, ysize2D=3.333 ):
 
-#   create_visualization_files()
+    if (stat_dir is None):
+        stat_dir = '~/stats1/'
+        stat_dir = os.path.expanduser( stat_dir )
+
+    #------------------------------------------      
+    # Just need to set output_dir to stat_dir
+    #------------------------------------------    
+    create_output_movies(output_dir=stat_dir, movie_dir=movie_dir,
+                         temp_png_dir=temp_png_dir,
+                         movie_fps=movie_fps, dpi=dpi,
+                         xsize2D=xsize2D, ysize2D=ysize2D )
+        
+#   create_stat_movies() 
+#----------------------------------------------------------------------------
+def create_met_movies( met_dir=None, media_dir=None,
+                       movie_fps=10, dpi=192,
+                       DEM_ncols=None, DEM_nrows=None,
+                       xsize2D=4, ysize2D=3.333,
+                       start_datetime='2015-10-01 00:00:00',  ######
+                       time_interval_hours=6,  #######                          
+                       rts_files=None):  # list of RTS filenames in met_dir
+
+    if (media_dir is None):
+        print('SORRY, media_dir argument is required.')
+        print()
+        return
+
+    if (met_dir is None):
+        print('SORRY, met_dir argument is required.')
+        print()
+        return
+
+    #------------------------------------
+    # Setup required output directories
+    #------------------------------------
+    temp_png_dir = media_dir + 'temp_png/'
+    if not(os.path.exists( temp_png_dir )):
+        os.mkdir( temp_png_dir )
+    #----------------------------------------
+    movie_dir = media_dir + 'movies/'
+    if not(os.path.exists( movie_dir )):
+        os.mkdir( movie_dir )
+
+    #---------------------------------
+    # Compute best xsize and ysize ?
+    #---------------------------------
+    if (DEM_ncols is not None) and (DEM_nrows is not None):
+        (xsize2D, ysize2D) = get_image_dimensions( DEM_ncols, DEM_nrows )
+                              
+    #-----------------------------------------------------
+    # Create set of images and movie for CHIRPS rainfall
+    # (or other meteorology) grid stacks in RTS format
+    #-----------------------------------------------------
+    print('Creating movies for rainfall grid stacks...')
+    os.chdir( met_dir )
+    if (rts_files is None):
+        rts_files = glob.glob('*.rts')
+    for rts_file in rts_files:
+        #------------------------------------
+        # Generate long_name from filename
+        #------------------------------------
+        if ('CHIRPS' in rts_file):
+            long_name='CHIRPS Rainfall Rate'
+            time_interval_hours = 6   ########
+        ## elif ('GLDAS' in rts_file) and ('Rain' in rts_file):
+        elif ('GLDAS' in rts_file):
+            long_name='GLDAS Rainfall Rate'
+            time_interval_hours = 3   ########
+        ## elif ('GPM' in rts_file) and ('Rain' in rts_file):
+        elif ('GPM' in rts_file):
+            long_name='GPM Rainfall Rate'
+            time_interval_hours = 0.5   ######
+        else:
+            # Could be air temperature, RH, etc.
+            long_name='Unknown Variable'  ##########
+                
+        #------------------------------------
+        # First, create a set of PNG images
+        #-------------------------------------------------------
+        # Timestamps will be added as a subtitle to each image
+        # using start_datetime and time_interval_hours
+        #------------------------------------------------------- 
+        save_rts_as_images( rts_file, temp_png_dir, extent=None,
+                 long_name=long_name,
+                 start_datetime=start_datetime,
+                 time_interval_hours=time_interval_hours,
+                 stretch='hist_equal', a=1, b=2, p=0.5,    ################
+                 ## stretch='power3', a=1, b=2, p=0.5,
+                 cmap='rainbow', BLACK_ZERO=False,
+                 REPORT=True, xsize=xsize2D, ysize=ysize2D, dpi=dpi )
+
+        #----------------------------------------------
+        # Create movie from set of images in temp_png
+        #----------------------------------------------
+        # movie_fps = "frames per second"
+        mp4_file = rts_file.replace('.rts', '.mp4')
+        mp4_path = (movie_dir + mp4_file)
+        create_movie_from_images( mp4_path, temp_png_dir,
+                                  fps=movie_fps, REPORT=True)
+
+        #-----------------------------------
+        # Delete all PNG files in temp_png
+        #-----------------------------------
+        delete_png_files( temp_png_dir )
+
+#   create_met_movies()
 #----------------------------------------------------------------------------
 def delete_png_files( temp_png_dir ):
 
@@ -1100,6 +1736,11 @@ def delete_png_files( temp_png_dir ):
            os.remove( file )
         except OSError as e:
             print("Error: %s : %s" % (file, e.strerror)) 
+
+    #-------------------
+    # Is this needed ?
+    #-------------------
+    time.sleep( 1.0 )
 
     print('Finished deleting PNG files in:')
     print('  ' + temp_png_dir)

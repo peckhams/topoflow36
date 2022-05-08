@@ -1,6 +1,8 @@
 
-## Copyright (c) 2010-2014, Scott D. Peckham
-## June 2010  (collected here from model_output.py)
+# Copyright (c) 2010-2022, Scott D. Peckham
+
+# Feb  2022.  Added OVERWRITE_OK to open_new_file().
+# June 2010.  Collected here from model_output.py.
 
 #-------------------------------------------------------------------
 # This class is for I/O of time series data to multi-column
@@ -82,9 +84,9 @@ class ts_file():
     #   open_file()
     #-------------------------------------------------------------------   
     def open_new_file( self, file_name,
-                       var_names=['X'],
-                       dtype='float64',
-                       time_units='minutes' ):
+                       var_names=['X'], dtype='float64',
+                       time_units='minutes',
+                       OVERWRITE_OK=False ):
 
         #-----------------------------------------------------------
         # Note:  The "dtype" argument is included to match similar
@@ -94,7 +96,8 @@ class ts_file():
         #----------------------------
         # Does file already exist ?
         #----------------------------
-        file_name = file_utils.check_overwrite( file_name )
+        if not(OVERWRITE_OK):
+            file_name = file_utils.check_overwrite( file_name )
         self.file_name = file_name
         
         self.var_names  = var_names

@@ -308,22 +308,49 @@ def get_start_pixels(DEM, nx, ny,
     zs = numpy.minimum(zs, z6)
     zs = numpy.minimum(zs, z7)
     zs = numpy.minimum(zs, z8)
-    
-    w = where(logical_or((zc.flat == closed_basin_code),
-                         (logical_and((zc.flat > nodata), (zs.flat <= nodata)))))
+
+    w = where(logical_or((zc == closed_basin_code),
+                         (logical_and((zc > nodata), (zs <= nodata)))))
     nw = size(w[0])
     if (nw != 0):    
-        #----------------------------------------------
-        # zc has only interior pixels, so need to add
-        # (nx + 1) to get IDs in the DEM itself
-        #----------------------------------------------
-        IDs[n_IDs: (n_IDs + nw)] = w + nx + 1
+        #------------------------------------------------------
+        # zc & zs only have interior pixels, so must add 1 to
+        # rows & cols before computing IDs in the DEM itself
+        #------------------------------------------------------
+        rows = w[0] + 1
+        cols = w[1] + 1
+        new_IDs = (rows * nx) + cols
+        IDs[n_IDs: (n_IDs + nw)] = new_IDs
         n_IDs += nw
+        
+   #-----------------------------------------------------
+   # Note: This method from before 2022-04-29 is WRONG.
+   #----------------------------------------------------- 
+#     w = where(logical_or((zc.flat == closed_basin_code),
+#                          (logical_and((zc.flat > nodata), (zs.flat <= nodata)))))
+#     nw = size(w[0])
+#     if (nw != 0):    
+#         #----------------------------------------------
+#         # zc has only interior pixels, so need to add
+#         # (nx + 1) to get IDs in the DEM itself
+#         #----------------------------------------------
+#         IDs[n_IDs: (n_IDs + nw)] = w + nx + 1
+#         n_IDs += nw
     
     #------------------------------------------
     # Remove unused entries from array of IDs
     #------------------------------------------
     IDs = IDs[:n_IDs]
+    #------------------------------------------------------------
+    # (col, row) = (114, 37), (nx, ny) = (163, 141)
+#     ID_closed_basin = (37 * nx) + 114  ## (6145)
+#     print('Closed basin code =', closed_basin_code)
+#     print('nx, ny =', nx, ny)  ## (163, 141)
+#     if (ID_closed_basin in IDs):
+#         print('SUCCESS:  Closed basin ID is in IDs.')
+#     else:
+#         print('FAILURE:  Closed basin ID is NOT in IDs.')
+    #------------------------------------------------------------
     return IDs
     
 #   get_start_pixels()

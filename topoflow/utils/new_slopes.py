@@ -212,6 +212,15 @@ def get_new_slope_grid(site_prefix=None, case_prefix=None,
     while not(DONE):   
         z1 = d8.DEM[pIDs]
         dz = (z2 - z1)
+        #-------------------------------------------------------
+        # Handle both nodata & edge values in DEM (2022-05-02)
+        # Otherwise, there are large, erroneous slopes.
+        # Issues show up best with a "linear" stretch.
+        #-------------------------------------------------------
+        w1 = np.logical_or(z1 <= d8.DEM_nodata, d8.d8_grid == 0)
+        # w1 = (d8.d8_grid == 0)  # (doesn't work)
+        # w1 = np.logical_or(z1 <= d8.DEM_nodata, pIDs == 0)  # (doesn't work)
+        dz[ w1 ] = 0
         
         wg = np.logical_and(slope == 0, dz > 0)   # (array of True or False) 
         ng = wg.sum()   # (number of cells with True)
