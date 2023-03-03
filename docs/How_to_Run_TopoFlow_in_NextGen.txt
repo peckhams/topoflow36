@@ -1,0 +1,241 @@
+S.D. Peckham
+October 27-28, 2022
+November 29, 2022 (updated)
+December 3, 2022 (updated)
+
+Note: This assumes that the NextGen repo has been installed.
+      This work used the NextGen version 0.2 from 2022-07-27.
+
+---------------------------------------------------
+ Steps to run the TopoFlow 3.6 Package in NextGen
+---------------------------------------------------
+(1) Download the latest TopoFlow 3.6 Python repo from:
+    https://github.com/peckhams/topoflow36
+
+(2) Copy the topoflow36 repo folder into the ngen project tree/repo at:
+    ngen/extern/topoflow36
+
+(3) Copy the files in the "ngen_files" subfolder into the corresponding
+    locations in the ngen project tree (e.g. into ngen/data/topoflow, etc.)
+
+(4) Download CSV forcing files from Amazon S3 bucket for catchments of interest:
+    /formulations-dev/forcings/huc01/csv
+    Time span:  2007-01-01 00:00:00 TO  2019-12-31 23:00:00  
+    Copy files (e.g. "cat-84.csv") into:
+    ngen/data/topoflow/forcing
+
+(5) In order to run TopoFlow for a catchment, the following files must exist
+    in ngen/data/topoflow/input_files/cat-**
+
+     Note: These dirs must exist:  __met, __misc, __soil, __topo, Test1_cfg
+     Note: Test1_cfg must contain:
+           Test1_multi-bmi.cfg   (no need to edit)
+           Test1_path_info.cfg   (Edit with correct path info.)
+           Test1_time_info.cfg   (Edit with correct time info.)
+
+(6) Open a terminal window and set PYTHONPATH (for this session).
+    For example:
+    (base) % export PYTHONPATH='/Applications/anaconda3/envs/tf36/lib/python3.7/site-packages:/Users/peckhams/Dropbox/GitHub/ngen/extern/topoflow36'
+
+    This adds the path to the topoflow package itself, as well as all of its
+    dependencies from a conda environment called tf36.
+ 
+    Note:  You can check that PYTHONPATH is set correctly via:
+           (base) % python
+           >>> import topoflow
+
+(7) Change to ngen repo directory, e.g.:
+     % cd ~/Dropbox/GitHub/ngen
+
+(8) % ./cmake_build/ngen ./data/topoflow/spatial/catchment_data_HUC01.geojson "cat-84" ./data/topoflow/spatial/nexus_data_HUC01.geojson "" ./data/topoflow/rc_files/tf36_realization_config.json
+
+    The output should look something like:
+
+#### NextGen Output ####
+NGen Framework 0.1.0
+Building Nexus collection
+Building Catchment collection
+Catchment topology is dendridic.
+Running Models
+Running timestep 0
+Running timestep 100
+Running timestep 200
+Running timestep 300
+Running timestep 400
+Running timestep 500
+Running timestep 600
+Running timestep 700
+Finished 720 timesteps.
+
+------------------------------------------------------------------
+ Notes about TopoFlow input files that are automatically created
+------------------------------------------------------------------
+
+(1) The module: topoflow/utils/prepare_inputs.py
+    is used to automatically create the necessary TopoFlow input files.
+    This module is called from:  topoflow/framework/multi_bmi.py.
+
+(2) First, a DEM for the catchment (e.g. "cat-84") will be created
+    by subsetting a hydrofabric DEM for CONUS that is in an Amazon
+    S3 bucket.  This uses:  topoflow/utils/hydrofab_tools.py
+
+(3) Next, a set of D8 grids will be computed automatically from DEM:
+        __topo/{{id}}_aspect.rtg,
+        __topo/{{id}}_d8_area.rtg,
+        __topo/{{id}}_flow.rtg
+        __topo/{{id}}_sinu.rtg      #### CHECK
+        __topo/{{id}}_slope.rtg
+
+(4) Next, a set of "channel geometry grids" will be computed automatically
+    from the TCA (total contributing area) grid.  This uses optional
+    cfg_file parameters:
+        max_river_width, channel_width_power,
+        min_manning_n, max_manning_n,
+        max_bankfull_depth, bankfull_depth_power
+     to create the crids:
+        __topo/{{id}}_chan-n.rtg   (Manning n grid)
+        __topo/{{id}}_chan-w.rtg   (channel width grid)
+        __topo/{{id}}_d0.rtg       (initial channel flow depth)
+        __topo/{{id}}_d-bank.rtg   (bankfull depth grid)
+        __topo/{{id}}_sinu.rtg      #### CHECK
+
+      Note: Several "nudging factors" are now supported in CFG files:
+            nval_factor, slope_factor, width_factor, d_bankfull_factor, etc.
+
+(5) A set of CFG files, one for each TopoFlow process component are also
+    computed automatically with default values.
+
+----------------------------------------------------
+ Notes about realization config files for TopoFlow
+----------------------------------------------------
+(1) Set "name" in the formulations block to "bmi_python".
+
+(2) Set "python_type" to "topoflow.main2.tf36_bmi",
+    which has the form:  "package-name/module-name/class-name".
+
+(3) Set "model_type_name" to "tf36_bmi", which is the model class name
+    in the case where a topoflow composite model presents as a single BMI.
+
+(4) Set "init_config" as the complete path to a TopoFlow "multi-bmi" config file.
+    For example:
+        "./extern/topoflow36/data/{{id}}/Test1_cfg/Test1_multi-bmi.cfg"
+    Note: It can contain the regular expression "{{id}}" to match many files.    
+
+(5) Set "main_output_variable" to
+        "channel_water_x-section__volume_flow_rate"
+
+(6) In the "variable_names_map" block, notice the lines:
+      "streamflow_cms": "channel_water_x-section__volume_flow_rate",
+      "atmosphere_water__precipitation_leq-volume_flux":"atmosphere_water__liquid_equivalent_precipitation_rate" 
+    The second one maps the internal long variable name used by the model
+    to the long variable name used by NextGen.
+ 
+(7) In the "forcing" block, you no longer need to use a forcing file that
+    only contains data for the time range of interest (start_time to end_time)
+    and the regular expression {{id}} can be used in "file_pattern":
+    For example:
+
+    "file_pattern": "{{id}}.csv",
+    "path": "./data/topoflow/forcing/huc01/",
+    "provider": "CsvPerFeature"
+
+(8) In the "time" block, make sure that "start_time" and "end_time" fall into
+    the range that is spanned by entries in the CSV forcing file.
+    Note: The module: topoflow/utils/mct_files.py contains a method for finding
+          the wettest month in a NextGen AORC CSV forcing file.
+
+-------------------------------------------------
+ Some Error Messages Encountered Before Success
+-------------------------------------------------
+1st console error message:
+
+NGen Framework 0.1.0
+Building Nexus collection
+Building Catchment collection
+libc++abi.dylib: terminating with uncaught exception of type std::__1::regex_error: One of *?+{ was not preceded by a valid regular expression.
+zsh: abort      ./cmake_build/ngen ./data/topoflow/spatial/catchment_data_cat67.geojson
+
+--------------------------------------------------------------------------------------------------
+2nd console error message:
+
+NGen Framework 0.1.0
+Building Nexus collection
+Building Catchment collection
+libc++abi.dylib: terminating with uncaught exception of type std::runtime_error: Error opening forcing data dir './extern/topoflow36/data/{{id}}/__forcing/' after 1 attempts: No such file or directory.
+zsh: abort      ./cmake_build/ngen ./data/topoflow/spatial/catchment_data_cat67.geojson    
+
+--------------------------------------------------------------------------------------------------
+3rd console error message:  (after changing "/{{id}}/" to "/cat-67/" in rc file)
+
+NGen Framework 0.1.0
+Building Nexus collection
+Building Catchment collection
+Importing TopoFlow 3.6 package modules:
+   topoflow.utils
+   topoflow.utils.tests
+   topoflow.components
+   topoflow.components.tests
+   topoflow.framework
+   topoflow.framework.tests
+ 
+libc++abi.dylib: terminating with uncaught exception of type std::runtime_error: ModuleNotFoundError: No module named 'osgeo'
+
+At:
+  /Users/peckhams/Dropbox/GitHub/ngen/extern/topoflow36/topoflow/utils/hydrofab_tools.py(35): <module>
+  <frozen importlib._bootstrap>(219): _call_with_frames_removed
+  <frozen importlib._bootstrap_external>(728): exec_module
+  <frozen importlib._bootstrap>(677): _load_unlocked
+  <frozen importlib._bootstrap>(967): _find_and_load_unlocked
+  <frozen importlib._bootstrap>(983): _find_and_load
+  <frozen importlib._bootstrap>(219): _call_with_frames_removed
+  <frozen importlib._bootstrap>(1043): _handle_fromlist
+  /Users/peckhams/Dropbox/GitHub/ngen/extern/topoflow36/topoflow/framework/multi_bmi.py(162): <module>
+  <frozen importlib._bootstrap>(219): _call_with_frames_removed
+  <frozen importlib._bootstrap_external>(728): exec_module
+  <frozen importlib._bootstrap>(677): _load_unlocked
+  <frozen importlib._bootstrap>(967): _find_and_load_unlocked
+  <frozen importlib._bootstrap>(983): _find_and_load
+  <frozen importlib._bootstrap>(219): _call_with_frames_removed
+  <frozen importlib._bootstrap>(1043): _handle_fromlist
+  /Users/peckhams/Dropbox/GitHub/ngen/extern/topoflow36/topoflow/main2.py(11): <module>
+  <frozen importlib._bootstrap>(219): _call_with_frames_removed
+  <frozen importlib._bootstrap_external>(728): exec_module
+  <frozen importlib._bootstrap>(677): _load_unlocked
+  <frozen importlib._bootstrap>(967): _find_and_load_unlocked
+  <frozen importlib._bootstrap>(983): _find_and_load
+
+zsh: abort      ./cmake_build/ngen ./data/topoflow/spatial/catchment_data_cat67.geojson 
+
+
+--------------------------------------------------------------------------------------------------
+4th console error message: (after adding to PYTHONPATH; see above)
+
+...
+...
+Component with smallest time step is: tf_channels_diff_wave
+
+Time interpolation method = Linear
+
+Will print values every 0.5 seconds.
+libc++abi.dylib: terminating with uncaught exception of type pybind11::error_already_set: TypeError: unhashable type: 'list'
+
+At:
+  /Users/peckhams/Dropbox/GitHub/ngen/extern/topoflow36/topoflow/framework/multi_bmi.py(691): get_output_var_names
+  /Users/peckhams/Dropbox/GitHub/ngen/extern/topoflow36/topoflow/framework/multi_bmi.py(644): get_output_item_count
+
+--------------------------------------------------------------------------------------------------
+5th console error message: (after editing get_output_var_names())
+
+Time =   43247.33 [min],  Q_out =    0.00002 [m^3/s]
+Time =   43395.00 [min],  Q_out =    0.00001 [m^3/s]
+Finished 720 timesteps.
+ngen(48297,0x1137a5dc0) malloc: *** error for object 0xffffff00e63a5963: pointer being freed was not allocated
+ngen(48297,0x1137a5dc0) malloc: *** set a breakpoint in malloc_error_break to debug
+
+### NOTES:  It is not clear that bmi.finalize() is called.
+
+--------------------------------------------------------------------------------------------------
+
+
+
+
