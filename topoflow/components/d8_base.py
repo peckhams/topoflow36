@@ -1,6 +1,10 @@
 
-# Copyright (c) 2001-2021, Scott D. Peckham
+# Copyright (c) 2001-2022, Scott D. Peckham
 #
+# Oct. 2022.  Added if stmt before calling "initialize_basin_vars()"
+#             in initialize().  Similar in open_output_files() and
+#             save_pixel_values().
+#             Now can use D8 grids to generate default outlet_file.
 # July 2021.  Added DEM_nodata to CFG file; replaces nodata.
 # Jan. 2012.  Added set_default_config_vars().
 #             Removed call to update_noflow_IDs() and
@@ -128,13 +132,13 @@ class d8_component( BMI_base.BMI_component ):
         # Note: These are currently variables needed from other
         #       components vs. those read from files or GUI.
         #--------------------------------------------------------   
-        return self._input_var_names
+        return np.array( self._input_var_names )
     
     #   get_input_var_names()
     #-------------------------------------------------------------------
     def get_output_var_names(self):
  
-        return self._output_var_names
+        return np.array( self._output_var_names )
     
     #   get_output_var_names()
     #-------------------------------------------------------------------
@@ -291,7 +295,15 @@ class d8_component( BMI_base.BMI_component ):
         self.initialize_config_vars()
         # print '### Calling read_grid_info()...'
         # self.read_grid_info()    # NOW IN initialize_config_vars()
-        self.initialize_basin_vars()    # (uncommented on 11/8/11.)
+        #----------------------------------------------------------
+        # Note: outlet_file is only used for a D8 component when
+        #       running the Erode model, since then D8 vars can
+        #       change over time.  In order to create a default
+        #       outlet_file, need D8 grids, so added this IF.
+        #       In CFG file, outlet_file is called pixel_file.
+        #----------------------------------------------------------
+        if (os.path.exists( self.pixel_file )):
+            self.initialize_basin_vars()
 
         #-------------------------------------------
         # This must come before "Disabled" test ??
@@ -996,6 +1008,8 @@ class d8_component( BMI_base.BMI_component ):
         #--------------------------------------
         # Open new files to write time series
         #--------------------------------------
+        if not(hasattr(self, 'outlet_IDs')):
+            return
         IDs = self.outlet_IDs
         if (self.SAVE_CODE_PIXELS):
             model_output.open_new_ts_file( self, self.code_ts_file, IDs,
@@ -1136,6 +1150,8 @@ class d8_component( BMI_base.BMI_component ):
     def save_pixel_values(self):
          # save_time_series_data(self): 
 
+        if not(hasattr(self, 'outlet_IDs')):
+            return
         IDs  = self.outlet_IDs
         time = self.time         #####   years ??
 

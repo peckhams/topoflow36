@@ -579,7 +579,9 @@ class topoflow_driver( BMI_base.BMI_component ):
                 movie_fps=10,
                 start_date=self.time_info.start_date,
                 end_date=self.time_info.end_date,
-                time_interval_hours=6)   # Assuming CHIRPS 6hr rain.        
+                time_interval_hours=1,
+                STAT_MOVIES=self.COMPUTE_STAT_GRIDS)
+                ## time_interval_hours=6)   # Assuming CHIRPS 6hr rain.        
                 #### OVERWRITE_OK=self.OVERWRITE_OK)
  
     #----------------------------------------------------------------   
@@ -1168,10 +1170,11 @@ class topoflow_driver( BMI_base.BMI_component ):
         report.append('Total accumulated volumes over entire DEM: (storage)')
         report.append('vol_soil_sum  (infiltration): ' + self.vol_str(vol_soil) + '  (change in storage)') 
         report.append('vol_chan_sum0 (channels):  ' + self.vol_str(vol_chan_sum0) + '  (initial)')
-        report.append('vol_chan_sum  (channels):  ' + self.vol_str(vol_chan_sum))
+        report.append('vol_chan_sum  (channels):  ' + self.vol_str(vol_chan_sum)  + '  (final)')
         report.append('vol_flood_sum  (surface):  ' + self.vol_str(vol_flood_sum))
-        report.append('vol_edge_sum  (boundary):  ' + self.vol_str(vol_edge))
         report.append('vol_swe_sum   (snowpack):  ' + self.vol_str(vol_swe))
+        #-----------------------------------------------------------------------
+        report.append('vol_edge_sum  (boundary):  ' + self.vol_str(vol_edge) + '  (time-integrated)')
         report.append(' ')
 
         #---------------------------------------------

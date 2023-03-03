@@ -9,7 +9,7 @@ in BMI_base.py.
 """
 #-----------------------------------------------------------------------
 #
-# Copyright (c) 2001-2021, Scott D. Peckham
+# Copyright (c) 2001-2022, Scott D. Peckham
 #
 #  Jul 2021.  Added start_year to CFG file and also in:
 #             set_missing_cfg_options().  Now passed to functions
@@ -146,6 +146,8 @@ class met_component( BMI_base.BMI_component ):
     # just means "liquid_equivalent".
     #---------------------------------------------------------   
     _input_var_names = [
+        ## 'atmosphere_water__precipitation_leq-volume_flux', # P [m s-1]
+        ########################## FOR NEXTGEN ONLY ############################
         'snowpack__z_mean_of_mass-per-volume_density', # rho_snow
         'snowpack__depth',                             # h_snow
         'snowpack__liquid-equivalent_depth',           # h_swe
@@ -509,13 +511,13 @@ class met_component( BMI_base.BMI_component ):
         # Note: These are currently variables needed from other
         #       components vs. those read from files or GUI.
         #--------------------------------------------------------   
-        return self._input_var_names
+        return np.array( self._input_var_names )
     
     #   get_input_var_names()
     #-------------------------------------------------------------------
     def get_output_var_names(self):
  
-        return self._output_var_names
+        return np.array( self._output_var_names )
     
     #   get_output_var_names()
     #-------------------------------------------------------------------
@@ -572,10 +574,12 @@ class met_component( BMI_base.BMI_component ):
         ## self.latent_heat_constant = np.float64(0.622)
         self.latent_heat_constant = np.float64(0.662)
         
-        #----------------------------------------
-        # Constants related to precip (9/24/09)
-        #----------------------------------------
+        #-------------------------------------
+        # Unit conversion factors for precip 
+        #-------------------------------------
         self.mmph_to_mps = (np.float64(1) / np.float64(3600000))
+        self.mmps_to_mps = (np.float64(1) / np.float64(1000))
+        self.mph_to_mps  = (np.float64(1) / np.float64(3600))
         self.mps_to_mmph = np.float64(3600000)
         self.forever     = np.float64(999999999)  # [minutes]
         
@@ -854,6 +858,13 @@ class met_component( BMI_base.BMI_component ):
         #----------------------------------------------------
         if not(hasattr(self, 'SATTERLUND')):
             self.SATTERLUND = False
+
+        #------------------------------------------------
+        # New option in model_input.read_next() to read
+        # a precip time series from a NextGen CSV file
+        #------------------------------------------------
+        if not(hasattr(self, 'NGEN_CSV')):
+            self.NGEN_CSV = False
 
         #--------------------------------------------
         # (2021-07-28) Added start_year to CFG file
@@ -1998,7 +2009,8 @@ class met_component( BMI_base.BMI_component ):
         self.cloud_factor_file  = self.met_directory + self.cloud_factor_file
         self.canopy_factor_file = self.met_directory + self.canopy_factor_file
 
-        self.P_unit      = model_input.open_file(self.P_type,      self.P_file)
+        self.P_unit      = model_input.open_file(self.P_type,      self.P_file,
+                                 NGEN_CSV=self.NGEN_CSV)
         self.T_air_unit  = model_input.open_file(self.T_air_type,  self.T_air_file)
         self.T_surf_unit = model_input.open_file(self.T_surf_type, self.T_surf_file)
         self.RH_unit     = model_input.open_file(self.RH_type,     self.RH_file)
@@ -2035,15 +2047,23 @@ class met_component( BMI_base.BMI_component ):
             print('Calling read_input_files()...')
 
         rti = self.rti
-
+           
         #--------------------------------------------------------
         # All grids are assumed to have a data type of float32.
         #--------------------------------------------------------
         # NB! read_next() returns None if TYPE arg is "Scalar".
         #--------------------------------------------------------
+        # 2022-11-18.  Added NGEN_CSV option in model_input.py.
+        #--------------------------------------------------------
+        if (self.NGEN_CSV):
+            # units_factor = self.mph_to_mps
+            units_factor = self.mmps_to_mps
+        else:
+            units_factor = self.mmph_to_mps
         P = model_input.read_next(self.P_unit, self.P_type, rti,
-                                  factor=self.mmph_to_mps)
-                                   
+                                  units_factor=units_factor,
+                                  NGEN_CSV=self.NGEN_CSV)
+                                                  
         # print('MET: (time,P) =', self.time, P)
         # print('shape(P) =', P.shape)
                     
@@ -2068,6 +2088,11 @@ class met_component( BMI_base.BMI_component ):
                     print('   max(P) = ' + Pmax_str + ' [mmph]')
                     print(' ')
 
+        ################  11/28/22  ###############
+        if (self.PRECIP_ONLY):
+            return
+        ###########################################
+           
         #------------------------------------------------------------
         # EXPERIMENTAL, NOT FINISHED
         # Read variables from files into scalars or grids while

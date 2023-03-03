@@ -472,22 +472,22 @@ class channels_component( BMI_base.BMI_component ):
         # Note: These are currently variables needed from other
         #       components vs. those read from files or GUI.
         #--------------------------------------------------------   
-        return self._input_var_names
+        return np.array( self._input_var_names )
     
     #   get_input_var_names()
     #-------------------------------------------------------------------
     def get_output_var_names(self):
  
-        return self._output_var_names
+        return np.array( self._output_var_names )
     
     #   get_output_var_names()
     #-------------------------------------------------------------------
-    def get_config_var_names(self):
- 
-        # New, proposed BMI function
-        return self._config_var_names
-    
-    #   get_config_var_names()
+#     def get_config_var_names(self):
+#  
+#         # New, proposed BMI function
+#         return self._config_var_names
+#     
+#     #   get_config_var_names()
     #-------------------------------------------------------------------
     def get_var_name(self, long_var_name):
             
@@ -1626,7 +1626,11 @@ class channels_component( BMI_base.BMI_component ):
 #         print( ' ' )
         
         self.R = (P + SM + GW + MR) - (ET + IN)
-            
+        
+#         print('### time_index =', self.time_index)    
+#         print('### R =', self.R)
+#         print()
+
     #   update_R()
     #-------------------------------------------------------------------
     def update_R_integral(self):

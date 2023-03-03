@@ -176,7 +176,7 @@ class satzone_component( infil_base.infil_component ):
             # GW      = baseflow volume flux [m/s]
             # h_table = water table elevation [m]
             #---------------------------------------
-            self.h_table   = self.initialize_scalar(0, dtype='float64')
+            self.h_table = self.initialize_scalar(0, dtype='float64')
             self.GW      = self.initialize_scalar(0, dtype='float64')
             self.vol_GW  = self.initialize_scalar(0, dtype='float64') # [m3]
             #---------------------            
