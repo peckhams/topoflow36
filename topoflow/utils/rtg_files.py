@@ -467,7 +467,11 @@ def read_grid( RTG_file, rti, RTG_type='FLOAT',
     # Read in the grid
     #-------------------
     file_unit = open( RTG_file, 'rb' )
-    RTG_type = rti.data_type   ######### (07/12/18) ########
+    ############################################################
+    # Notice:  RTG_type keyword is ignored.   But this method
+    # is called with that keyword in several places.
+    ############################################################
+    RTG_type = rti.data_type   ### (07/12/18) ###
     dtype = rti_files.get_numpy_data_type( RTG_type )
     grid  = np.fromfile( file_unit, count=rti.n_pixels,
                             dtype=dtype )

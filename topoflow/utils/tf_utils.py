@@ -1,26 +1,27 @@
 
-## Copyright (c) 2001-2019, Scott D. Peckham
-## January 2009  # (converted from IDL)
-## August 2009
-## May 2010 (renamed *Data_Prefix to *Site_Prefix)
-
+# Copyright (c) 2001-2022, Scott D. Peckham
+#
+# May 2010 (renamed *Data_Prefix to *Site_Prefix)
+# August 2009
+# January 2009  # (converted from IDL)
+#
 #-------------------------------------------------------------------
 
 #  Functions:
 #
-#      TF_Use_CCA()
-#      TF_Set_Test_Info()       # (6/23/10)
-#      TF_Test_Directory()
-#      TF_Test_Site_Prefix()
-#      TF_Test_Case_Prefix()
 #      TF_Build_Date()
 #      TF_Version_Number()
 #      TF_Version()
 #      TF_Print()
 #      TF_String()
+#      --------------------
+#      TF_Use_CCA()             # (obsolete)
+#      TF_Set_Test_Info()       # (6/23/10)
+#      TF_Test_Directory()
+#      TF_Test_Site_Prefix()
+#      TF_Test_Case_Prefix()
 
 #      file_exists() # (2/16/09, used in diversions_fraction_method.py)
-
 #      Count_Lines()
 #      Current_Directory()
 #      Resize()
@@ -42,13 +43,63 @@ import datetime
 
 from . import idl_func
 
+#-------------------------------------------------------------------   
+def TF_Build_Date():
+
+    #---------------------------------------------------------
+    # Notes:  Update this whenever a new version is released
+    #---------------------------------------------------------
+    return '2022-11-04'
+    ## return '2022-05-08'
+    ## return '2020-06-02'
+    ## return '10/4/19'
+    ## return '2/14/17'
+    ## return '11/16/16'
+    ## return '9/22/14'  ## (3.4)
+
+#   TF_Build_Date()
 #-------------------------------------------------------------------
-def TF_Use_CCA():
+def TF_Version_Number():
 
-    return True    # (to use as a set of CCA components)
-    ## return False   # (to use as stand-along Python program)
+    return 3.67
 
-#   TF_Use_CCA()
+#   TF_Version_Number()
+#-------------------------------------------------------------------
+def TF_Version():
+
+    ## num_str    = str(TF_Version_Number()) + ' beta '
+    num_str    = str(TF_Version_Number())
+    date_str   = ' (' + TF_Build_Date() + ')'
+
+    ver_string = 'TopoFlow Version ' + num_str + date_str
+
+    return ver_string
+
+#   TF_Version()
+#-------------------------------------------------------------------
+def TF_Print(string):
+    """Print a string to the TopoFlow output log window."""
+
+    #------------------------------------------
+    # For now, just print to terminal window.
+    # Later, this will be method in tf_gui.py.
+    #------------------------------------------
+    print(string)
+
+#   TF_Print()  
+#-------------------------------------------------------------------
+def TF_String(number, FORMAT=None):
+
+    return idl_func.string(number, format=FORMAT).strip()
+
+#   TF_String()
+#-------------------------------------------------------------------
+# def TF_Use_CCA():
+# 
+#     return True    # (to use as a set of CCA components)
+#     ## return False   # (to use as stand-along Python program)
+# 
+# #   TF_Use_CCA()
 #-------------------------------------------------------------------
 def TF_Set_Test_Info(self):
 
@@ -114,57 +165,9 @@ def TF_Test_Site_Prefix():
 #-------------------------------------------------------------------
 def TF_Test_Case_Prefix():
 
-    return 'Case5'
+    return 'Test1'
 
 #   TF_Test_Case_Prefix()
-#-------------------------------------------------------------------   
-def TF_Build_Date():
-
-    #---------------------------------------------------------
-    # Notes:  Update this whenever a new version is released
-    #---------------------------------------------------------
-    return '2020-06-02'
-    ## return '10/4/19'
-    ## return '2/14/17'
-    ## return '11/16/16'
-    ## return '9/22/14'  ## (3.4)
-
-#   TF_Build_Date()
-#-------------------------------------------------------------------
-def TF_Version_Number():
-
-    return 3.62
-
-#   TF_Version_Number()
-#-------------------------------------------------------------------
-def TF_Version():
-
-    ## num_str    = str(TF_Version_Number()) + ' beta '
-    num_str    = str(TF_Version_Number())
-    date_str   = ' (' + TF_Build_Date() + ')'
-
-    ver_string = 'TopoFlow Version ' + num_str + date_str
-
-    return ver_string
-
-#   TF_Version()
-#-------------------------------------------------------------------
-def TF_Print(string):
-    """Print a string to the TopoFlow output log window."""
-
-    #------------------------------------------
-    # For now, just print to terminal window.
-    # Later, this will be method in tf_gui.py.
-    #------------------------------------------
-    print(string)
-
-#   TF_Print()  
-#-------------------------------------------------------------------
-def TF_String(number, FORMAT=None):
-
-    return idl_func.string(number, format=FORMAT).strip()
-
-#   TF_String()
 #-------------------------------------------------------------------
 def file_exists(filename):
 

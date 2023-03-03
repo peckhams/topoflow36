@@ -261,6 +261,11 @@ def get_rtg_type_from_gdal_type( raster ):
 #-------------------------------------------------------------------------------
 def read_from_geotiff( tif_file, REPORT=False, rti_file=None):
 
+#     print('## In read_from_geotiff:')
+#     print('## tif_file =', tif_file)
+#     print('## rti_file =', rti_file)
+#     print()
+    
     #-----------------------------------------------------
     # Note:  tif_file may need to have ".tif" extension.
     #-----------------------------------------------------
@@ -273,9 +278,9 @@ def read_from_geotiff( tif_file, REPORT=False, rti_file=None):
  
     if (REPORT):
         print_gdal_grid_info( tif_file, grid, ds )
-        
+  
     if (rti_file is not None):
-        make_rti_for_gdal_grid(tif_file, grid, ds, rti_file=rti_file)
+        make_rti_for_gdal_grid(tif_file, grid, ds, rti_file)
 
     #--------------------          
     # Close the tif_file

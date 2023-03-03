@@ -430,59 +430,73 @@ def show_grid_as_image( grid, long_name, extent=None,
     #------------
     # Use these
     #------------    
-    fontsize1 = 10
-    fontsize2 = 8
-    fontsize3 = 6
-
-    #-----------------------------------------------
-    # Compute best ysize for a given xsize, taking
-    # ncols, nrows, labels, colorbar into account
-    #-----------------------------------------------
-    # ncols = 131, nrows = 115
-    # Best xsize = 4, ysize = 3.1 (but 3.1 bad for movie)
-    #-----------------------------------------------------
-    # im_xsize / im_ysize = ncols / nrows
-    # fig_xsize = im_xsize + left_margin + right_margin 
-    # fig_ysize = im_ysize + bottom_margin + top_margin
-    #-----------------------------------------------------
-    # aspect_ratio = 131.0 / 115  # (ncols / nrows)
-    # ysize = xsize / aspect_ratio
+    ## fontsize1 = 10
+    if (xsize >= 4.0):
+        fontsize1 = 8
+        fontsize2 = 8
+        fontsize3 = 6
+    else:
+        fontsize1 = 7
+        fontsize2 = 5
+        fontsize3 = 5
 
     #-------------------------------------------------    
     # For Tana River basin, use xsize=4, ysize=3.333
     #-------------------------------------------------
     if (ysize > 3.3) and (ysize < 3.334):
         ysize = 10/3.0
-        
+            
     #----------------------------
     # Set up and show the image
     #----------------------------
     # figure = plt.figure(1, figsize=(xsize, ysize), dpi=dpi)
     fig, ax = plt.subplots( figsize=(xsize, ysize), dpi=dpi)
+    ax.set_xlabel('Longitude [deg]', fontsize=fontsize2)
+    ax.set_ylabel('Latitude [deg]', fontsize=fontsize2)
+    ax.tick_params(axis='both', labelsize=fontsize2)
+
+    #---------------------------------------
+    # Construct image title from long_name
+    #---------------------------------------
     im_title = long_name.replace('_', ' ').title()
     acronyms = ['Chirps', 'Gpm', 'Gldas', 'Dem']
     for word in acronyms:
         if (word in im_title):
             im_title = im_title.replace(word, word.upper())
-    ax.set_xlabel('Longitude [deg]', fontsize=fontsize2)
-    ax.set_ylabel('Latitude [deg]', fontsize=fontsize2)
-    ax.tick_params(axis='both', labelsize=fontsize2)
-
+    #---------------------------------
+    # Add measurement units to title
+    #---------------------------------
+    if (im_title.endswith('Area')):
+        im_title += ' [km2]'
+    elif (im_title.endswith('Elevation')):
+        im_title += ' [m]'
+    elif (im_title.endswith('Slope')):
+        im_title += ' [m/m]'
+    elif (im_title.endswith('Discharge')):
+        im_title += ' [m3/s]'
+    elif (im_title.endswith('Depth')):
+        im_title += ' [m]'
+    elif (im_title.endswith('Velocity')):
+        im_title += ' [m/s]'
+                
     #---------------------    
     # Adjust the margins
-    #---------------------
+    #--------------------------------------
+    # Right margin is wider for color bar
+    #--------------------------------------
     # plt.margins(x=0.25, y=0.05)  # doesn't work??
     # This works well for xsize=4, ysize=3.1
-    plt.subplots_adjust(left=0.15, bottom=0.05, right=0.85, top=0.95)
-    
+    plt.subplots_adjust(left=0.16, bottom=0.05, right=0.80, top=0.97)
+    ##plt.subplots_adjust(left=0.15, bottom=0.05, right=0.85, top=0.95)
+        
     #-------------------------
     # Add title and subtitle
     #-------------------------
     ## subtitle = '2021-01-10'  # for testing
     if (subtitle is not None):
         # Spacing is affected by image ysize
-        #plt.suptitle(im_title, fontsize=fontsize1)
-        #plt.title( subtitle, fontsize=fontsize2 )
+        # plt.suptitle(im_title, fontsize=fontsize1)
+        # plt.title( subtitle, fontsize=fontsize2 )
         ## plt.suptitle(im_title, fontsize=fontsize1, y=0.925)
         #---------------------------------------
         # This method does better with margins
@@ -779,7 +793,8 @@ def save_rts_as_images( rts_file, png_dir, extent=None,
 def plot_time_series(nc_file, output_dir=None, var_index=0,
                      marker=',', REPORT=True, xsize=11, ysize=6,
                      im_file=None, start_date=None, end_date=None,
-                     time_interval_hours=6):
+                     time_interval_hours=6,
+                     start_index=0, end_index=-1):
 
     # Example nc_files:
     # nc_file = case_prefix + '_0D-Q.nc'
@@ -829,8 +844,10 @@ def plot_time_series(nc_file, output_dir=None, var_index=0,
     long_name = ts_values.long_name
     v_units   = ts_values.units
     t_units   = ts_times.units
-    values    = ts_values[:]
-    times     = ts_times[:]
+#     values    = ts_values[:]
+#     times     = ts_times[:]
+    values    = ts_values[start_index:end_index]  # 12/05/22
+    times     = ts_times[start_index:end_index]   # 12/05/22
     # values    = np.array( ts_values )
     # times     = np.array( ts_times )
 
@@ -860,11 +877,9 @@ def plot_time_series(nc_file, output_dir=None, var_index=0,
     ### start_date = '2005-01-01'  # for testing
     ### end_date   = '2015-01-01'  # for testing
     if (start_date is not None):
-        #--------------------------------------------
+        #----------------------------------
         # Tick labels on x-axis are dates
-        # Plot a tick every 2 months w/ MonthLocator
-        #   if time range is 3 years.
-        #---------------------------------------------
+        #----------------------------------
         times = np.arange(np.datetime64( start_date ),
                           np.datetime64( end_date),
                           np.timedelta64( time_interval_hours, 'h'))
@@ -872,23 +887,46 @@ def plot_time_series(nc_file, output_dir=None, var_index=0,
         #-------------------------------------------------------------------
         start_date_obj = dt.datetime.strptime( start_date, '%Y-%m-%d' )
         end_date_obj   = dt.datetime.strptime( end_date,   '%Y-%m-%d' )
-        n_months = tu.get_month_difference( start_date_obj, end_date_obj )
-        n_ticks  = 20
-        interval = np.int16( np.ceil( n_months / n_ticks ) )
-        print('interval =', interval)
-        #-------------------------------------------------------------------
-        # print('len(times)  =', n_times)
-        # print('len(values) =', len(values))
-        values = values[:n_times]  ###############
+        values = values[:n_times]  ########
         #---------------------------------------------
-        plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
-        plt.gca().xaxis.set_major_locator(mdates.MonthLocator( interval=interval ))
-        ## plt.gca().xaxis.set_major_locator(mdates.MonthLocator())  ## too crowded  
+        plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d')) 
         plt.plot( times, values, marker=marker)
         plt.gcf().autofmt_xdate()  # Rotate the dates  ########
-        plt.xlabel( 'Date' )
-        plt.ylabel( y_name + ' [' + v_units + ']' )
+        ## plt.xlabel( 'Date', fontsize=16 )
+        plt.ylabel( y_name + ' [' + v_units + ']', fontsize=16 )
         plt.ylim( np.array(ymin, ymax) )
+        plt.xticks( fontsize=14 ) ####### 12/05/22
+
+#     if (start_date is not None):
+#         #--------------------------------------------
+#         # Tick labels on x-axis are dates
+#         # Plot a tick every 2 months w/ MonthLocator
+#         #   if time range is 3 years.
+#         #---------------------------------------------
+#         times = np.arange(np.datetime64( start_date ),
+#                           np.datetime64( end_date),
+#                           np.timedelta64( time_interval_hours, 'h'))
+#         n_times = len(times)
+#         #-------------------------------------------------------------------
+#         start_date_obj = dt.datetime.strptime( start_date, '%Y-%m-%d' )
+#         end_date_obj   = dt.datetime.strptime( end_date,   '%Y-%m-%d' )
+#         n_months = tu.get_month_difference( start_date_obj, end_date_obj )
+#         n_ticks  = 20
+#         interval = np.int16( np.ceil( n_months / n_ticks ) )
+#         ## print('interval =', interval)
+#         #-------------------------------------------------------------------
+#         # print('len(times)  =', n_times)
+#         # print('len(values) =', len(values))
+#         values = values[:n_times]  ###############
+#         #---------------------------------------------
+#         plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
+#         plt.gca().xaxis.set_major_locator(mdates.MonthLocator( interval=interval ))
+#         ## plt.gca().xaxis.set_major_locator(mdates.MonthLocator())  ## too crowded  
+#         plt.plot( times, values, marker=marker)
+#         plt.gcf().autofmt_xdate()  # Rotate the dates  ########
+#         plt.xlabel( 'Date' )
+#         plt.ylabel( y_name + ' [' + v_units + ']' )
+#         plt.ylim( np.array(ymin, ymax) )
     
     #--------------------------------------------------       
     # Tick labels on x-axis are elapsed time, in days
@@ -1289,15 +1327,58 @@ def get_image_dimensions( ncols, nrows, dpi=192 ):
     # ncols_pad = ncols
     # fac = 0.87  # (0.85 is too low, 0.9 is too high)
     #---------------------------------------------------
-    ncols_pad = (ncols + 20)
-    fac   = 1.0
-    xsize = 4.0
-    im_xsize = (xsize * dpi)
-    n1 = np.int16( im_xsize / 16 )
-    n2 = np.int16( np.floor( fac * n1 * nrows / ncols_pad) )
-    im_ysize = (n2 * 16)
-    ysize = (im_ysize / dpi)
-    
+    # xsize = 4.0
+    # ncols2 = (ncols + 30)
+    # nrows2 = nrows
+    #---------------------------------------------------
+#     xsize = 3.0  # Reduce size to create movies faster
+#     xpad = 150  # (depends on font sizes)
+#     ypad = 120
+#     ncols2 = (ncols + xpad)
+#     nrows2 = (nrows + ypad)
+#     ## xsize = 2.0
+#     # fac = 0.9
+#     fac = 1.0
+#     #----------------------------------
+#     im_xsize = (xsize * dpi)
+#     n1 = np.int16( im_xsize / 16 )
+#     n2 = np.int16( np.floor( fac * n1 * nrows2 / ncols2) )
+#     im_ysize = (n2 * 16)
+#     ysize = (im_ysize / dpi)
+
+    #------------------------------------------
+    # This worked well for Omo & Awash Rivers
+    # (Not tested for movies, though.)
+    #------------------------------------------
+    # Note: 1.5 * 192 = 288 = 18 * 16
+    #       2.0 * 192 = 384 = 24 * 16
+    #       2.5 * 192 = 480 = 30 * 16
+    #------------------------------------------    
+    xsize_im = 1.5   # [inches]
+    grid_xsize = (xsize_im * dpi)
+    n1 = np.int16( grid_xsize / 16 )
+    n2 = np.int16( np.floor(n1 * nrows / ncols) )
+    grid_ysize = (n2 * 16)
+
+    #---------------------------------------
+    # Give all margins as multiples of 16.
+    # Margin sizes are given in pixels.
+    #-------------------------------------------
+    # 5 * 16 works for left_margin if lats > 0
+    # but use 6 * 16 to support lats < 0.
+    #--------------------------------------------------------------------
+    # We're also using these settings for margins (2022-05-09)
+    # plt.subplots_adjust(left=0.16, bottom=0.05, right=0.80, top=0.97)
+    #--------------------------------------------------------------------
+    left_margin   = 16 * 6   # (96)
+    right_margin  = 16 * 9   # (144)  # bigger for colorbar
+    bottom_margin = 16 * 5   # (80)
+    top_margin    = 16 * 8    # title & subtitle
+    im_xsize = grid_xsize + left_margin + right_margin
+    im_ysize = grid_ysize + bottom_margin + top_margin
+    xsize    = (im_xsize / dpi)   # [inches]
+    ysize    = (im_ysize / dpi)   # [inches]
+        
     return (xsize, ysize)
 
 #   get_image_dimensions()
@@ -1309,7 +1390,8 @@ def create_media_files( output_dir=None, media_dir=None,
                         DEM_ncols=None, DEM_nrows=None, ####
                         xsize2D=4, ysize2D=3.333,
                         start_date=None, end_date=None,  #####
-                        time_interval_hours=6):          #####
+                        time_interval_hours=6,
+                        STAT_MOVIES=False):          #####
 
     #-------------------------------------------------------------
     # Note:  When an image is used to make a movie, then size of
@@ -1365,6 +1447,8 @@ def create_media_files( output_dir=None, media_dir=None,
     temp_png_dir = media_dir + 'temp_png/'
     if not(os.path.exists( temp_png_dir )):
         os.mkdir( temp_png_dir )
+    else:
+        delete_png_files( temp_png_dir )  ##### 11/28/22
     #-----------------------------------------
     movie_dir = media_dir + 'movies/'
     if not(os.path.exists( movie_dir )):
@@ -1393,7 +1477,7 @@ def create_media_files( output_dir=None, media_dir=None,
         var_index = 0   # (dimension vars are now excluded)
         plot_time_series(nc_file, output_dir=output_dir,
                          var_index=var_index, marker=',',
-                         REPORT=True, xsize=11, ysize=6,
+                         REPORT=False, xsize=11, ysize=6,
                          im_file=im_path,
                          start_date=start_date, end_date=end_date,  ####
                          time_interval_hours=time_interval_hours)   ####
@@ -1473,10 +1557,11 @@ def create_media_files( output_dir=None, media_dir=None,
     # Create set of images and movie for all "2D"
     # stat files which contain grid stacks
     #----------------------------------------------
-    create_stat_movies(stat_dir=None, movie_dir=movie_dir,
-                       temp_png_dir=temp_png_dir,
-                       movie_fps=movie_fps, dpi=dpi, 
-                       xsize2D=xsize2D, ysize2D=ysize2D )
+    if (STAT_MOVIES):
+        create_stat_movies(stat_dir=None, movie_dir=movie_dir,
+                    temp_png_dir=temp_png_dir,
+                    movie_fps=movie_fps, dpi=dpi, 
+                    xsize2D=xsize2D, ysize2D=ysize2D )
                                                     
 #     os.chdir( output_dir ) 
 #     nc2D_file_list = glob.glob('*2D*nc')

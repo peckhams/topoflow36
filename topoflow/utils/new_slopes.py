@@ -21,7 +21,7 @@
 #------------------------------------------------------------------------
 
 import numpy as np
-import copy
+import copy, os
 from . import rtg_files   # (also in utils directory)
 from . import rti_files   # (also in utils directory)
 
@@ -159,8 +159,10 @@ def get_d8_slope_grid(site_prefix=None, case_prefix=None,
     
     #------------------------------------
     # Save new slope grid to slope_file
-    #------------------------------------             
-    slope_file2 = (topo_dir + slope_file)
+    #------------------------------------
+    slope_file2 = slope_file
+    if not(os.sep in slope_file):             
+        slope_file2 = (topo_dir + slope_file)   
     rtg_files.write_grid( slope, slope_file2, grid_info, RTG_type='FLOAT')
     print( 'Finished writing D8 slope grid to file: ')
     print( slope_file2 )
@@ -275,15 +277,19 @@ def get_new_slope_grid(site_prefix=None, case_prefix=None,
     header_file = (topo_dir + site_prefix + '.rti')
     grid_info = rti_files.read_info( header_file, REPORT=False)
     
-    #------------------------------------
+    #-----------------------------------------------
     # Save new slope grid to slope_file
-    #------------------------------------             
-    slope_file2 = (topo_dir + slope_file)
+    # Don't add topo_dir; may already be full path
+    #-----------------------------------------------
+    if not(os.sep in slope_file):             
+        slope_file2 = (topo_dir + slope_file)
+    else:
+        slope_file2 = slope_file
     rtg_files.write_grid( slope, slope_file2, grid_info, RTG_type='FLOAT')
     print( 'Finished writing new slope grid to file: ')
     print( slope_file2 )
     print()
-    ### print('Finished computing slope grid.')
+
     Spmin = slope[ slope > 0 ].min()
     print('   n_reps        = ' + str(n_reps) )
     print('   min slope     = ' + str(np.nanmin(slope)) )

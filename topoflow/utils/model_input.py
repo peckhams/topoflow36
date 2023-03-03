@@ -1,5 +1,5 @@
 
-## Copyright (c) 2009-2016, Scott D. Peckham
+## Copyright (c) 2009-2021, Scott D. Peckham
 ## January 9, 2009
 ## April 29, 2009
 ## May 2010, Changed var_types from {0,1,2,3} to
@@ -18,7 +18,7 @@ import numpy as np
 import os.path
 
 #-------------------------------------------------------------------
-def open_file(var_type, input_file):
+def open_file(var_type, input_file, NGEN_CSV=False):
 
     #-----------------------------------------------------
     # Note:  This method's name cannot be "open" because
@@ -55,6 +55,11 @@ def open_file(var_type, input_file):
         # is ASCII text with one value per line.
         #-----------------------------------------
         file_unit = open(input_file, 'r')
+        if (NGEN_CSV):
+            #----------------------
+            # Skip one header row
+            #----------------------
+            line = file_unit.readline()
     else:
         #--------------------------------------------
         # Input file contains a grid or grid stack
@@ -124,8 +129,9 @@ def read_next2(self, var_name, rti, dtype='float32', factor=1.0):
 
 #   read_next2()
 #-------------------------------------------------------------------
-def read_next(file_unit, var_type, rti, \
-              dtype='float32', factor=1.0):
+def read_next(file_unit, var_type, rti,
+              dtype='float32', units_factor=1.0,
+              NGEN_CSV=False):
 
     if (var_type.lower() == 'scalar'): 
         #-------------------------------------------
@@ -137,7 +143,12 @@ def read_next(file_unit, var_type, rti, \
         # Time series: Read scalar value from file.
         # File is ASCII text with one value per line.
         #----------------------------------------------
-        data = read_scalar(file_unit, dtype)
+        if (NGEN_CSV):
+            col=1;  delim=','
+        else:
+            col=0;  delim=' '      
+        data = read_scalar(file_unit, dtype, col=col,
+                           delim=delim )
     elif (var_type.lower() in ['grid', 'grid_sequence']):   
         #--------------------------------------
         # Single grid: Read grid from file
@@ -154,8 +165,8 @@ def read_next(file_unit, var_type, rti, \
     #---------------------------------------------
     # Multiply by a conversion or scale factor ?
     #---------------------------------------------
-    if (factor != 1) and (data is not None):
-        data *= factor
+    if (units_factor != 1) and (data is not None):
+        data *= units_factor
 
     #-----------------------------------------------------
     # Values must usually be read from file as FLOAT32
@@ -170,35 +181,41 @@ def read_next(file_unit, var_type, rti, \
 
 #   read_next()
 #-------------------------------------------------------------------
-def read_scalar(file_unit, dtype='float32'):
+def read_scalar(file_unit, dtype='float32',
+                col=0, delim=' '):
 
     #-------------------------------------------------
     # Note:  Scalar values are read from text files.
     #-------------------------------------------------
-
+    # Note:  Added col and delim args for NextGen
+    #        on 2022-11-18.
+    #-------------------------------------------------
+        
     #-------------------------------
     # Recheck if any of these work
     #-------------------------------
-    # scalar = fromfile(file_unit, count=1, dtype=dtype)
-    # scalar = fromfile(file_unit, count=1, dtype=dtype, sep="\n")
-    # scalar = fromfile(file_unit, count=1, dtype=dtype, sep=" ")    
-    # scalar = loadtxt(file_unit, dtype=dtype)
-
+    # scalar = np.fromfile(file_unit, count=1, dtype=dtype)
+    # scalar = np.fromfile(file_unit, count=1, dtype=dtype, sep="\n")
+    # scalar = np.fromfile(file_unit, count=1, dtype=dtype, sep=" ")    
+    # scalar = np.loadtxt(file_unit, dtype=dtype)
+       
     line = file_unit.readline()
     line = line.strip()
 ##    print 'line =', line
     if (line != ''):
-        words  = line.split()
+        words  = line.split( delim )
 ##        print 'type(words)   =', type(words)
 ##        print 'size(words)   =', size(words)
 ##        print 'words[0]      =', words[0]
 ##        print 'type(words[0] =', type(words[0])
 
-        #----------------------------------------        
-        # This worked in Python version at home
-        #----------------------------------------
-        ## scalar = np.float32(words[0])
-        scalar = np.float32(eval(words[0]))
+        #---------------------------------       
+        # Why was eval() used here?
+        # For scientific notation maybe?
+        # Or an old numpy version?
+        #---------------------------------
+        scalar = np.float32(words[ col ])
+        ## scalar = np.float32(eval(words[ col ]))
     else:
         scalar = None
 
@@ -224,28 +241,6 @@ def read_grid(file_unit, rti, dtype='float32'):
         grid.byteswap(True)
     #-------------------------        
     return grid
-    
-    #----------------------------------------------
-    # Original method, after conversion from IDL
-    #----------------------------------------------    
-#     file_size = os.path.getsize(file_unit.name)
-#     file_pos  = file_unit.tell()
-#     END_OF_FILE = (file_pos == file_size)
-#     if (END_OF_FILE):
-#         grid = None
-#         return grid
-#     
-#     grid = np.fromfile(file_unit, count=rti.n_pixels, dtype=dtype)
-#     grid = np.reshape(grid, (rti.nrows, rti.ncols))
-#     if (rti.SWAP_ENDIAN):
-#         grid.byteswap(True)
-# 
-#     #--------------
-#     # For testing
-#     #--------------
-#     # print 'In model_input.read_grid(), dtype =', grid.dtype
-#         
-#     return grid
 
 #   read_grid()
 #-------------------------------------------------------------------

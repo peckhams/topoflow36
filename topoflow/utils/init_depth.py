@@ -18,6 +18,7 @@
 
 #------------------------------------------------------------------------
 
+import os
 import numpy as np
 
 from . import rtg_files   # (also in utils directory)
@@ -269,10 +270,16 @@ def compute_initial_depth( site_prefix=None, topo_dir=None,
     #----------------------------
     # Read the input grid files
     #----------------------------
-    A_file = topo_dir + area_file
-    S_file = topo_dir + slope_file
-    w_file = topo_dir + width_file
-    n_file = topo_dir + manning_file
+    A_file = area_file
+    S_file = slope_file
+    w_file = width_file
+    n_file = manning_file
+    if not(os.sep in area_file):
+        A_file = topo_dir + area_file
+        S_file = topo_dir + slope_file
+        w_file = topo_dir + width_file
+        n_file = topo_dir + manning_file
+
     #---------------------------------------------------------------
     # Note: S, w and n may have NaNs on edges.  A has zeros.
     #---------------------------------------------------------------    
@@ -282,7 +289,9 @@ def compute_initial_depth( site_prefix=None, topo_dir=None,
     n = rtg_files.read_grid( n_file, grid_info, RTG_type='FLOAT' )
     #------------------------------------------------------------------------   
     if (angle_file is not None):
-        q_file = topo_dir + angle_file    # q = theta = bank_angle
+        q_file = angle_file
+        if not(os.sep in angle_file):
+            q_file = topo_dir + angle_file    # q = theta = bank_angle
         theta = rtg_files.read_grid( q_file, grid_info, RTG_type='FLOAT' )
     else:
         if (bank_angle is None):
@@ -291,8 +300,10 @@ def compute_initial_depth( site_prefix=None, topo_dir=None,
             theta = bank_angle
     #------------------------------------------------------------------------  
     if (sinu_file is not None):
-        sinu_file = topo_dir + sinu_file  
-        sinu = rtg_files.read_grid( sinu_file, grid_info, RTG_type='FLOAT' )
+        sinu_file2 = sinu_file
+        if not(os.sep in sinu_file):
+            sinu_file2 = topo_dir + sinu_file  
+        sinu = rtg_files.read_grid( sinu_file2, grid_info, RTG_type='FLOAT' )
         sinu[ sinu == 0 ] = 1.0  # (starts with zeros on edges)
     else:
         sinu = 1.0
@@ -432,7 +443,9 @@ def compute_initial_depth( site_prefix=None, topo_dir=None,
     # Byte swapping may occur in write_grid() based
     # on byte order recorded in grid_info object.
     #------------------------------------------------
-    d0_file2 = (topo_dir + d0_file)
+    d0_file2 = d0_file
+    if not(os.sep in d0_file):
+        d0_file2 = topo_dir + d0_file
     rtg_files.write_grid( d, d0_file2, grid_info, RTG_type='FLOAT')
     print( 'Finished writing file: ')
     print( d0_file2 )
@@ -457,7 +470,9 @@ def compute_initial_depth( site_prefix=None, topo_dir=None,
         # Byte swapping may occur in write_grid() based
         # on byte order recorded in grid_info object.
         #------------------------------------------------
-        v0_file2 = (topo_dir + v0_file)
+        v0_file2 = v0_file
+        if not(os.sep in v0_file):
+            v0_file2 = topo_dir + v0_file
         rtg_files.write_grid( v0, v0_file2, grid_info, RTG_type='FLOAT')
         print( 'Finished writing file: ')
         print( v0_file2 )

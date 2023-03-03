@@ -1,6 +1,8 @@
 
-# Copyright (c) 2014, Scott D. Peckham
-# September 2014
+# Copyright (c) 2014-2022, Scott D. Peckham
+#
+# Oct 2022.  Updated write_outlet_file() for use in prepare_inputs.py.
+# Sep 2014.  Created
 
 #------------------------------------------------------------------------
 # Note: Wrote this on 9/19/14 to eliminate a cyclic dependency between
@@ -16,28 +18,39 @@
 #-----------------------------------------------------------------------
 
 import numpy as np
-import os
-import os.path
+import os, os.path
 
 #-----------------------------------------------------------------------
-def write_outlet_file( self ):
+def write_outlet_file( outlet_file, col, row, area, relief, lon, lat ):
 
-    #---------------------------------------------------
-    # Written to provide default if missing. (11/7/11)
-    #---------------------------------------------------
-    dash_line = ''.rjust(60, "-")  #########
-    unit = open( self.outlet_file, 'w' )
-    unit.write('\n')
-    unit.write( dash_line + '\n')
+    #-----------------------------------------
+    # Written to provide default if missing.
+    # Original: 11/7/11.  Updated: 11/4/22.
+    #-----------------------------------------
+    format1 = '%10s%10s%16s%16s%16s%16s'         # for header
+    format2 = '%10i%10i%16.2f%16.2f%16.8f%16.8f' # for values
+    
+    dash_line1 = ''.rjust(60, "-") + '\n'
+    dash_line2 = ''.rjust(86, "-") + '\n'
+    
+    unit = open( outlet_file, 'w' )
+    unit.write( dash_line1 )
     unit.write(' Monitored Grid Cell (Outlet) Information\n')
-    unit.write( dash_line + '\n')
-    format1 = '%10s%10s%16s%16s'
-    format2 = '%10i%10i%16.4f%16.4f'
-    header = format1 % ('Column', 'Row', 'Area [km^2]', 'Relief [m]')
+    unit.write( dash_line2 )
+
+    header = format1 % ('Column', 'Row', 'Area [km^2]',
+                        'Relief [m]', 'Lon [deg]', 'Lat [deg]')
     unit.write( header + '\n' )
-    unit.write( dash_line + '\n')
-    info_str = format2 % (self.nx/2, self.ny/2, 0.0, 0.0)
-    unit.write( info_str + '\n')
+    unit.write( dash_line2 )
+    #--------------------------------------------------------
+    val_str = format2 % (col, row, area, relief, lon, lat)
+    unit.write( val_str + '\n')
+    #--------------------------------------------------------
+#     for k in range(len(col)):
+#         val_str = format2 % (col[k], row[k], area[k],
+#                              relief[k], lon[k], lat[k])
+#         unit.write( val_str + '\n')
+    #--------------------------------------------------------
     unit.close()
 
 #   write_outlet_file()
@@ -123,6 +136,14 @@ def read_outlet_file( self ):
             n += 1
     n_outlets = n
 
+    #-------------------------------------    
+    # Bug fix (for trailing blank lines)
+    #-------------------------------------
+    outlet_cols   = outlet_cols[0:n_outlets]
+    outlet_rows   = outlet_rows[0:n_outlets]
+    basin_areas   = outlet_cols[0:n_outlets]
+    basin_reliefs = outlet_cols[0:n_outlets]
+        
     #------------------------------------------------    
     # Save area and relief of first basin into self
     #------------------------------------------------
@@ -157,9 +178,11 @@ def read_outlet_file( self ):
     # Save IDs as a tuple of row indices and
     # calendar indices, "np.where" style
     #-------------------------------------------
+    self.outlet_flat_ID = outlet_ID   ## 12/3/22 (for NextGen)
     self.n_outlets  = n_outlets   ## (new; 9/19/14)
     self.outlet_IDs = (outlet_rows,    outlet_cols)
     self.outlet_ID  = (outlet_rows[0], outlet_cols[0])
+
     ## self.outlet_IDs = (outlet_IDs / self.nx, outlet_IDs % self.nx)
     ## self.outlet_ID  = (outlet_ID  / self.nx, outlet_ID  % self.nx)
 
@@ -179,7 +202,9 @@ def check_outlet_IDs( outlet_IDs, n_pixels ):
                      ' ', \
                      'You can use hydrologic GIS software to get ', \
                      'the outlet ID for the main basin. ', ' '])
-        result = GUI_Message(msg, INFO=True, TITLE='Missing Input')
+        for k in range(len(msg)):
+            print( msg[k] )
+        #### result = GUI_Message(msg, INFO=True, TITLE='Missing Input')
         OK = False
         
     return OK

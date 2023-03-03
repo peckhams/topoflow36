@@ -595,6 +595,7 @@ class ncts_file():
         #---------------------------------------------------
         for k in range(len(var_names)):
             var_name = var_names[k]
+            ## print('#### var_name =', var_name)
             var = ncts_unit.createVariable(var_name, dtype_codes[k], ("time",))
         
             #-----------------------------------------

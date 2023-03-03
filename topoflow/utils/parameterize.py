@@ -10,6 +10,7 @@
 
 #------------------------------------------------------------------------
 
+import os
 import numpy as np
 from . import rtg_files   # (also in utils directory)
 from . import rti_files   # (also in utils directory)
@@ -97,9 +98,9 @@ def get_grid_from_TCA( site_prefix=None, topo_dir=None,
 
     if (site_prefix is None):
         site_prefix = 'Treynor'
-    if (topo_dir is None):
-        topo_dir = '/Users/peckhams/Dropbox/TopoFlow_3.6/topoflow/'
-        topo_dir += 'examples/Treynor_Iowa_30m/'
+#     if (topo_dir is None):
+#         topo_dir = '/Users/peckhams/Dropbox/TopoFlow_3.6/topoflow/'
+#         topo_dir += 'examples/Treynor_Iowa_30m/'
     if (area_file is None):
         area_file = site_prefix + '_area.rtg'
     if (out_file is None):
@@ -115,8 +116,10 @@ def get_grid_from_TCA( site_prefix=None, topo_dir=None,
     # Read the area grid (i.e. D8 total contributing area)
     #-------------------------------------------------------
     # Also available as d8.A
-    #-------------------------------------------------------------
-    area_file2 = topo_dir + area_file
+    #--------------------------
+    area_file2 = area_file
+    if not(os.sep in area_file):
+        area_file2 = topo_dir + area_file   
     A = rtg_files.read_grid( area_file2, grid_info, RTG_type='FLOAT' )
 
     #----------------------------------- 
@@ -199,7 +202,9 @@ def get_grid_from_TCA( site_prefix=None, topo_dir=None,
     #----------------------------------
     # Write computed grid to out_file
     #----------------------------------
-    out_file2 = (topo_dir + out_file)
+    out_file2 = out_file
+    if not(os.sep in area_file):
+        out_file2 = topo_dir + out_file
     rtg_files.write_grid( grid, out_file2, grid_info, RTG_type='FLOAT')
     if (REPORT):
         print( 'Finished writing file: ')
