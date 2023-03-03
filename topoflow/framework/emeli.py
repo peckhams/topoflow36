@@ -11,27 +11,27 @@
 #
 #  >>> import cProfile
 #  >>> cProfile.run('topoflow.framework.tests.test_framework.topoflow_test()')  
-#      
+#
 #-----------------------------------------------------------------------      
-## Copyright (c) 2012-2020, Scott D. Peckham
-##
-## Nov 2016.  Updated to use comp_names vs. port_names throughout.
-##            EMELI doesn't link components by type, but couples
-##            components to others that provide required variables.
-##            Changed "port_name" as "comp_type", but not used. 
-##            Also removed old XML tags from component repository.
-##            Also added unit conversion that uses cfunits.Units.
-## 
-## Apr 2013.  Added automatic time interpolation, using new
-##            time_interpolator class in time_interpolation.py.
-##
-## Feb 2013.  New approach, starting from framework.py.
-## Jan 2013.  Testing with full standard names and removal of
-##               all calls to get_port_data(), get_grid_*, etc.
-## Mar 2012.  Started from port_queue.py.
-## Apr 2012.
-## May 2012.  Can remove embed_name tag from XML file now.
-##
+# Copyright (c) 2012-2022, Scott D. Peckham
+#
+# Nov 2016.  Updated to use comp_names vs. port_names throughout.
+#            EMELI doesn't link components by type, but couples
+#            components to others that provide required variables.
+#            Changed "port_name" as "comp_type", but not used. 
+#            Also removed old XML tags from component repository.
+#            Also added unit conversion that uses cfunits.Units.
+# 
+# Apr 2013.  Added automatic time interpolation, using new
+#            time_interpolator class in time_interpolation.py.
+#
+# Feb 2013.  New approach, starting from framework.py.
+# Jan 2013.  Testing with full standard names and removal of
+#               all calls to get_port_data(), get_grid_*, etc.
+# Mar 2012.  Started from port_queue.py.
+# Apr 2012.
+# May 2012.  Can remove embed_name tag from XML file now.
+#
 #-----------------------------------------------------------------------
 # Notes: In this version, the "run_model()" method calls a function
 #        called "get_required_vars()" within its time loop that gets
@@ -78,33 +78,22 @@
 #      read_repository()
 #      read_provider_file()
 #      comp_name_valid()
-#      comp_set_complete()          # NOT USED. Still uses ports.
-#      -------------------------
-#      instantiate()
-#      remove()
-#      connect()
-#      disconnect()
-#      ----------------------------
-#      These are from CMI_base.py
-#      ----------------------------
-#      get_values()                  # NOT USED. See get_required_vars()
-#      set_values()     
-#      get_values_at_indices()
-#      set_values_at_indices()
-#      -------------------------
-#      initialize()
-#      update()
-#      finalize()
-#      -------------------------
-#      get_cfg_filename()            # (9/18/14)
+#      get_provider_bmi()
+#      ------------------------
+#      instantiate_comp()
+#      get_cfg_filename()
+#      initialize_comp()
+#      update_comp()
+#      finalize_comp()
+#      remove_comp()
+#      connect_comps()
+#      ------------------------
+#      instantiate_all()
 #      initialize_all()
 #      update_all()
 #      finalize_all()
-#      -------------------------
-#      go()
 #      run_model()                   # (4/18/13. New way to set refs.)
-#      run_rc_script()               # Not ready yet.
-#      -------------------------
+#      ------------------------
 #      initialize_time_vars()
 #      convert_time_units()
 #      initialize_framework_dt()
@@ -117,13 +106,6 @@
 #      check_var_users_and_providers()
 #      initialize_comp_set()              ## (2/18/13)
 #      get_required_vars()                ## (4/18/13)
-
-#      ----------------------------------
-#      Alternate approach, not used now
-#      ----------------------------------
-#      initialize_and_connect_comp_set()  ## (used before 2/18/13)
-#      run_model_old()
-#      set_provided_vars()                ## (2/18/13, not used now)
 #
 #-----------------------------------------------------------------------
 
@@ -493,85 +475,16 @@ class framework():
         
     #   comp_name_valid()
     #-------------------------------------------------------------------
-#     def comp_set_complete( self, SILENT=True, REPORT=False ):
-# 
-#         #-----------------------------------------------------
-#         # Note:  This checks if all of the "uses" ports for
-#         #        components in comp_set have a corresponding
-#         #        "provider" port in the comp_set.
-#         #-----------------------------------------------------
-#         # Note:  This currently ignores the "ppf" port.
-#         #-----------------------------------------------------
-#         
-#         #---------------------------------------------------
-#         # Build up a list of all the uses ports and a list
-#         # of all the provider ports for the components in
-#         # the comp_set (configuration).
-#         #---------------------------------------------------
-#         uses_ports_found     = []
-#         provides_ports_found = []
-#         for port_name in self.comp_set:
-#             provides_ports_found.append( port_name )
-#             #-----------------------------------------
-#             info = self.port_info[ port_name ]
-#             for name in info.uses_ports:
-#                 if (name not in uses_ports_found):
-#                     uses_ports_found.append( name )
-# 
-#         #-------------------------------------
-#         # Any uses and provides ports found?
-#         #-------------------------------------
-#         n_uses     = len( uses_ports_found )
-#         n_provides = len(provides_ports_found )
-#         if (n_uses == 0):
-#             print 'ERROR: No uses ports found.'
-#             return
-#         if (n_provides == 0):
-#             print 'ERROR: No provides ports found.'
-#             return
-# 
-#         #---------------------
-#         # Sort the two lists
-#         #---------------------
-#         uses_ports_found.sort()
-#         provides_ports_found.sort()
-#         
-#         #----------------------------------------------
-#         # Option to print all uses and provides ports
-#         #----------------------------------------------
-#         if (REPORT):
-#             print 'Uses ports in comp_set are:'
-#             for name in uses_ports_found:
-#                 print '    ' + name
-#             print 'Provides ports in comp_set are:'
-#             for name in provides_ports_found:
-#                 print '    ' + name
-#             print ' '
-#             
-#         #------------------------------------------------
-#         # Check if every uses_port is in providers
-#         #------------------------------------------------
-#         missing_providers = []
-#         for uses_port_name in uses_ports_found:
-#             FOUND = (uses_port_name in provides_ports_found)
-#             ######## if not(FOUND):
-#             if not(FOUND) and (uses_port_name != 'ppf'):  #########
-#                 missing_providers.append( uses_port_name )
-#         if (len(missing_providers) > 0):
-#             if not(SILENT):
-#                 print 'These uses ports have no matching provider:'
-#             for name in missing_providers:
-#                 print '   ' + name
-#             print ' '
-#             return False
-#         else:
-#             if not(SILENT):
-#                 print 'All uses ports have matching provider port.\n'
-#             return True
-#         
-#     #   comp_set_complete()  
+    def get_provider_bmi( self, long_var_name ):
+    
+        provider_list = self.var_providers[ long_var_name ]
+        provider_name = provider_list[0]
+        bmi = self.comp_set[ provider_name ]
+        return bmi
+
+    #   get_provider_bmi()   
     #-------------------------------------------------------------------
-    def instantiate( self, comp_name ):
+    def instantiate_comp( self, comp_name ):
 
         #-------------------------------------------------------
         # Note: This version only allows one component of each
@@ -663,9 +576,109 @@ class framework():
             print('EMELI: Instantiated component: ' + comp_name)
             ## print('        of comp_type: ' + comp_type)
 
-    #   instantiate()
+    #   instantiate_comp()
     #-------------------------------------------------------------------
-    def remove( self, comp_name ):
+    def get_cfg_filename( self, bmi ):  ###################
+    
+        #---------------------------
+        # Get name of the cfg_file
+        #---------------------------
+        cfg_extension = bmi.get_attribute( 'cfg_extension' )   ###### NO LONGER IN BMI
+        file_name     = (self.cfg_prefix + cfg_extension)
+        #-------------------------------------------------
+        ## cfg_directory = (os.getcwd() + os.sep)
+        cfg_directory = self.cfg_directory + os.sep
+        cfg_file      = (cfg_directory + file_name) 
+
+        #--------------
+        # For testing
+        #--------------
+#         print 'In EMELI, cfg_file =', cfg_file
+
+        return cfg_file
+          
+    #   get_cfg_filename()
+    #-------------------------------------------------------------------
+    def initialize_comp( self, comp_name, cfg_file=None):
+
+        #--------------------------------------------------
+        # Note: This is called by:  initialize_comp_set()
+        #       SILENT keyword applies to all components.
+        #--------------------------------------------------
+        #       In every component, mode='nondriver' in
+        #       initialize.  EMELI sets mode='driver'
+        #       for the driver after instantiation.
+        #       So don't do anything with mode here.
+        #--------------------------------------------------
+        
+        #------------------------------
+        # Is comp_name in comp_list ?
+        #------------------------------
+##        if not(self.comp_name_valid( comp_name )):
+##            return
+
+        bmi = self.comp_set[ comp_name ]
+        if (cfg_file == None):
+            cfg_file = self.get_cfg_filename( bmi )
+        #-------------------------------------------
+        # driver_comp is identified in run_model()
+        # and message is printed there.
+        #-------------------------------------------
+        mode = 'nondriver'        
+        if (comp_name == self.driver_comp_name):
+            mode = 'driver'      
+        bmi.initialize( cfg_file=cfg_file, SILENT=self.SILENT,
+                        mode=mode )
+            
+    #   initialize_comp()
+    #-------------------------------------------------------------------
+    def update_comp( self, comp_name ):
+
+        #------------------------------
+        # Is comp_name in comp_list ?
+        #------------------------------
+##        if not(self.comp_name_valid( comp_name )):
+##            return
+
+        #----------------------------------------------------
+        # Note: If we don't pass "time_sec" to update()
+        #       and then on to write_output_files() it will
+        #       use its internal self.time_sec for output.      
+        #----------------------------------------------------      
+        bmi = self.comp_set[ comp_name ]
+        bmi.update()
+        ## bmi.update( -1.0, time_seconds=self.time_sec )
+
+        #---------------------------------------------
+        # Was this update was successful ?
+        # Status could be "updated", "failed" or
+        # "initialized" (if comp_status == Disabled)
+        #---------------------------------------------
+        status = bmi.get_status()
+        if (status == 'failed'):
+            print('================================================')
+            print('ERROR: Model run aborted.')
+            print('  Update failed on component: ' + comp_name + '.')
+            print('================================================')
+            print()
+            self.DONE = True
+    
+    #   update_comp()
+    #-------------------------------------------------------------------
+    def finalize_comp( self, comp_name ):
+
+        #------------------------------
+        # Is comp_name in comp_list ?
+        #------------------------------
+##        if not(self.comp_name_valid( comp_name )):
+##            return
+        
+        bmi = self.comp_set[ comp_name ]
+        bmi.finalize()
+            
+    #   finalize_comp()
+    #-------------------------------------------------------------------
+    def remove_comp( self, comp_name ):
 
         #-----------------------------------------------------
         # Note: Remove a component from comp_set, perhaps to
@@ -700,21 +713,24 @@ class framework():
         if not(self.SILENT):
             print('Removed component:', comp_name)
             
-    #   remove()
+    #   remove_comp()
     #-------------------------------------------------------------------
-    def connect( self, provider_name, user_name,
-                 long_var_name, REPORT=False ):
+    def connect_comps( self, provider_name, user_name,
+                       long_var_name, REPORT=False ):
 
         if (REPORT):
             print('Connecting user: ' + user_name)
             print('    to provider: ' + provider_name)
             print('    for the variable: ' + long_var_name)
 
+        p_bmi = self.comp_set[ provider_name ]
+        u_bmi = self.comp_set[ user_name ]
+        
         #---------------------------------------------
         # Get a reference to long_var_name from the
         # component with provider_name (a comp_name)
         #---------------------------------------------
-        values = self.get_values( long_var_name, provider_name )
+        values = p_bmi.get_value_ptr( long_var_name )
       
         #-------------------------------------------------------
         # This is where service components could be called to
@@ -736,8 +752,6 @@ class framework():
         #------------------------------
         # Convert units, if necessary
         #------------------------------
-        p_bmi   = self.comp_set[ provider_name ]
-        u_bmi   = self.comp_set[ user_name ]
         p_units = p_bmi.get_var_units( long_var_name )
         u_units = u_bmi.get_var_units( long_var_name )
         if (u_units != p_units):
@@ -747,7 +761,7 @@ class framework():
         # Embed a reference to long_var_name from the
         # provider into the (BMI level of) user component.
         #---------------------------------------------------
-        self.set_values( long_var_name, values, user_name )
+        u_bmi.set_value( long_var_name, values )
 
         #-------------------
         # Test on Q_outlet
@@ -760,368 +774,23 @@ class framework():
 ##            print ' After set_values, rank( Q_outlet ) =', np.ndim(vals)
 ##            print '########################################################'
 
-        #---------------------------------------------------
-        # This needs to be done using a component's own
-        # get_var_name() function, not here.  (5/17/12)
-        #---------------------------------------------------
-        # embed_name could be null string or the name of a
-        # named container (struct) such as "met_vars."
-        #---------------------------------------------------
-##        embed_name     = self.port_info[ user_name ].embed_name
-##        long_var_name2 = (embed_name + long_var_name)
-##        self.set_values( long_var_name2, values, user_name )
-
-    #   connect()
+    #   connect_comps()
     #-------------------------------------------------------------------
-    def disconnect( self, provider_name, user_name,
-                    long_var_name ):
-
-        #--------------------------------------------
-        # Note: We may not need this.  Use "del" ??
-        #--------------------------------------------
-        pass
-        
-    #   disconnect()
-    #-------------------------------------------------------------------
-    def get_values( self, long_var_name, comp_name ):
-
-        #---------------------------------------------------
-        # Note: We will later have a PYTHON_ONLY flag that
-        #       will allow us to bypass the static-type
-        #       BMI methods.
-        #---------------------------------------------------
-        
-        #---------------------------------------------------------
-        # Note: This method returns a NumPy "ndarray" object
-        #       that Babel is able to pass to other components
-        #       as a SIDL generic array.
-        #---------------------------------------------------------
-        #       The functions called by this one below are "port
-        #       functions" (or methods) and therefore have
-        #       static return types.
-        #---------------------------------------------------------
-        #       This component (self) often won't have a port
-        #       connection to the caller and so can't call the
-        #       methods of its caller.  Regridding and unit
-        #       conversion (if supported) would be done just
-        #       prior to calling set_values() in connect().
-        #---------------------------------------------------------
-        bmi = self.comp_set[ comp_name ]
-
-        ###############################################
-        # THIS IS A LOT FASTER.  (2/20/13)
-        ###############################################
-        return bmi.get_values( long_var_name )
-    
-#         #----------------------------------------------
-#         # Get data type and rank for long_var_name.
-#         # Assume that NumPy dtype string is returned.
-#         #----------------------------------------------
-#         dtype = bmi.get_var_type( long_var_name )
-#         rank  = bmi.get_var_rank( long_var_name )
-# 
-#         #-----------------------------------------------------------
-#         # Call the appropriate BMI method.  We could do this other
-#         # ways in Python, but this is the general approach.
-#         #-----------------------------------------------------------
-#         if (dtype == 'float64'):
-#             if (rank == 0):
-#                 values = bmi.get_0d_double( long_var_name )
-#             elif (rank == 1):
-#                 values = bmi.get_1d_double( long_var_name )
-#             elif (rank == 2):
-#                 values = bmi.get_2d_double( long_var_name )
-#             elif (rank == 3):
-#                 values = bmi.get_3d_double( long_var_name )
-# ##            elif (rank == 4):
-# ##                values = bmi.get_4d_double( long_var_name )
-#                 #-------------------------------------------------------------
-#         elif (dtype == 'int32'):
-#             if (rank == 0):
-#                 values = bmi.get_0d_int( long_var_name )
-#             elif (rank == 1):
-#                 values = bmi.get_1d_int( long_var_name )
-#             elif (rank == 2):
-#                 values = bmi.get_2d_int( long_var_name )
-#             elif (rank == 3):
-#                 values = bmi.get_3d_int( long_var_name )
-# ##            elif (rank == 4):
-# ##                values = bmi.get_4d_int( long_var_name )
-#                 #-------------------------------------------------------------
-#         else:
-#             print '############################################'
-#             print ' ERROR: In framework.get_values():'
-#             print '        Type_name of "' + dtype + '"'
-#             print '        is not yet supported.'
-#             print '############################################'
-#             print ' '
-#             
-#         #-----------------------------------------------
-#         # Return values on this component's own grid
-#         # and with its own units for variables.
-#         # Set values will do conversions when needed ?
-#         #-----------------------------------------------
-#         return values
-
-    #   get_values()   
-    #-------------------------------------------------------------------
-    def set_values( self, long_var_name, values, comp_name):
-
-        #---------------------------------------------------
-        # Note: We will later have a PYTHON_ONLY flag that
-        #       will allow us to bypass the static-type
-        #       BMI methods.
-        #-----------------------------------------------------
-        
-        #--------------------------------------------
-        # Get data type and rank for long_var_name.
-        #--------------------------------------------
-        bmi = self.comp_set[ comp_name ]
-
-        ###############################################
-        # THIS IS A LOT FASTER.  (2/20/13)
-        ###############################################
-        bmi.set_values( long_var_name, values )
-        return
-    
-#         dtype = str( values.dtype )
-#         rank  = np.ndim( values )
-# 
-#         #------------------------------------------
-#         # Use dtype and rank to call appropriate,
-#         # static-type BMI functions.
-#         #------------------------------------------
-#         if (dtype == 'float64'):
-#             if (rank == 0):
-#                 bmi.set_0d_double( long_var_name, values )
-#             elif (rank == 1):
-#                 bmi.set_1d_double( long_var_name, values )
-#             elif (rank == 2):
-#                 bmi.set_2d_double( long_var_name, values )
-#             elif (rank == 3):
-#                 bmi.set_3d_double( long_var_name, values )
-#         #------------------------------------------------------
-#         elif (dtype == 'int32'):
-#             if (rank == 0):
-#                 bmi.set_0d_int( long_var_name, values )
-#             elif (rank == 1):
-#                 bmi.set_1d_int( long_var_name, values )
-#             elif (rank == 2):
-#                 bmi.set_2d_int( long_var_name, values )
-#             elif (rank == 3):
-#                 bmi.set_3d_int( long_var_name, values )
-#         #------------------------------------------------------
-#         else:
-#             print '############################################'
-#             print ' ERROR: In framework.set_values():'
-#             print '        Type_name of "' + dtype + '"'
-#             print '        is not yet supported.'
-#             print '############################################'
-#             print ' '
-                
-    #   set_values()
-    #-------------------------------------------------------------------
-    def get_values_at_indices( self, long_var_name, indices,
-                               comp_name ):
-
-        #-------------------------------------------------------------
-        # Notes:  For the specified variable, get the values at the
-        #         specified indices and return them.  If the wrapped
-        #         model is raster, then each raster cell has a long
-        #         integer, calendar-style index and these are used
-        #         for indices.  If the wrapped model is ugrid, then
-        #         each cell in the grid has a unique, long-integer
-        #         ID and these are used for indices.
-        #-------------------------------------------------------------
-
-        #----------------------------------------------
-        # Get data type and rank for long_var_name.
-        # Assume that NumPy dtype string is returned.
-        #----------------------------------------------
-        bmi   = self.comp_set[ comp_name ]
-        return bmi.get_values_at_indices( long_var_name, indices )
-    
-#         dtype = bmi.get_var_type( long_var_name )
-#         rank  = bmi.get_var_rank( long_var_name )
-# 
-#         if (dtype == 'float64'):
-#             if (rank == 2):
-#                 return bmi.get_2d_double_at_indices( long_var_name, indices )
-#         elif (dtype == 'int32'):
-#             if (rank == 2):
-#                 return bmi.get_2d_int_at_indices( long_var_name, indices )
-            
-    #   get_values_at_indices()
-    #-------------------------------------------------------------------
-    def set_values_at_indices( self, long_var_name, indices, values,
-                               comp_name ):
-
-        #----------------------------------------------
-        # Get data type and rank for long_var_name.
-        # Assume that NumPy dtype string is returned.
-        #----------------------------------------------
-        bmi   = self.comp_set[ comp_name ]
-        bmi.set_values_at_indices( long_var_name, indices, values )
-        
-#         dtype = bmi.get_var_type( long_var_name )
-#         rank  = bmi.get_var_rank( long_var_name )
-# 
-#         if (dtype == 'float64'):
-#             if (rank == 2):
-#                 bmi.set_2d_double_at_indices( long_var_name, indices, values )
-#                 return
-#         elif (dtype == 'int32'):
-#             if (rank == 2):
-#                 bmi.set_2d_int_at_indices( long_var_name, indices, values )
-#                 return
-# 
-#         print '######################################################'
-#         print ' ERROR: framework.set_values_at_indices() currently'
-#         print '        requires target variable to be a 2D array.'
-#         print '######################################################'
-#         print ' '
-                
-    #   set_values_at_indices()
-    #-------------------------------------------------------------------
-    def initialize( self, comp_name, cfg_file=None):
+    def instantiate_all( self ):
 
         #--------------------------------------------------
-        # Note: This is called by:  initialize_comp_set()
-        #       SILENT keyword applies to all components.
+        # Note: The "comp_set_list" has the comps in
+        #       a particular order, while self.comp_set
+        #       is an unordered dictionary.
         #--------------------------------------------------
-        #       In every component, mode='nondriver' in
-        #       initialize.  EMELI sets mode='driver'
-        #       for the driver after instantiation.
-        #       So don't do anything with mode here.
-        #--------------------------------------------------
-        
-        #------------------------------
-        # Is comp_name in comp_list ?
-        #------------------------------
-##        if not(self.comp_name_valid( comp_name )):
-##            return
-
-        bmi = self.comp_set[ comp_name ]
-        if (cfg_file == None):
-            cfg_file = self.get_cfg_filename( bmi )
-        #-------------------------------------------
-        # driver_comp is identified in run_model()
-        # and message is printed there.
-        #-------------------------------------------
-        mode = 'nondriver'        
-        if (comp_name == self.driver_comp_name):
-            mode = 'driver'      
-        bmi.initialize( cfg_file=cfg_file, SILENT=self.SILENT,
-                        mode=mode )
-            
-    #   initialize()
-    #-------------------------------------------------------------------
-#     def initialize_LAST( self, comp_name, cfg_file=None,
-#                     mode='nondriver'):
-# 
-#         #--------------------------------------------------
-#         # Note: This is called by:  initialize_comp_set()
-#         #       SILENT keyword applies to all components.
-#         #--------------------------------------------------
-#         
-#         #------------------------------
-#         # Is comp_name in comp_list ?
-#         #------------------------------
-# ##        if not(self.comp_name_valid( comp_name )):
-# ##            return
-#            
-#         bmi = self.comp_set[ comp_name ]
-#         if (cfg_file == None):
-#             cfg_file = self.get_cfg_filename( bmi )
-#         bmi.initialize( cfg_file=cfg_file, mode=mode,
-#                         SILENT=self.SILENT )
-#             
-#     #   initialize()
-    #-------------------------------------------------------------------
-    def update( self, comp_name ):
-
-        #------------------------------
-        # Is comp_name in comp_list ?
-        #------------------------------
-##        if not(self.comp_name_valid( comp_name )):
-##            return
-
-        #----------------------------------------------------
-        # Note: Passing dt=-1.0 to update() method tells
-        #       component to use its own timestep.
-        #       And if we don't pass "time_sec" to update()
-        #       and then on to write_output_files() it will
-        #       use its internal self.time_sec for output.      
-        #----------------------------------------------------      
-        bmi = self.comp_set[ comp_name ]
-        bmi.update( -1.0 )
-        ## bmi.update( -1.0, time_seconds=self.time_sec )
-
-        #---------------------------------------------
-        # Was this update was successful ?
-        # Status could be "updated", "failed" or
-        # "initialized" (if comp_status == Disabled)
-        #---------------------------------------------
-        status = bmi.get_status()
-        if (status == 'failed'):
-            print('================================================')
-            print('ERROR: Model run aborted.')
-            print('  Update failed on component: ' + comp_name + '.')
-            print('================================================')
-            print()
-            self.DONE = True
-    
-    #   update()
-    #-------------------------------------------------------------------
-    def finalize( self, comp_name ):
-
-        #------------------------------
-        # Is comp_name in comp_list ?
-        #------------------------------
-##        if not(self.comp_name_valid( comp_name )):
-##            return
-        
-        bmi = self.comp_set[ comp_name ]
-        bmi.finalize()
-            
-    #   finalize()
-    #-------------------------------------------------------------------
-##    def instantiate_all( self ):
-##
-##        #--------------------------------------------------
-##        # Note: The "comp_set_list" has the comps in
-##        #       a particular order, while self.comp_set
-##        #       is an unordered dictionary.
-##        #--------------------------------------------------
-##        if not(hasattr(self, 'comp_set_list')):
-##            print 'Providers not yet read from provider_file.'
-##            return
-##        
-##        for comp_name in self.comp_set_list:
-##            self.instantiate( comp_name )
-##            
-##    #   instantiate_all()
-    #-------------------------------------------------------------------
-    def get_cfg_filename( self, bmi ):  ###################
-    
-        #---------------------------
-        # Get name of the cfg_file
-        #---------------------------
-        cfg_extension = bmi.get_attribute( 'cfg_extension' )   ###### NO LONGER IN BMI
-        file_name     = (self.cfg_prefix + cfg_extension)
-        #-------------------------------------------------
-        ## cfg_directory = (os.getcwd() + os.sep)
-        cfg_directory = self.cfg_directory + os.sep
-        cfg_file      = (cfg_directory + file_name) 
-
-        #--------------
-        # For testing
-        #--------------
-#         print 'In EMELI, cfg_file =', cfg_file
-
-        return cfg_file
-          
-    #   get_cfg_filename()
+        if not(hasattr(self, 'comp_set_list')):
+            print('Providers not yet read from provider_file.')
+            return
+       
+        for comp_name in self.comp_set_list:
+            self.instantiate_comp( comp_name )
+           
+    #   instantiate_all()
     #-------------------------------------------------------------------
     def initialize_all( self, cfg_prefix=None, mode='nondriver'):
 
@@ -1161,31 +830,11 @@ class framework():
             bmi = self.comp_set[ comp_name ]
             if hasattr(bmi, 'comp_status'):
                 if (bmi.comp_status.lower() == 'enabled'):
-                    bmi.update( -1.0 )
+                    bmi.update()
             else:
-                bmi.update( -1.0 )
-            
-            ## if (bmi.comp_status == 'Enabled'):
-            ##     bmi.update( -1.0 )             
+                bmi.update()           
             
     #   update_all()
-    #-------------------------------------------------------------------
-    def finalize_all0( self ):
-
-        #--------------------------------------------------
-        # Note: The "provider_list" has the ports in
-        #       a particular order, while self.comp_set
-        #       is an unordered dictionary.
-        #--------------------------------------------------
-        if not(hasattr(self, 'provider_list')):
-            print('Providers not yet read from provider_file.')
-            return
-        
-        for comp_name in self.provider_list:
-            bmi = self.comp_set[ comp_name ]
-            bmi.finalize()
-          
-    #   finalize_all0()
     #-------------------------------------------------------------------
     def finalize_all( self ):
 
@@ -1291,12 +940,9 @@ class framework():
             
         #--------------------------------------------
         # Instantiate a complete set of components.
-        #--------------------------------------------
-        # Now the instantiate() method only allows
-        # one component of each "type" (comp_type).
-        #--------------------------------------------    
+        #--------------------------------------------   
         for comp_name in self.comp_set_list:
-            self.instantiate( comp_name )
+            self.instantiate_comp( comp_name )
         ### self.instantiate_all()   ### Later; change it first.
        
         #---------------------------------------------
@@ -1322,7 +968,7 @@ class framework():
         # NOTE: If we set driver.mode here, it will
         # get unset when initialize_comp_set() calls
         # each component's initialize with defaults.
-        # See initialize().
+        # See initialize_comp().
         #--------------------------------------------- 
         # driver.mode = 'driver'
         
@@ -1353,9 +999,9 @@ class framework():
                                           self.provider_list,
                                           self.vars_provided,
                                           time_interp_method )
-        #------------------------------------------------------
-        # This calls bmi.update(-1) on every comp in comp_set
-        #------------------------------------------------------
+        #----------------------------------------------------
+        # This calls bmi.update() on every comp in comp_set
+        #----------------------------------------------------
         time_interpolator.initialize( SILENT=self.SILENT )
         #---------------------------------------------------------
         # This is used by set_provided_vars() in run_model_old()
@@ -1401,7 +1047,7 @@ class framework():
                     self.get_required_vars( comp_name, bmi_time )
                     
                     if (bmi.comp_status == 'Enabled'):   ######## 2021-07
-                        bmi.update( -1.0 )
+                        bmi.update()
                     
                     #--------------------------------------------------
                     # Update time interpolation vars for every
@@ -1438,18 +1084,6 @@ class framework():
         self.finalize_all()
             
     #   run_model()
-    #-------------------------------------------------------------------
-    def run_rc_script( self ):
-
-        #----------------------------------------------------------
-        # Note: This method will eventually be used to run all
-        #       of the framework commands in a Ccaffeine RC file
-        #       such as set_path(), instantiate(), connect(),
-        #       remove(), etc.
-        #----------------------------------------------------------
-        pass
-    
-    #   run_rc_script()
     #-------------------------------------------------------------------
     def initialize_time_vars(self, units='seconds'):
 
@@ -1607,17 +1241,6 @@ class framework():
         if not(self.SILENT):
             print('Component with smallest time step is: ' + dt_min_name)
             print()
-
-        #----------------------------------------------
-        # This is not used with new method. (4/13/13)
-        #----------------------------------------------
-        # Compute an "update_step" for each component
-        #----------------------------------------------
-##        self.comp_update_steps = np.zeros( n_comps )
-##        for k in xrange( n_comps ):
-##            dt = dt_array[ k ]
-##            self.comp_update_steps[ k ] = np.ceil( dt / dt_min ).astype('int32')  
-##        self.n_comps = n_comps  # (used by run_model().)
         
     #   initialize_framework_dt()
     #-------------------------------------------------------------------
@@ -1834,7 +1457,7 @@ class framework():
             # all of its variables, etc.
             #-------------------------------------------
             cfg_file = self.get_cfg_filename( bmi )
-            self.initialize( provider_name, cfg_file )
+            self.initialize_comp( provider_name, cfg_file )
             if not(self.SILENT):
                 print('EMELI: Initialized component: ' + provider_name + '.')
 
@@ -1863,7 +1486,7 @@ class framework():
                     # Embed a reference in the user component to
                     # a variable in the provider component.
                     #---------------------------------------------
-                    self.connect( provider_name, user_name,
+                    self.connect_comps( provider_name, user_name,
                                   long_var_name, REPORT=REPORT )
 
         return OK
@@ -1895,7 +1518,7 @@ class framework():
             # Get a reference to long_var_name from the
             # component with provider_name (a comp_name)
             #---------------------------------------------
-            # values = self.get_values( long_var_name, provider_name )
+            # values = p_bmi.get_value_ptr( long_var_name )
 
             #------------------------------------
             # Break the reference for testing ?
@@ -1916,6 +1539,7 @@ class framework():
             values = self.time_interpolator.get_values( long_var_name,
                                                         provider_name,
                                                         bmi_time )
+
             #-----------------------------------------
             # Call Unit Converter to convert from
             # provider's units to this user's units.
@@ -1961,7 +1585,7 @@ class framework():
             # Embed a reference to long_var_name from the
             # provider into the (BMI level of) user component.
             #---------------------------------------------------
-            self.set_values( long_var_name, values, user_name )
+            u_bmi.set_value( long_var_name, values )
 
             #------------------        
             # Optional report
@@ -1974,343 +1598,6 @@ class framework():
            
     #   get_required_vars()
     #-------------------------------------------------------------------
-    #  Not used currently.  Alternative to get_required_vars.
-    #-------------------------------------------------------------------
-#     def initialize_and_connect_comp_set( self, REPORT=False ):
-# 
-#         #-------------------------------------------------------------
-#         # Note: This first calls find_var_users_and_providers()
-#         #       to find and save self.all_input_var_names and
-#         #       self.all_output_var_names.  It then calls
-#         #       check_var_users_and_providers() to determine if
-#         #       self.comp_set has a provider (in self.var_providers)
-#         #       for every long_name in self.all_input_var_names.
-#         #       If it does, then self.connect is used to create
-#         #       all necessary connections (as embedded references)
-#         #       between users and providers.
-#         #-------------------------------------------------------------               
-#         # (5/17/12) The TopoFlow components used to call a method:
-#         # "initialize_required_components()" that in turn called:
-#         # "initialize_ports()", inherited from CSDMS_base.py.
-#         # But this is not done with the new approach.
-#         #-------------------------------------------------------------
-#         
-#         #----------------------------------------------
-#         # Find and check variable users and providers
-#         #----------------------------------------------
-#         self.find_var_users_and_providers()
-#         OK = self.check_var_users_and_providers()
-#         if not(OK):
-#             return OK    # (a report was just printed)
-# 
-#         #------------------------
-#         # For testing (5/17/12)
-#         #------------------------
-# ##        print '##########################################'
-# ##        print "var_users[ 'channel_time_step_size' ] ="
-# ##        for each in self.var_users[ 'channel_time_step_size' ]:
-# ##            print '    ' + each
-# ##        print '##########################################'              
-#         
-#         #------------------------------------------------
-#         # Loop over providers in order of provider_list.
-#         # Note that the dictionary, self.comp_set, is
-#         # not ordered.  Order of initialize() matters.
-#         #------------------------------------------------
-#         for provider_name in self.provider_list:
-#             bmi = self.comp_set[ provider_name ]
-#             #-------------------------------------------
-#             # Initialize the provider component to set
-#             # all of its variables, etc.
-#             #-------------------------------------------
-#             ## print 'cfg_prefix =', cfg_prefix
-#             cfg_file = None
-#             self.initialize( provider_name, cfg_file )
-#             print 'Initialized component of type: ' + provider_name + '.'
-#                 
-#             #--------------------------------------------------------
-#             # Create a dictionary that maps every long_var_name
-#             # that can be provided by this comp_set to a comp_name.
-#             #--------------------------------------------------------
-#             output_var_names = bmi.get_output_var_names()
-#             for long_var_name in output_var_names:
-#                 #-----------------------------------------------------
-#                 # Is this long_var_name used by any other component?
-#                 #-----------------------------------------------------
-#                 try:
-#                     user_list = self.var_users[ long_var_name ]
-#                 except:
-#                     user_list = []
-#                 for user_name in user_list:
-#                     #---------------------------------------------
-#                     # Embed a reference in the user component to
-#                     # a variable in the provider component.
-#                     #---------------------------------------------
-#                     self.connect( provider_name, user_name,
-#                                   long_var_name, REPORT=REPORT )
-# 
-#         return OK
-#     
-#     #   initialize_and_connect_comp_set()
-    #-------------------------------------------------------------------
-#     def run_model_old( self, driver_comp_name='hydro_model',
-#                        cfg_directory=None, cfg_prefix=None,
-#                        time_interp_method='Linear'):
-#         ## (rename to run_comp_set ????)
-#       
-#         #-------------------
-#         # Default settings
-#         #-------------------
-#         DEBUG = True
-#         ## DEBUG = False
-#         if (cfg_prefix == None):
-#             print 'ERROR: The "cfg_prefix" argument is required.'
-#             return
-#         if (cfg_directory == None):
-#             print 'ERROR: The "cfg_directory" argument is required.'
-#             return
-#         
-#         #--------------------------------------------------
-#         # All components, including this one (the driver)
-#         # will look in the CWD for their CFG file.
-#         #--------------------------------------------------
-#         # This must come after "repo" stuff, which also
-#         # changes the directory.
-#         #--------------------------------------------------        
-#         if (cfg_directory is not None):
-#             os.chdir( cfg_directory )
-#         self.cfg_prefix    = cfg_prefix
-#         self.cfg_directory = cfg_directory
-# 
-#         #-----------------------------------------------------
-#         # Set self.comp_set_list and self.provider_list
-#         # from info in the provider file, including the
-#         # repository path "repo_path".
-#         #-----------------------------------------------------
-#         self.provider_file = (cfg_prefix + '_providers.txt')
-#         self.read_provider_file()
-#         
-#         #------------------------------------
-#         # Get the component repository info
-#         #------------------------------------
-#         ## self.repo_path = '/Users/peckhams/Dropbox/00_New_Framework/'
-#         ## repo_file = self.repo_path + 'component_repository.xml'
-#         ## repo_file = self.repo_dir + 'component_repository.xml'  # (6/19/13)
-#         
-#         self.read_repository( SILENT=False )
-# ##        print 'Components in repository:'
-# ##        for comp_name in f.repo_list:
-# ##            print '   ' + comp_name
-# ##        print ' '
-#         
-#         #--------------------------------------------
-#         # Instantiate a complete set of components.
-#         #--------------------------------------------
-#         # Now the instantiate() method only allows
-#         # one component of each "type" (comp_type).
-#         #--------------------------------------------    
-#         for comp_name in self.comp_set_list:
-#             self.instantiate( comp_name )
-#         ### self.instantiate_all()   ### Later; change it first.
-#        
-#         #---------------------------------------------
-#         # Try to automatically connect every user to
-#         # a corresponding provider in the comp_set.
-#         #---------------------------------------------------
-#         # Provider components are initialized in the order
-#         # of provider_list and then set references in each
-#         # component that uses one or more of their vars.
-#         #---------------------------------------------------
-# ##        OK = self.initialize_and_connect_comp_set( REPORT=True )
-# ##        if not(OK):
-# ##            return
-# 
-#         #------------------------------------------------------------
-#         # (2/18/13) Previous version of framework class initialized
-#         # and then connected the components in the comp_set using
-#         # embedded references.  In this version we will call a
-#         # "get_required_vars()" method within the time loop, which
-#         # will in turn call the get_values() and set_values()
-#         # methods.  But we still need to initialize the comp set.
-#         #------------------------------------------------------------
-#         ## OK = self.initialize_comp_set( REPORT=True )
-#         OK = self.initialize_comp_set( REPORT=False )
-#         if not(OK):
-#             return
-#         
-#         #---------------------------------------
-#         # Set mode of the driver component.
-#         # Note: Must happen before next block.
-#         #---------------------------------------
-#         driver = self.comp_set[ driver_comp_name ]
-#         driver.mode = 'driver'
-#         print('Driver component name = ' + driver_comp_name)
-#         print()
-#         
-#         #-----------------------------------
-#         # Initialize all time-related vars
-#         #-----------------------------------
-#         self.initialize_time_vars()
-#         self.initialize_framework_dt()
-# 
-#         #------------------------------------
-#         # Instantiate a "time_interpolator"
-#         #------------------------------------
-#         time_interpolator = time_interpolation.time_interpolator(
-#                                           self.comp_set,
-#                                           self.provider_list,
-#                                           self.vars_provided,
-#                                           time_interp_method )
-#         time_interpolator.initialize()
-#         #--------------------------------------------
-#         # This will be used by set_provided_vars().
-#         #--------------------------------------------
-#         self.time_interpolator = time_interpolator
-#         
-#         while not(self.DONE):
-# 
-#             # try:
-#             #-------------------------------------------------
-#             # Update components that are ready to be updated
-#             #----------------------------------------------------
-#             # (2/18/13) The "provider_list" we loop over
-#             # here refers to entries in the provider_file; they
-#             # don't necessarily provide anything to another
-#             # component in the comp_set.
-#             #----------------------------------------------------
-#             # It might be more clear to change these names:
-#             #     comp_name     ->    provider_name
-#             #----------------------------------------------------  
-#             for comp_name in self.provider_list:
-# 
-#                 #--------------------------------------------------
-#                 # Update time interpolation vars for every
-#                 # long_var_name that is provided by this provider.
-#                 # Interpolation methods = 'None', 'Linear', etc.
-#                 #--------------------------------------------------
-#                 # This calls bmi.update() whenever necessary.
-#                 # It does so for the driver as well. (4/14/13)
-#                 #--------------------------------------------------
-#                 time_interpolator.update( comp_name, self.time )
-#         
-#                 #------------------------------------------------
-#                 # (2/18/13) Use get_values()/set_values() calls
-#                 # here to set latest vars from this component
-#                 # into all user components that need it.
-#                 #------------------------------------------------
-#                 # This also calls service components as needed.
-#                 #------------------------------------------------
-#                 self.set_provided_vars( comp_name )
-#      
-#             #--------------------
-#             # Are we done yet ?
-#             #--------------------
-#             self.DONE = (driver.DONE or self.DONE)    ####
-#             self.update_time()
-#             ## print 'time =', self.time
-#                 
-# ##            except:
-# ##                print 'ERROR in run_model() method at:'
-# ##                print '   time_index =', self.time_index
-# ##                self.status = 'failed'
-# ##                self.DONE = True
-# 
-#         #-------------------------
-#         # Finalize the model run
-#         #-------------------------
-#         self.finalize_all()
-#         
-#     #   run_model_old()
-    #-------------------------------------------------------------------
-#     def set_provided_vars( self, provider_name ):    
-# 
-#         #----------------------------------------------------------
-#         # Note:  This routine loops through all of the components
-#         #        that the component given by "provider_name"
-#         #        provides vars to and gets/sets the required
-#         #        variables.
-#         #----------------------------------------------------------
-#         # Example: The variable, P, (precip rate) is computed by
-#         #          the Meteorology component with a timestep of
-#         #          60 seconds.  The framework uses the same
-#         #          timestep as the Channels component, namely 6
-#         #          seconds.  Since the Channels component uses P,
-#         #          the framework sets a value of P into Channels
-#         #          that has been time-interpolated to framework
-#         #          time.  So every time the Channels component
-#         #          gets updated, it is using a new (interpolated)
-#         #          value of P.
-#         #----------------------------------------------------------
-#         
-#         #------------------------------------------------------
-#         # Restrict attention to output_var_names that are
-#         # actually needed by other components.  (2/18/13)
-#         # This uses "vars_provided" that was computed earlier
-#         # and just once by "find_var_users_and_providers()".
-#         #------------------------------------------------------
-#         output_var_names = self.vars_provided[ provider_name ]
-#         
-#         for long_var_name in output_var_names:
-# 
-#             #---------------------------------------------
-#             # Get a reference to long_var_name from the
-#             # component with provider_name (a comp_name)
-#             #---------------------------------------------           
-#             # values = self.get_values( long_var_name, provider_name )
-#             values = self.time_interpolator.get_values( long_var_name,
-#                                                         provider_name,
-#                                                         self.time )
-#                 
-#             #------------------------------------
-#             # Break the reference for testing ?
-#             #------------------------------------
-#             # values = np.float64( values )
-# 
-#             user_list = self.var_users[ long_var_name ]
-#             for user_name in user_list:
-#             
-#                 #------------------------------------------------------
-#                 # Note that values from above are on provider's grid,
-#                 # with provider's units, etc.  So need to call some
-#                 # service components here, before self.set_values().
-#                 #------------------------------------------------------
-#                 
-#                 #-------------------------------------
-#                 # Call Unit Converter component here
-#                 #-------------------------------------
-#                 # convert to units used by this user
-#                 
-#                 #----------------------
-#                 # Call Regridder here
-#                 #----------------------
-#                 # convert to grid used by this user
-# 
-#                 #---------------------------------------------------
-#                 # Embed a reference to long_var_name from the
-#                 # provider into the (BMI level of) user component.
-#                 #---------------------------------------------------
-#                 # Note that all values have been interpolated to
-#                 # the current framework time.
-#                 #---------------------------------------------------
-#                 self.set_values( long_var_name, values, user_name )
-# 
-#                 #------------------        
-#                 # Optional report
-#                 #------------------
-#                 REPORT = False
-#                 if (REPORT):
-#                     print 'provider: ' + provider_name
-#                     print '    just shared var: ' + long_var_name
-#                     print '    with user:       ' + user_name
-# 
-#         #---------------
-#         # For Testing.
-#         #---------------
-# ##        bmi = self.comp_set[ provider_name ] 
-# ##        comp_time = bmi.get_current_time()
-# ##        print (provider_name + ' time ='), comp_time
-#             
-#     #   set_provided_vars()
-    #-------------------------------------------------------------------              
+           
 
     

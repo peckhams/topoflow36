@@ -250,7 +250,8 @@ class time_interpolator():
                 # Get vars at start of interpolation time interval
                 #---------------------------------------------------                
                 for long_var_name in self.vars_provided[ comp_name ]:
-                    v1 = bmi.get_values( long_var_name )
+                    ## v1 = bmi.get_values( long_var_name )
+                    v1 = bmi.get_value_ptr( long_var_name )
                     data = time_interp_data( v1=v1, t1=t1, \
                                 long_var_name=long_var_name )
                     self.time_interp_vars[ long_var_name ] = data
@@ -278,8 +279,9 @@ class time_interpolator():
                 #-------------------------------------------------
                 # Get vars at end of interpolation time interval
                 #-------------------------------------------------                
-                for long_var_name in self.vars_provided[ comp_name ]:       
-                    v2 = bmi.get_values( long_var_name )
+                for long_var_name in self.vars_provided[ comp_name ]:
+                    ## v2 = bmi.get_values( long_var_name )       
+                    v2 = bmi.get_value_ptr( long_var_name )
                     #-------------------------------------
                     # Save (v2,t2) and update the time
                     # interpolation parameters a and b.
@@ -438,13 +440,14 @@ class time_interpolator():
             #--------------------------------------------------- 
             for long_var_name in self.vars_provided[ comp_name ]:
                 #------------------------------------------------
-                # Note: bmi.get_values() works for any rank.
+                # Note: bmi.get_value() works for any rank.
                 #------------------------------------------------
                 # self.time_interp_vars is a dictionary that is
                 # initialized in the framework's initialize().
                 #------------------------------------------------ 
-                v2 = bmi.get_values( long_var_name )
-                
+                ## v2 = bmi.get_values( long_var_name )
+                v2 = bmi.get_value_ptr( long_var_name )
+                                
                 #--------------
                 # For testing
                 #--------------
@@ -542,13 +545,14 @@ class time_interpolator():
             #--------------------------------------------------- 
             for long_var_name in self.vars_provided[ comp_name ]:
                 #------------------------------------------------
-                # Note: bmi.get_values() works for any rank.
+                # Note: bmi.get_value() works for any rank.
                 #------------------------------------------------
                 # self.time_interp_vars is a dictionary that is
                 # initialized in the framework's initialize().
                 #------------------------------------------------ 
-                v2 = bmi.get_values( long_var_name )
-                
+                ## v2 = bmi.get_values( long_var_name )
+                v2 = bmi.get_value_ptr( long_var_name )
+                                
                 #--------------
                 # For testing
                 #--------------
@@ -615,7 +619,8 @@ class time_interpolator():
         comp_status = bmi.get_status()
         if (comp_status == 'initialized') or \
            (comp_status == 'finalized'):
-            return bmi.get_values( long_var_name )
+            ## return bmi.get_values( long_var_name )
+            return bmi.get_value_ptr( long_var_name )
 
         #---------------------------     
         # Case of no interpolation
@@ -633,13 +638,14 @@ class time_interpolator():
             if (time > bmi_time):
                 print('--------------------------------------------')
                 print(' WARNING: (in time_interpolation.py)')
-                print('     time > bmi_time in bmi.get_values().')
+                print('     time > bmi_time in get_values().')
                 print('     time, bmi_time =', time, bmi_time)
                 print('     comp_name =', comp_name)
                 print('--------------------------------------------')
                 print(' ')
-                
-            return bmi.get_values( long_var_name )
+
+            ## return bmi.get_values( long_var_name )                
+            return bmi.get_value_ptr( long_var_name )
 
         #-------------------------------      
         # Case of Linear interpolation
