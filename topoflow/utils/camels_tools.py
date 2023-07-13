@@ -13,6 +13,7 @@
 #
 #---------------------------------------------------------------------
 #
+#  get_basin_repo_dir()
 #  get_camels_data_dir()
 #  create_camels_bbox_file()
 #  sort_camels_bbox_file()
@@ -29,6 +30,17 @@ import time
 from topoflow.utils import shape_utils as su
 
 #---------------------------------------------------------------------
+def get_basin_repo_dir():
+
+    #-----------------------------------
+    # Modify this directory as needed.
+    #-----------------------------------
+    repo_dir  = '/Users/peckhams/Dropbox/NOAA_NextGen/'
+    repo_dir += '__NextGen_Example_Basin_Repo/'
+    return repo_dir
+
+#   get_basin_repo_dir()
+#---------------------------------------------------------------------
 def get_camels_data_dir(version='1.2'):
 
     if (version == '1.2'):
@@ -36,8 +48,8 @@ def get_camels_data_dir(version='1.2'):
     elif (version == '2.0'):
        camels_dir = '/Users/peckhams/Data/CAMELS/2023_v2.0/'
     else:
-       camels_dir  = '/Users/peckhams/Dropbox/NOAA_NextGen/'
-       camesl_dir += '__NextGen_Example_Basin_Repo/CAMELS/'
+       repo_dir = get_basin_repo_dir()
+       camels_dir = repo_dir + 'CAMELS/'
        
     return camels_dir
 
