@@ -3,23 +3,27 @@
 #
 # Jun 2023. Started from hlr_tools.py and wrote a more general
 #              set of shapefile functions in shape_utils.py.
-#           Then wrote read_shapefile, read_shapefile_ref,
+#           Then wrote create_tsv0, create_tsv_from_shapefile,
 #              get_poly_feature_v0, get_poly_feature,
 #              get_gage_ID, check_gage_ID, check_overshoot,
 #              check_bounding_box, check_basin_poly_file.
+# Jul 2023. Added get_basin_repo_dir, get_gages2_data_dir.
 #
 #---------------------------------------------------------------------
 #
 #  % conda activate tf36  (has gdal package)
 #  % python
 #  >>> from topoflow.utils import gages2_tools as g2
-#  >>> g2.read_shapefile_ref( nf_max=10000 )
+#  >>> g2.create_tsv_from_shapefile( nf_max=100, tsv_file="TEST.tsv" )
+#  >>> g2.create_tsv_from_shapefile( nf_max=100, tsv_file="TEST2.tsv",
+#         basin_option='ALL')
+#  >>> g2.create_tsv_from_shapefile( nf_max=10000 )
 #
 #---------------------------------------------------------------------
 #
-#  read_shapefile()
+#  create_tsv0()
 #      
-#  read_shapefile_ref()   # main function
+#  create_tsv_from_shapefile()   # main function
 #  get_poly_feature_v0()
 #  get_poly_feature()
 #  get_gage_ID()
@@ -34,19 +38,46 @@ import numpy as np
 from osgeo import ogr, osr
 import json, sys, time
 
-#---------------------------------------------------------------------
 from topoflow.utils import shape_utils as su
-# import numpy as np
 
 #---------------------------------------------------------------------
-def read_shapefile( data_dir=None,
-                    shape_file='gagesII_9322_sept30_2011.shp',                    
-                    prj_file  ='gagesII_9322_sept30_2011.prj',
-#                     shape_file='bas_ref_all.shp',                    
-#                     prj_file  ='bas_ref_all.prj',
-                    csv_file='new_gages2_all.csv',
-#                     csv_file='new_gages2_conus.csv',
-                    nf_max=50, REPORT=True, basin_option='ALL'):
+def get_basin_repo_dir():
+
+    #-----------------------------------
+    # Modify this directory as needed.
+    #-----------------------------------
+    repo_dir  = '/Users/peckhams/Dropbox/NOAA_NextGen/'
+    repo_dir += '__NextGen_Example_Basin_Repo/'
+    return repo_dir
+
+#   get_basin_repo_dir()
+#---------------------------------------------------------------------
+def get_gages2_data_dir( gtype='root' ):
+
+    #-----------------------------------
+    # Modify this directory as needed.
+    #-----------------------------------
+    repo_dir  = get_basin_repo_dir()
+    data_dir  = repo_dir + 'GAGES-II/'
+    if (gtype == 'root'):
+        pass
+    elif (gtype == 'points'):
+       data_dir += 'gagesII_9322_point_shapefile/'
+    elif (gtype == 'polygons'):
+       data_dir += 'boundaries-shapefiles-by-aggeco/'
+       
+    return data_dir
+       
+#   get_gages2_data_dir()
+#---------------------------------------------------------------------
+def create_tsv0( data_dir=None,
+                 shape_file='gagesII_9322_sept30_2011.shp',                    
+                 prj_file  ='gagesII_9322_sept30_2011.prj',
+#                shape_file='bas_ref_all.shp',                    
+#                prj_file  ='bas_ref_all.prj',
+                 tsv_file='new_gages2_all.tsv',
+#                 tsv_file='new_gages2_conus.csv',
+                 nf_max=50, REPORT=True, basin_option='ALL'):
 
     #--------------------------------------------------------
     # Note:  Attributes in shapefile attribute table for
@@ -67,16 +98,8 @@ def read_shapefile( data_dir=None,
     # g2_flyrs1950  = attributes['FLYRS1950'] 
     # g2_flyrs1990  = attributes['FLYRS1990'] 
     #--------------------------------------------------------
-    
-    #--------------------------------------------
-    # You will need to modify these directories
-    # and get all the necessary files.
-    #--------------------------------------------
     if (data_dir is None):
-        data_dir  = '/Users/peckhams/Dropbox/NOAA_NextGen/'
-        data_dir += '__NextGen_Example_Basin_Repo/'
-        data_dir += 'GAGES-II/gagesII_9322_point_shapefile/'
-        # data_dir += 'GAGES-II/boundaries-shapefiles-by-aggeco/'
+        data_dir = get_gages2_data_dir()
 
     insert_key = 'LNG_GAGE'
     if (basin_option == 'REF'):
@@ -89,34 +112,32 @@ def read_shapefile( data_dir=None,
         filter_key   = None
         filter_value = None
 
-    su.read_shapefile(data_dir=data_dir, shape_file=shape_file,
+    su.create_tsv_from_shapefile(data_dir=data_dir, shape_file=shape_file,
                       prj_file=prj_file, nf_max=nf_max,
                       insert_key=insert_key,
                       ADD_BOUNDING_BOX=True,
                       filter_key=filter_key, filter_value=filter_value)
 
-#   read_shapefile()
+#   create_tsv0()
 #---------------------------------------------------------------------
-def read_shapefile_ref( point_dir=None, polygon_dir=None,
-                    point_shp_file='gagesII_9322_sept30_2011.shp',
-                    ## polygon_files=['bas_ref_all_sorted.shp'],
-                    ## polygon_files=['bas_ref_all.shp'],
-                    ## csv_file='new_gages2_ref.csv',
-                    nf_max=50, REPORT=False, DEBUG=False,
-                    insert_key=None, ADD_BOUNDING_BOX=True, 
-                    filter_key=None, filter_value=None,
-                    basin_option='REF' ):
-                    ## REF_ONLY=True ):
+def create_tsv_from_shapefile( data_dir=None, tsv_file=None,
+        point_dir=None, polygon_dir=None,
+        point_shp_file='gagesII_9322_sept30_2011.shp',
+        nf_max=50, SWAP_XY=True,  # Must swap for GAGES-II
+        REPORT=False, DEBUG=False,
+        insert_key=None, ADD_BOUNDING_BOX=True, 
+        filter_key=None, filter_value=None,
+        basin_option='REF' ):
 
     #------------------------------------------------------------------
-    # Note:  This routine creates a CSV file with attributes from the
+    # Note:  This routine creates a TSV file with attributes from the
     #        attribute table of point_shp_file and new attributes
     #        computed from a shapefile of basin polygons.
     #        New attributes:  minlon, maxlon, minlat, maxlat.
     #        Can also get AREA & PERIMETER from polygon shapefile.
     #        By default, it does this only for the "Reference" basins.
     #        There are 9322 total basins and 2057 reference basins.
-    #        Could remove "CLASS" from CSV, since always "Ref".
+    #        Could remove "CLASS" from TSV, since always "Ref".
     #        Could remove US state after comma in STANAME, since
     #        there is a separate STATE field.
     #------------------------------------------------------------------
@@ -138,31 +159,37 @@ def read_shapefile_ref( point_dir=None, polygon_dir=None,
     #          qgis-how-to-permanently-change-the-order-of-records-
     #          sort-records-features-perm
     #------------------------------------------------------------------
-    # Note:  To get a CSV file for both Ref and Non-ref basins,
-    #        will need to use a set of basin polygon shapefiles,
-    #        one for each "region", and they'll each need to be
+    # Note:  To get a TSV file for both Ref and Non-ref basins,
+    #        we need to use a set of basin polygon shapefiles,
+    #        one for each "region", and they each need to be
     #        sorted by GAGE_ID.
     #------------------------------------------------------------------ 
     start_time = time.time()
     print('Running...')
-    #--------------------------------------------
-    # You will need to modify these directories
-    # and get all the necessary files.
-    #--------------------------------------------
-    data_dir  = '/Users/peckhams/Dropbox/NOAA_NextGen/'
-    data_dir += '__NextGen_Example_Basin_Repo/GAGES-II/'
+    
+    if (data_dir is None):
+        data_dir = get_gages2_data_dir('root')   
     if (point_dir is None):
-        point_dir = data_dir + 'gagesII_9322_point_shapefile/'
+        point_dir = get_gages2_data_dir('points')
     if (polygon_dir is None):
-        polygon_dir = data_dir + 'boundaries-shapefiles-by-aggeco/'
+        polygon_dir = get_gages2_data_dir('polygons')
 
+    basin_option = basin_option.upper()
+    if (tsv_file is None):
+        if (basin_option == 'REF'):
+            tsv_file = 'new_gages2_ref.tsv'
+        elif (basin_option == 'ALL'):
+            tsv_file = 'new_gages2_all.tsv' 
+    tsv_path = data_dir + tsv_file
+    
     #---------------------------------------------    
     # Open shapefile for the gauge/outlet points
     # This doesn't have the basin polygon.
     #---------------------------------------------    
     point_shp_path = point_dir + point_shp_file
     point_prj_path = point_shp_path.replace('.shp', '.prj')
-    point_unit  = ogr.Open( point_shp_path )
+    point_unit     = su.open_shapefile( point_shp_path )
+    ## point_unit  = ogr.Open( point_shp_path )
     point_layer = point_unit.GetLayer()
 
     #------------------------------------------    
@@ -173,18 +200,18 @@ def read_shapefile_ref( point_dir=None, polygon_dir=None,
     elif (basin_option == 'ALL'):
         poly_shp_files = [
             'bas_ref_all_sorted.shp',
-            'bas_nonref_AKHIPR.shp',
-            'bas_nonref_AKHIPR.shp',
-            'bas_nonref_AKHIPR.shp',
-            'bas_nonref_CntlPlains.shp',
-            'bas_nonref_EastHghlnds.shp',
-            'bas_nonref_MxWdShld.shp',
-            'bas_nonref_NorthEast.shp',
-            'bas_nonref_SECstPlain.shp',
-            'bas_nonref_SEPlains.shp',
-            'bas_nonref_WestMnts.shp',
-            'bas_nonref_WestPlains.shp',
-            'bas_nonref_WestXeric.shp' ]
+            'nonref_sorted/bas_nonref_AKHIPR_sorted.shp',
+            'nonref_sorted/bas_nonref_AKHIPR_sorted.shp',
+            'nonref_sorted/bas_nonref_AKHIPR_sorted.shp',
+            'nonref_sorted/bas_nonref_CntlPlains_sorted.shp',
+            'nonref_sorted/bas_nonref_EastHghlnds_sorted.shp',
+            'nonref_sorted/bas_nonref_MxWdShld_sorted.shp',
+            'nonref_sorted/bas_nonref_NorthEast_sorted.shp',
+            'nonref_sorted/bas_nonref_SECstPlain_sorted.shp',
+            'nonref_sorted/bas_nonref_SEPlains_sorted.shp',
+            'nonref_sorted/bas_nonref_WestMnts_sorted.shp',
+            'nonref_sorted/bas_nonref_WestPlains_sorted.shp',
+            'nonref_sorted/bas_nonref_WestXeric_sorted.shp' ]
     poly_shp_keys = [
         'Ref', 'Alaska', 'Hawaii', 'PuertoRico', 'CntlPlains',
         'EastHghlnds', 'MxWdShld', 'NorthEast', 'SECstPlain',
@@ -208,7 +235,8 @@ def read_shapefile_ref( point_dir=None, polygon_dir=None,
         ## poly_shp_unit = ogr.Open( poly_shp_path )
         ## poly_layer = poly_shp_unit.GetLayer()
         #----------------------------------------------- 
-        poly_shp_units.append( ogr.Open( poly_shp_path ))
+        ## poly_shp_units.append( ogr.Open( poly_shp_path ))
+        poly_shp_units.append( su.open_shapefile( poly_shp_path ))
         poly_layer = poly_shp_units[k].GetLayer()
         ## poly_shp_unit = None  # don't close the files here
         poly_key      = poly_shp_keys[k]
@@ -220,20 +248,14 @@ def read_shapefile_ref( point_dir=None, polygon_dir=None,
         print('## nf_max =', nf_max)
              
     #--------------------    
-    # Open new CSV file
+    # Open new TSV file
     #--------------------
-    option = basin_option.upper()
-    if (option == 'REF'):
-        csv_file = 'new_gages2_ref.csv'
-    elif (option == 'ALL'):
-        csv_file = 'new_gages2_all.csv' 
-    csv_path = data_dir + csv_file
     # FIRST CHECK IF FILE EXISTS AND OK TO OVERWRITE?  #######
-    csv_unit = open( csv_path, 'w') 
+    tsv_unit = open( tsv_path, 'w') 
     if (ADD_BOUNDING_BOX):
         ## new_headings=['MINLON','MAXLON','MINLAT','MAXLAT']
         new_headings=['MINLON','MAXLON','MINLAT','MAXLAT','AREA','PERIMETER']
-    n_features_csv = np.int32(0)
+    n_features_tsv = np.int32(0)
 
     insert_key   = 'LNG_GAGE'
     filter_key   = None
@@ -258,10 +280,10 @@ def read_shapefile_ref( point_dir=None, polygon_dir=None,
         # n_rings    = point_geom.GetGeometryCount()
 
         #--------------------------------
-        # Write header for new CSV file
+        # Write header for new TSV file
         #--------------------------------
         if (n_features == 0):
-            su.write_csv_header( csv_unit, point_atts, insert_key=insert_key,
+            su.write_tsv_header( tsv_unit, point_atts, insert_key=insert_key,
                   new_headings=new_headings )            
               
         #----------------------------------------
@@ -347,7 +369,7 @@ def read_shapefile_ref( point_dir=None, polygon_dir=None,
                 print()
             x1, y1 = su.get_polygon_points( poly_feature )
             x2, y2 = su.convert_coords(x1,y1, inPRJfile=poly_prj_path,
-                                    PRINT=False)
+                                       SWAP_XY=SWAP_XY, PRINT=False)
             minlon, maxlon, minlat, maxlat = su.get_bounding_box(x2, y2)
 
             IN_RANGE = check_bounding_box( point_atts, minlon,
@@ -357,7 +379,7 @@ def read_shapefile_ref( point_dir=None, polygon_dir=None,
 
         #--------------------------------------------              
         # Apply some test or filter to this feature
-        # to decide whether to write it to CSV file
+        # to decide whether to write it to TSV file
         #--------------------------------------------
         if (filter_key is None):
             ALL_GOOD = True
@@ -369,16 +391,16 @@ def read_shapefile_ref( point_dir=None, polygon_dir=None,
                 ALL_GOOD = (value == filter_value)
                         
         #-------------------------------------              
-        # Write line of info to new CSV file
+        # Write line of info to new TSV file
         #-------------------------------------
         if (ALL_GOOD and FOUND_POLY_MATCH):
             new_values = []  # empty list;  default
             if (ADD_BOUNDING_BOX):
                 ## new_values = [minlon,maxlon,minlat,maxlat]
                 new_values = [minlon,maxlon,minlat,maxlat,area,perimeter]
-            su.write_csv_line( csv_unit, point_atts, insert_key=insert_key,
+            su.write_tsv_line( tsv_unit, point_atts, insert_key=insert_key,
                                new_values=new_values )
-            n_features_csv += 1
+            n_features_tsv += 1
 
         n_features += 1
         if (n_features >= nf_max):   # May need >= vs. == now.
@@ -388,7 +410,7 @@ def read_shapefile_ref( point_dir=None, polygon_dir=None,
     # Print info, close files, etc.
     #--------------------------------
     print('Processed', n_features, 'features.')
-    print('Wrote', n_features_csv, 'rows to csv file.')
+    print('Wrote', n_features_tsv, 'rows to tsv file.')
     print('Bad station IDs =')
     print( bad_station_IDs )
     print('Missing station count  =', len(bad_station_IDs))
@@ -396,12 +418,12 @@ def read_shapefile_ref( point_dir=None, polygon_dir=None,
     print('   (outlet outside bounding box)')
     print('Long gage IDs =')
     print( long_gage_IDs )
-    csv_unit.close()
+    tsv_unit.close()
     run_time = (time.time() - start_time)
     print('Run time =', run_time, '[sec]')
     print('Finished.')
          
-#   read_shapefile_ref()
+#   create_tsv_from_shapefile()
 #---------------------------------------------------------------------
 def get_poly_feature_v0( poly_unit_num, poly_layers ):
 
@@ -538,9 +560,7 @@ def check_basin_poly_file():
     # You will need to modify these directories
     # and get all the necessary files.
     #--------------------------------------------
-    data_dir  = '/Users/peckhams/Dropbox/NOAA_NextGen/'
-    data_dir += '__NextGen_Example_Basin_Repo/GAGES-II/'
-    polygon_dir = data_dir + 'boundaries-shapefiles-by-aggeco/'
+    polygon_dir = get_gages2_data_dir('polygons')
     polygon_file = 'bas_ref_all.shp'
     ## polygon_file = 'bas_ref_all_sorted.shp'
     polygon_path = polygon_dir + polygon_file

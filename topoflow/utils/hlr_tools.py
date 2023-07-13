@@ -1,39 +1,136 @@
-
+#
 # Copyright (c) 2023, Scott D. Peckham
 #
-# May 2023. Wrote: check_shapefile,
+# May 2023. Wrote: create_tsv,
 #           get_polygon_points (all versions),
 #           get_cols_and_rows, get_polygon_zvals,
 #           check_lon_lats, get_zmin_lon_and_lat,
 #           convert_coords)
 # Jun 2023. Wrote convert_vat_adf_to_csv, get_bounding_box.
+#           Moved many functions into shape_utils.py.
+# Jul 2023. Modified to use newer shape_utils.py, which
+#           contains many of the original functions from here.
+#           Added get_hlr_data_dir, get_hlr_dem_dir.
 #
-# NOTE: Many code comments are for original (old) shapefile,
-#       that has numerous issues. The "new" shapefile
-#       comes from QGIS work with the raster version
-#       of HLR dataset in arctar00000 folder.
-#       For some reason, the same watershed ID "VALUE"
-#       occurs in multiple rows, but with different outlet.
 #---------------------------------------------------------------------
 #
 #  % conda activate tf36  (has gdal package)
 #  % python
 #  >>> from topoflow.utils import hlr_tools as hlr
-#  >>> hlr.check_shapefile()
+#  >>> hlr.create_tsv(nf_max=100, tsv_file='new_hlr_na_100.tsv')
+#  >>> hlr.create_tsv(nf_max=50000, tsv_file='new_hlr_na_all.tsv')
 #
 #---------------------------------------------------------------------
-#  check_shapefile()      # main function
-#  get_polygon_points()
-#  get_polygon_points1()  # also works
-#  get_polygon_points2()  # doesn't work
-#  get_polygon_points3()  # doesn't work
+# Notes:
+#
+# The HLR (Hydrologic Landscape Regions) data set from USGS has
+# some metadata, including HLR codes in {0,...,20}, for what is
+# claimed to be 43931 basins.
+# See:  https://www.sciencebase.gov/catalog/item/
+# 4f4e4786e4b07f02db485758
+# 
+# However, the HLR shapefile in the "hlrshape" folder of this
+# dataset may be a draft version because it has several problems,
+# such as:
+#
+#    * 47479 features/basins (3648 more than 43391)
+#
+#    * 659 basins with invalid HLR code of 0.
+#      These have COUNT=0, VALUE=-9999
+#
+#    * Multiple features/basins with the same VALUE field, which
+#      is supposed to be a unique watershed ID.
+#
+#    * 3391 basins w/ area < 1e7 sqm = 10 km2, even though it is
+#      claimed that the pruning threshold is 100 km2.
+#
+#    * Strange coordinates for the points on the basin boundaries.
+#
+#  To save the shapefile attribute table to a CSV file in QGIS:
+#    - Right click on the layer in the Layers panel
+#    - Choose Export > Save Features As...
+#    - Choose Comma Separated Values (.csv) from Format droplist
+
+#  There is a "raster" version of the HLR dataset that consists of
+#  a set of ESRI ADF files in the arctar00000/hlrus folder.  This
+#  dataset has fewer problems (e.g. 43931 basins) and seems more
+#  consistent with a "final" version than the shapefile/vector
+#  dataset.  While attributes for the HLR shapefile are included
+#  in the shapefile attribute table, the attributes of the HLR
+#  raster dataset are in the file: vat.adf.  The function called:
+#  convert_vat_adf_to_csv() reads attributes from the vat.adf file
+#  and writes them to a CSV file: vat_adf.csv.  The resulting CSV
+#  file has 43931 rows, no HLR codes of 0, and (it appears) no
+#  repeated values in the VALUE (watershed ID) column.  It seemed
+#  to work but got this error message at the end:
+#  ERROR 5: OSRCalcInvFlattening(): Wrong input values
+##########################################################
+
+#  A new HLR shapefile (hlrus4.shp) was created by reading the
+#  raster version of the HLR data set into QGIS and then using
+#  its raster to vector conversion tool as follows:
+#    Raster > Conversion > Polygonize (Raster to Vector).
+#    Change DN to VALUE.
+#    The resulting shapefile attribute table has only one column:
+#    VALUE (watershed ID). 
+#  The new shapefile was saved into the HLR shapefiles folder. 
+#  To add the (raster) attribute table (vat_adf.csv; see above)
+#  to this new shapefile, QGIS was again used and the steps are 
+#  described in the text file:
+#  "__HLR_shapefile_notes.txt" in the hlrshape folder.
+
+###############################################################
+#  NOTE:  When the attribute table of this new shapefile was
+#  saved to CSV (see above), it had many of the same problems
+#  as the original shapefile.
+###############################################################
+
+#  Note that neither the vector or raster version of the HLR data
+#  attribute tables provide names for the basins.  However, it is
+#  likely that many of them are also USGS gauged basins, so it
+#  may be possible to get names and USGS basin IDs from outlet
+#  lons and lats.  Wolock is retiring soon but plans to generate
+#  an updated version of the HLR data set in the near future.
+
+#  Note that neither the vector or raster version of the HLR data
+#  attribute tables provides the coordinates of the basin outlet
+#  nor the geographic bounding box coordinates.  These are needed
+#  for modeling these watersheds in NextGen.  The set of utilities
+#  in this file attempt to rectify these omissions.  First, the
+#  coordinates of each watershed polygon are read from the (new)
+#  shapefile so that the min & max of lon & lat can be found for
+#  each basin.  These bounds are padded slightly larger.  Second,
+#  the HYDRO1K DEM for North America --- which was used to create
+#  the HLR data set in the first place --- is used in an effort to
+#  determine the outlet coordinates (lon/lat) for each basin.  The
+#  elevation values for every grid cell on the basin boundary are
+#  found, and the outlet is assumed to be the grid cell with the
+#  lowest elevation.  However, this elevation is not always unique.
+
+#  The source DEM is the GTOPO30 HYDRO1K DEM and uses a Lambert
+#  Azimuthal Equal Area projection as described in its PRJ file.
+        
+#  In all of these utilities, we use GDAL and the PRJ files to
+#  convert coordinates (e.g. Lambert Azimuthal Equal Area) to WGS84
+#  lon/lat.  See the "convert_coords()" function in shape_utils.py.
+
+#  Many code comments are for original (old) shapefile, that exhibit
+#  that exhibits the numerous issues listed above.  The "new"
+#  shapefile (hlrus4.shp) comes from QGIS work described above.
+#
+#---------------------------------------------------------------------
+#
+#  get_basin_repo_dir()    # Modify these as needed.
+#  get_hlr_data_dir()
+#  get_hlr_dem_dir()
+#
+#  create_tsv()      # main function
+#
 #  get_cols_and_rows()
 #  get_polygon_zvals()
 #  check_lons_lats()
 #  get_zmin_lon_and_lat()
 #  get_zmin_lon_and_lat1()  # uses np.argmin()
-#  convert_coords()
-#  get_bounding_box()
 #
 #  convert_vat_adf_to_csv()
 #
@@ -42,40 +139,72 @@ import numpy as np
 from osgeo import ogr, osr
 import json, time
 
-# For convert_vat_adf_to_csv()
-import csv, sys
 from osgeo import gdal
+from topoflow.utils import shape_utils as su
+
+# For convert_vat_adf_to_csv()
+import csv, sys, gdal
 
 #---------------------------------------------------------------------
-def check_shapefile( data_dir=None, dem_dir=None,
-                     shape_file='hlrus4.shp',
-                     ## shape_file='hlrus.shp',
-                     ## prj_file='hlrus.prj',                     
-                     prj_file='na_dem.prj',
-                     dem_file='na_dem.bil',
-                     old_shapefile = False,  # old = original shapefile
-                     csv_file='new_hlr_na.csv',  # only North America
-                     nf_max=50, REPORT=True ):
+def get_basin_repo_dir():
+
+    #-----------------------------------
+    # Modify this directory as needed.
+    #-----------------------------------
+    repo_dir  = '/Users/peckhams/Dropbox/NOAA_NextGen/'
+    repo_dir += '__NextGen_Example_Basin_Repo/'
+    return repo_dir
+
+#   get_basin_repo_dir()
+#---------------------------------------------------------------------
+def get_hlr_data_dir():
+
+    #-----------------------------------
+    # Modify this directory as needed.
+    #-----------------------------------
+    repo_dir = get_basin_repo_dir()
+    data_dir = repo_dir + 'HLR/'
+    return data_dir
+       
+#   get_hlr_data_dir()
+#---------------------------------------------------------------------
+def get_hlr_dem_dir():
+
+    #-----------------------------------
+    # Modify this directory as needed.
+    #-----------------------------------
+    # repo_dir  = get_basin_repo_dir()
+    dem_dir = '/Users/peckhams/DEMs/HYDRO1K/'
+    return dem_dir
+    
+#   get_hlr_dem_dir
+#---------------------------------------------------------------------
+def create_tsv( shape_dir=None, dem_dir=None,
+                shape_file='hlrus4.shp', # shape_file='hlrus4.shp',
+                ## prj_file='hlrus.prj',                     
+                prj_file='na_dem.prj', dem_file='na_dem.bil',
+                old_shapefile = False,  # old = original shapefile
+                tsv_file='new_hlr_na.tsv',  # only North America
+                #### ADD_BOUNDING_BOX=True, 
+                nf_max=50, SWAP_XY=True, REPORT=True ):
 
     start_time = time.time()
     REPORT2 = True  # for basins outside North America
     # REPORT2 = REPORT
     print('Running...')
-    #--------------------------------------------
-    # You will need to modify these directories
-    # and get all the necessary files.
-    #--------------------------------------------
-    if (data_dir is None):
-        data_dir  = '/Users/peckhams/Dropbox/NOAA_NextGen/'
-        data_dir += '__NextGen_Example_Basin_Repo/'
-        data_dir += 'HLR_Data_Sets/hlrshape/'
+
+    if (shape_dir is None):
+        shape_dir = get_hlr_data_dir() + 'hlrshape/'
     if (dem_dir is None):
-        dem_dir  = '/Users/peckhams/DEMs/HYDRO1K/'
-    shape_path = data_dir + shape_file
-    prj_path   = data_dir + prj_file
-    dem_path   = dem_dir  + dem_file
-    csv_path   = data_dir + csv_file 
-    shape_unit = ogr.Open( shape_path )
+        dem_dir  = get_hlr_dem_dir()
+
+    ## prj_file = shape_file.replace('.shp', '.prj')
+    
+    shape_path = shape_dir + shape_file
+    prj_path   = shape_dir + prj_file
+    dem_path   = dem_dir   + dem_file
+    tsv_path   = shape_dir + tsv_file
+    shape_unit = su.open_shapefile( shape_path )
     layer      = shape_unit.GetLayer()
 
     #-------------------------------------------
@@ -109,7 +238,7 @@ def check_shapefile( data_dir=None, dem_dir=None,
     nodata = -9999  # used for ocean grid cells
 
     dem_unit = open( dem_path, 'rb')
-    csv_unit = open( csv_path, 'w') 
+    tsv_unit = open( tsv_path, 'w') 
 
     n_features        = np.int32(0)
     zmin_matches      = np.int32(0)
@@ -128,6 +257,14 @@ def check_shapefile( data_dir=None, dem_dir=None,
     val_histogram   = np.zeros(max_val, dtype='int32')
     not_in_dem_vals = list()
     
+    insert_key    = 'VALUE'
+    new_headings  = ['OUTLON', 'OUTLAT', 'OUTCOL', 'OUTROW']
+    new_headings += ['MINLON', 'MAXLON', 'MINLAT', 'MAXLAT']
+    #--------------------------------------------------------------
+#     new_headings = ['OUTLON', 'OUTLAT', 'OUTCOL', 'OUTROW']
+#     if (ADD_BOUNDING_BOX):
+#         new_headings += ['MINLON', 'MAXLON', 'MINLAT', 'MAXLAT']
+
     #-----------------------------------------    
     # Iterate over the features in the layer
     # GeometryType = 3 is POLYGON.
@@ -143,18 +280,25 @@ def check_shapefile( data_dir=None, dem_dir=None,
         # n_rings    = geometry.GetGeometryCount()
 
         #--------------------------------
-        # Write header for new CSV file
+        # Write header for new TSV file
         #--------------------------------
         if (n_features == 0):
-            csv_header = ''
-            for key in attributes.keys():
-                csv_header += (key + ',')
-                if (key == 'VALUE'):
-                    csv_header += 'OUTLON,OUTLAT,'
-                    csv_header += 'OUTCOL,OUTROW,'
-                    csv_header += 'MINLON,MAXLON,MINLAT,MAXLAT,'
-            csv_header = csv_header[:-1] + '\n' # remove comma, add newline
-            csv_unit.write( csv_header )
+            su.write_tsv_header( tsv_unit, attributes, insert_key=insert_key,
+                  new_headings=new_headings )
+                  
+        #--------------------------------
+        # Write header for new TSV file
+        #--------------------------------
+#         if (n_features == 0):
+#             tsv_header = ''
+#             for key in attributes.keys():
+#                 tsv_header += (key + ',')
+#                 if (key == 'VALUE'):
+#                     tsv_header += 'OUTLON,OUTLAT,'
+#                     tsv_header += 'OUTCOL,OUTROW,'
+#                     tsv_header += 'MINLON,MAXLON,MINLAT,MAXLAT,'
+#             tsv_header = tsv_header[:-1] + '\n' # remove comma, add newline
+#             tsv_unit.write( tsv_header )
               
         #-----------------------------
         # Get some of the attributes
@@ -167,16 +311,6 @@ def check_shapefile( data_dir=None, dem_dir=None,
         # n_pts = 124 but PERIMETER = 144000.0.
         # For basin #28 (2 cells), AREA=2e6,
         # COUNT=377, PERIMETER=6e3
-        #--------------------------------------------
-        #   Claim is 43,931 basins, but there are
-        #   47,579 basins in shapefile (3648 more).
-        #--------------------------------------------
-        #   659 basins have invalid HLR code of 0.
-        #   These basins have COUNT=0, VALUE=-9999
-        #--------------------------------------------
-        #   Claim is pruning threshold of 100 km2,
-        #   but a large number are much smaller. 
-        #   3391 basins have area < 1e7 m2 = 10 km2
         #--------------------------------------------
         if (old_shapefile):
             hlr_area   = attributes['AREA']
@@ -196,15 +330,18 @@ def check_shapefile( data_dir=None, dem_dir=None,
         if (hlr_count == 1):
             # In new shapefile, (min,max) = (31, 23476)
             one_cell_matches += 1
-                
+
+        #----------------------------------------
+        # Print attributes in attribute table ?
+        #----------------------------------------
+        if (REPORT):
+            su.print_attributes( attributes, n_features )
+                            
         #---------------------------------- 
         # Get all points in this geometry
         #----------------------------------
-        x1, y1 = get_polygon_points( feature )
-        # x1, y1 = get_polygon_points1( geometry ) 
-        # x1, y1 = get_polygon_points2( feature )
-        # x1, y1 = get_polygon_points3( feature )
-        # p = geometry.GetPoints()  # doesn't work
+        x1, y1 = su.get_polygon_points( feature )
+
         #----------------------------------
         # Round to nearest 1000 or 500 ??
         #----------------------------------------
@@ -226,8 +363,8 @@ def check_shapefile( data_dir=None, dem_dir=None,
         #--------------------------------------------------        
         # Convert Lambert coords to Geo. lon/lat (WGS-84)
         #--------------------------------------------------
-        x2,y2 = convert_coords(x1,y1, inPRJfile=prj_path,
-                               PRINT=False)
+        x2,y2 = su.convert_coords(x1,y1, inPRJfile=prj_path,
+                                  SWAP_XY=SWAP_XY, PRINT=False)
 #         print('x2 =', x2)
 #         print('y2 =', y2)
 #         break
@@ -235,7 +372,7 @@ def check_shapefile( data_dir=None, dem_dir=None,
         #------------------------------ 
         # Get geographic bounding box
         #------------------------------
-        minlon, maxlon, minlat, maxlat = get_bounding_box(x2, y2)
+        minlon, maxlon, minlat, maxlat = su.get_bounding_box(x2, y2)
   
         #---------------------------------------------------------
         # The source DEM is the GTOPO30 HYDRO1K DEM and uses
@@ -345,7 +482,7 @@ def check_shapefile( data_dir=None, dem_dir=None,
             print('    zmin   =', zmin)       # meters
             print('hlr_zmin   =', hlr_zmin)   # meters
             print('hlr_relief =', hlr_relief) # meters
-            print('hlr_value  =', hlr_value)
+            print('hlr_value  =', hlr_value, '(watershed ID)')
             print('hlr_count  =', hlr_count)
             print('hlr_slope  =', hlr_slope)  # m/m
             print('hlr_code   =', hlr_code)   # 0 to 20
@@ -366,28 +503,14 @@ def check_shapefile( data_dir=None, dem_dir=None,
                 (zmin == hlr_zmin) and (one_zmin))
  
         #---------------------------------------------               
-        # Save info for good matches to new CSV file
+        # Save info for good matches to new TSV file
         #---------------------------------------------
         if (ALL_GOOD):
             all_good_matches += 1
-            n_vals = 0
-            line = ''
-            for val in attributes.values():
-                line += str(val) + ','   ###### CHECK FOR LOSS
-                n_vals += 1
-                if (n_vals == 1):
-                    line += str(lon) + ','
-                    line += str(lat) + ','
-                    line += str(col) + ','
-                    line += str(row) + ','
-                    #------------------------
-                    line += str(minlon) + ','
-                    line += str(maxlon) + ','
-                    line += str(minlat) + ','
-                    line += str(maxlat) + ','
-                    n_vals += 8
-            line = line[:-1] + '\n' # remove comma, add newline
-            csv_unit.write( line )
+
+            su.write_tsv_line( tsv_unit, attributes, insert_key=insert_key,
+                    new_values=[lon,lat,col,row,minlon,maxlon,minlat,maxlat])
+            
             # How many basins with each HLR code?
             hlr_histogram[ hlr_code ]  += 1
             val_histogram[ hlr_value ] += 1
@@ -429,96 +552,13 @@ def check_shapefile( data_dir=None, dem_dir=None,
     print()
 
     dem_unit.close()
-    csv_unit.close()
+    tsv_unit.close()
+    shape_unit = None  # way to close file
     run_time = (time.time() - start_time)
     print('Run time =', run_time, '[sec]')
     print('Finished.')
     
-#   check_shapefile()
-#---------------------------------------------------------------------
-def get_polygon_points( feature ):
-
-    #---------------------------------------------------- 
-    # Get all points in this geometry by exporting
-    # feature to GeoJSON and converting json to dict().
-    #----------------------------------------------------
-    # Printing jstr shows that triple square brackets
-    # are used for coordinates, so need subscript [0].
-    # This is likely because polygons can have more
-    # than one "ring" for holes (in general).
-    #----------------------------------------------------
-    jstr = feature.ExportToJson()
-    # print(jstr)
-    jdict = json.loads( jstr ) # python dictionary
-    points = np.array( jdict['geometry']['coordinates'][0] )
-    x1 = points[:,0]
-    y1 = points[:,1]
-    return x1, y1
-    
-#   get_polygon_points()
-#---------------------------------------------------------------------
-def get_polygon_points1( geometry ):
-
-    #--------------------------------------------------
-    # Note: About same speed as get_polygon_points().
-    #--------------------------------------------------
-    ring = geometry.GetGeometryRef(0)  # outer ring
-    p  = ring.GetPoints()    # This is a list of xy tuples
-    p2 = np.array(p)
-    x1 = p2[:,0]
-    y1 = p2[:,1]
-    return x1, y1
-
-#   get_polygon_points1()
-#---------------------------------------------------------------------
-# def get_polygon_points2( feature ):
-# 
-#     #----------------------------------
-#     # Get all points in this geometry
-#     # This version doesn't work.
-#     #----------------------------------
-#     n_points = geometry.GetPointCount()
-#     if (n_points == 0):
-#         print('###### WARNING ######')
-#         print('No points in feature.')
-#         continue
-#     x1 = np.zeros( n_points, dtype='float64')
-#     y1 = np.zeros( n_points, dtype='float64')
-#     for i in range(n_points):
-#         p = geometry.GetPoint(i)
-#         x1[i] = p[0]
-#         y1[i] = p[1]
-#     return x1, y1
-    
-#   get_polygon_points2()
-#---------------------------------------------------------------------
-# def get_polygon_points3( feature ):
-# 
-#     #----------------------------------
-#     # Get all points in this geometry 
-#     #--------------------------------------------
-#     # GetBoundary sort of works, but deprecated
-#     #--------------------------------------------      
-#     b = geometry.GetBoundary()  # deprecated
-#     p = b.GetPoints()    # This is a list of xy tuples
-#     #-------------------------------
-#     # print( type(p) )   # list
-#     # print( type(p[0])) # tuple
-#     # print(p)
-#     # print(p[0])
-#     #------------------------------------------------
-#     p2 = np.array(p)
-#     if (p2.ndim < 2):
-#         print('#### WARNING FOR FEATURE ####')
-#         print('p  =', p)
-#         print('p2 =', p2)
-#         continue
-#     x1 = p2[:,0]
-#     y1 = p2[:,1]
-# 
-#     return x1, y1
-    
-#   get_polygon_points3()
+#   create_tsv()
 #---------------------------------------------------------------------
 def get_cols_and_rows( x1, y1, xmin, ymax, dx, dy,
                        round_method='floor',
@@ -744,132 +784,6 @@ def get_zmin_lon_and_lat( zvals, lons, lats, nodata,
 # 
 # #   get_zmin_lon_and_lat1()             
 #---------------------------------------------------------------------
-def convert_coords(x1, y1, inEPSG=None, inPRJfile=None,
-                   outEPSG=4326, PRINT=False):
-
-    #------------------------------------------------------------
-    # Note: ESPG=4326 is for WGS-84 (Geographic lon/lat)
-    #------------------------------------------------------------
-    # Read WKT (Well Known Text) from HLR shapefile's PRJ file.
-    # Projection metadata is also provided in:
-    # https://water.usgs.gov/GIS/metadata/usgswrd/XML/hlrus.xml
-    #------------------------------------------------------------
-    # Geographic bounding box for HLR DEM is given by:
-    #    (minlon, maxlon) = (-180, -60)
-    #    (minlat, maxlat) = (25, 75)
-    # This includes Alaska and Hawaii; not just CONUS.
-    # Can check in Google Earth via View > Grid option.
-    #------------------------------------------------------------
-    if (inPRJfile is not None):
-        prj_unit = open(inPRJfile, 'r')
-        hlr_wkt = prj_unit.read()
-        prj_unit.close()
-
-    #-----------------------------------
-    # Create coordinate transformation
-    #-----------------------------------
-    srs_in = osr.SpatialReference()
-    if (inEPSG is None):
-        srs_in.ImportFromWkt( hlr_wkt )
-    else:
-        srs_in.ImportFromEPSG( inESPG )
-    
-    srs_out = osr.SpatialReference()
-    srs_out.ImportFromEPSG( outEPSG )
-
-    coordTransform = osr.CoordinateTransformation(srs_in, srs_out)
-
-    #------------------------------------------
-    # Is (x1,y1) a point or a basin polygon ?
-    #------------------------------------------
-    if (x1.size == 1):
-        #----------------------
-        # Transform the point
-        #----------------------
-        point = ogr.Geometry(ogr.wkbPoint)
-        point.AddPoint(x1, y1)
-        point.Transform( coordTransform )
-        x2 = point.GetY()
-        y2 = point.GetX()  #### Need to swap.
-    else:
-        #----------------------------------
-        # Transform each point in polygon
-        #----------------------------------
-        x2 = np.zeros(x1.size, dtype='float64')
-        y2 = np.zeros(x1.size, dtype='float64')
-        for k in range(x1.size): 
-            point = ogr.Geometry(ogr.wkbPoint)
-            point.AddPoint(x1[k], y1[k])
-            point.Transform( coordTransform )
-            x2[k] = point.GetY()
-            y2[k] = point.GetX()  #### Need to swap.
-            
-        #----------------------------------
-        # Transform each point in polygon
-        #----------------------------------
-#         ring = ogr.Geometry(ogr.wkbLinearRing)
-#         for k in range(x1.size): 
-#             point = ogr.Geometry(ogr.wkbPoint)
-#             point.AddPoint(x1[k], y1[k])
-#             point.Transform( coordTransform )
-#             x2k = point.GetY()
-#             y2k = point.GetX()  #### Need to swap.
-#             x2[k] = x2k
-#             y2[k] = y2k    
-#             ring.AddPoint(x2k, y2k)
-#         p  = ring.GetPoints()  # list of tuples
-#         p2 = np.array(p)
-#         x2 = p2[:,0]
-#         y2 = p2[:,1]
-        # x2 = ring.GetX()  # only gets x2[0]
-        #------------------------------------------   
-#         basin = ogr.Geometry(ogr.wkbPolygon)
-#         basin.AddGeometry(ring)
-#         basin.CloseRings()
-#         p  = basin.GetPoints() # DOESN'T WORK
-#       # This doesn't work
-#       basin.Transform( coordTransform )
-#       x2 = basin.GetX()
-#       y2 = basin.GetY()
-              
-    #----------------------------------
-    # Print input and output points ?
-    #----------------------------------
-    if (PRINT):
-        print('Input:  x1, y1 =', x1, ',', y1 )
-        print('Output: x2, y2 =', x2, ',', y2 )  # lon,lat
-        print()
-
-    return x2, y2
-
-#   convert_coords()
-#---------------------------------------------------------------------
-def get_bounding_box(x2, y2, buffer=0.02):
-
-    #---------------------------------------------------------
-    # Note: Buffer is in decimal degrees, and 0.02 is
-    #       roughly 2.2 km.  See Wikipedia: Decimal degrees.
-    #       Recall that HYDRO1K DEM has 1 km grid cells.
-    #---------------------------------------------------------
-    minlon = x2.min() - buffer
-    maxlon = x2.max() + buffer
-    minlat = y2.min() - buffer
-    maxlat = y2.max() + buffer
-
-    #----------------------------------- 
-    # Round to 4 places after decimal;
-    # roughly 11 meters.  Can only do
-    # in-place w/out for ndarrays.
-    #-----------------------------------
-    minlon = np.around(minlon, decimals=4)
-    maxlon = np.around(maxlon, decimals=4)
-    minlat = np.around(minlat, decimals=4)
-    maxlat = np.around(maxlat, decimals=4)
- 
-    return minlon, maxlon, minlat, maxlat
-    
-#   get_bounding_box()
-#---------------------------------------------------------------------
 def convert_vat_adf_to_csv( vat_adf_file=None, csv_file=None):
 
     #-------------------------------------------------------
@@ -877,17 +791,24 @@ def convert_vat_adf_to_csv( vat_adf_file=None, csv_file=None):
     # https://gis.stackexchange.com/questions/84700/
     # showing-only-raster-attribute-table-using-gdal/84729
     # See "__README_RAT_TO_CSV.txt." about error message.
+    # VAT = "Value Attribute Table" (value vs. vector)
     #-------------------------------------------------------
-    data_dir  = '/Users/peckhams/Dropbox/NOAA_NextGen/'
-    data_dir += '__NextGen_Example_Basin_Repo/HLR_Data_Sets/'
-    data_dir += 'arctar00000/hlrus/'
+    hlr_dir = get_hlr_data_dir()
+    vat_dir = hlr_dir + 'arctar00000/hlrus/'
     
     if (vat_adf_file is None):
-        vat_adf_file = data_dir + 'vat.adf'
+        vat_adf_file = vat_dir + 'vat.adf'
     if (csv_file is None):
-        csv_file = data_dir + 'vat_adf.csv'
+        csv_file = vat_dir + 'vat_adf.csv'
 
+    #------------------------------------------
+    # Note: ogr is a vector library;
+    #       gdal is a raster library
+    #       Not sure if ogr can open vat_adf.
+    #------------------------------------------
     ds  = gdal.Open(vat_adf_file)
+    ## ds  = ogr.Open( vat_adf_file )
+    
     rat = ds.GetRasterBand(1).GetDefaultRAT()
     
     with open(csv_file, 'w') as csvfile:
