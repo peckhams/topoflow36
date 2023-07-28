@@ -2,6 +2,11 @@
 # Copyright (c) 2023, Scott D. Peckham
 #
 # Jun 2023. Utils to collate several river basin datasets.
+# Jul 2023. Added haversine, distance_on_sphere,
+#           get_closest_station, add_ars_basins, add_czo_basins,
+#           add_hlr_basins, add_lter_basins, add_neon_basins,
+#           and their subfunctions.
+#           Moved all USGS-specific utils to usgs_utils.py.
 #
 #---------------------------------------------------------------------
 #
