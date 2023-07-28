@@ -10,7 +10,7 @@
 #
 #  % conda activate tf36  (has gdal package)
 #  % python
-#  >>> from topoflow.utils import gages2_tools as g2
+#  >>> from topoflow.utils.ngen import gages2_tools as g2
 #  >>> g2.create_tsv_from_shapefile()
 #
 #---------------------------------------------------------------------

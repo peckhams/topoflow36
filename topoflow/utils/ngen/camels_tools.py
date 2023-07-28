@@ -7,7 +7,7 @@
 #
 #  % conda activate tf36  (has gdal package)
 #  % python
-#  >>> from topoflow.utils import camels_tools as ct
+#  >>> from topoflow.utils.ngen import camels_tools as ct
 #  >>> ct.create_camels_bbox_file()
 #  >>> ct.create_tsv()
 #

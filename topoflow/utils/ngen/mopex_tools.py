@@ -7,7 +7,7 @@
 #
 #  % conda activate tf36  (has gdal package)
 #  % python
-#  >>> from topoflow.utils import mopex_tools as mt
+#  >>> from topoflow.utils.ngen import mopex_tools as mt
 #  >>> mt.create_tsv( nf_max=500, SWAP_XY=False )
 #
 #---------------------------------------------------------------------

@@ -7,7 +7,7 @@
 #
 #  % conda activate tf36  (has gdal package)
 #  % python
-#  >>> from topoflow.utils import collate_basins as cb
+#  >>> from topoflow.utils.ngen import collate_basins as cb
 #  >>> cb.compare_basin_ids( db_str2='CAMELS' )
 #  >>> cb.compare_basin_ids( db_str2='MOPEX' )
 #  >>> cb.compare_basin_ids( db_str2='GAGES2_ref' )

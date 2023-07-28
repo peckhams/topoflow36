@@ -9,7 +9,7 @@
 #
 #  % conda activate tf36  (has gdal package)
 #  % python
-#  >>> from topoflow.utils import usgs_utils as ut
+#  >>> from topoflow.utils.ngen import usgs_utils as ut
 #  >>> ut.get_station_subset()
 #  >>> coords = ut.get_usgs_station_coords( NWIS_ALL=False )
 #  >>> coords = ut.get_usgs_station_coords( NWIS_ALL=True )

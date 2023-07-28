@@ -23,7 +23,7 @@
 #---------------------------------------------------------------------
 #
 #  % python
-#  >>> from topoflow.utils import usda_tools as ut
+#  >>> from topoflow.utils.ngen import usda_tools as ut
 #  >>> ut.create_tsv( tsv_file='TEST.tsv' )
 #
 #---------------------------------------------------------------------
