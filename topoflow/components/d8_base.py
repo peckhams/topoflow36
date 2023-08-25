@@ -1,6 +1,7 @@
 
-# Copyright (c) 2001-2022, Scott D. Peckham
+# Copyright (c) 2001-2023, Scott D. Peckham
 #
+# Aug. 2023.  See 2023-08-24 for 2 fixed bugs affecting INT DEMs.
 # Oct. 2022.  Added if stmt before calling "initialize_basin_vars()"
 #             in initialize().  Similar in open_output_files() and
 #             save_pixel_values().
@@ -478,12 +479,22 @@ class d8_component( BMI_base.BMI_component ):
             if not(self.SILENT):
                 print()
                 print('Filling pits in initial DEM...')
-            fill_pits.fill_pits( self.DEM, 'FLOAT', self.nx, self.ny,
+            #--------------------------------------------
+            # 2023-08-24.  Bug fix. 'FLOAT' -> rtg_type
+            #--------------------------------------------
+            rtg_type = self.rti.data_type
+            fill_pits.fill_pits( self.DEM, rtg_type, self.nx, self.ny,
                                  SILENT=self.SILENT )
-            #--------------------------
-            # Save new DEM to a file. 
-            #-------------------------- 
-            rtg_files.write_grid( self.DEM, self.DEM_file, self.rti)
+#             fill_pits.fill_pits( self.DEM, 'FLOAT', self.nx, self.ny,
+#                                  SILENT=self.SILENT )
+            #-------------------------
+            # Save new DEM to a file
+            #----------------------------------------------------
+            # 2023-08-24. Bug fix. Need RTG_type keyword here,
+            #             otherwise default is FLOAT. 
+            #---------------------------------------------------- 
+            rtg_files.write_grid( self.DEM, self.DEM_file, self.rti,
+                                  RTG_type=rtg_type)
 
             ###################################################
             #  THE ABOVE CALL OVERWRITES THE ORIGINAL DEM !!

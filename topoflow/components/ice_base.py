@@ -503,7 +503,25 @@ class ice_component( BMI_base.BMI_component ):
 ##                                           dtDefault=self.Parameters.dtDefault,
 ##                                           dtMax=self.Parameters.dtMax )
 
-
+        #----------------------------------
+        # Update computed values (FUTURE)
+        #----------------------------------
+        # self.status = 'updating'
+        # self.update_rectangle()
+        # self.update_boundary_values()
+        # self.update_basal_shear_stress()
+        # self.update_deformation_velocity()
+        # self.update_sliding_velocity()
+        # self.update_total_velocity()
+        # self.update_dH_dt()
+        # self.update_specific_discharge()
+        # self.update_mass_balance()   # or update_bz()
+        #### self.update_avalanches()
+        #### self.update_calving()
+        # self.update_thickness()
+        # self.update_melt_rate()
+        # self.update_time()
+        
         if (self.mode == 'driver'):
             self.print_time_and_value(H.max(), 'H_max', '[m]')
               
@@ -552,6 +570,186 @@ class ice_component( BMI_base.BMI_component ):
         self.status = 'updated'  # (OpenMI)
 
     #   update()
+    #-------------------------------------------------------------------
+    def update_rectangle(self):
+    
+        """Only simulate on sub-rectangle that contains ice.
+           Inputs: H, Zb, COMPRESS_TOGGLE, RESTART_TOGGLE, THERMAL_TOGGLE
+           Outputs: Zi, compression_ration, COMPRESSED_FLAG"""
+
+        #---------------------------------------------------------------------
+        # Notes: It seems like this might have a bug, because rectangle
+        #        with ice is dynamic and Zi, Zb & H get redefined each time.
+        #        Better to handle some other way?
+        #---------------------------------------------------------------------
+        if (self.COMPRESS_TOGGLE) and (self.H.max() > 1) and \
+           (self.RESTART_TOGGLE != 2):
+            H_FullSpace  = self.H.copy()
+            Zb_FullSpace = self.Zb.copy()
+        
+            if (self.THERMAL_TOGGLE):
+                Ts_FullSpace = self.Ts.copy()  # Ts = surface temp. ?
+                Tb_FullSpace = self.Tb.copy()  # Tb = bed temp. ?
+                Tm_FullSpace = self.Tm.copy()  # Tm = ??? temp.
+
+            #[indrw,indcl] = find(H ~= 0);    # Matlab?
+            indrw, indcl = np.where( self.H != 0 )
+
+            mxrw, mxcl = self.Zb.shape
+
+            mnrw = max( 0    , min(indrw) - 2 )
+            mxrw = min( mxrw , max(indrw) + 2 )
+            mncl = max( 0    , min(indcl) - 2 )
+            mxcl = min( mxcl , max(indcl) + 2 )
+
+            self.H  = H [ mnrw:mxrw , mncl:mxcl ]
+            self.Zb = Zb[ mnrw:mxrw , mncl:mxcl ]
+            ## Zi = Zb + max( H, 0 )
+            ## Zi = Zb + np.choose( H<0 , (H,0) )
+            self.Zi = self.Zb + np.maximum(H, 0)
+
+            if (self.THERMAL_TOGGLE):
+                Ts = Ts[ mnrw:mxrw , mncl:mxcl ]
+                Tb = Tb[ mnrw:mxrw , mncl:mxcl ]
+                Tm = Tm[ mnrw:mxrw , mncl:mxcl ]
+
+            ny, nx          = self.H.shape
+            mx_ny, mx_nx    = Zb_FullSpace.shape
+            ny, nx          = Zb.shape
+            self.compression_ratio = (mx_nx * mx_ny) / (nx * ny)
+            self.COMPRESSED_FLAG   = 1
+        else:
+            ## Zi = Zb + max( H, 0 ) # included for restarts
+            ## Zi = Zb + np.choose( H<0 , (H,0) )
+            self.Zi = self.Zb + np.maximum(self.H, 0)
+            self.compression_ratio = 1.
+            self.COMPRESSED_FLAG   = 0
+
+        ### return ( Zi , compression_ratio , COMPRESSED_FLAG )
+    
+    #   update_rectangle()
+    #-------------------------------------------------------------------
+    def update_boundary_values(self):
+    
+        """Modify boundary cells to enforce boundary conditions.
+           Inputs: H, Zb, Zi
+           Outputs: H_ext, Zb_ext, Zi_ext"""
+        # ( H_ext , Zb_ext , Zi_ext ) = set_bc( H , Zb , Zi )
+        # ( dZidxX , dZidyY ) = difference_grid( Zi_ext , dx , dy )
+        pass
+    
+    #   update_boundary_values()
+    #-------------------------------------------------------------------
+#     def update_Zi_gradient(self):
+#             
+#     #   update_Zi_gradient()    
+    #-------------------------------------------------------------------
+    def update_basal_shear_stress(self):
+
+        """Update the basal shear stress.
+           Inputs: H_ext, Zi_ext
+           Outputs: H_ext, Zb_ext, Zi_ext"""
+        #( ( xcmpnt , ycmpnt ) , ( taubX , taubY ) , ( HX , HY ) ) = 
+        #    basal_shear_stress( H_ext , Zi_ext , dx=dx , dy=dy )
+        pass
+        
+    #   update_basal_shear_stress()
+    #-------------------------------------------------------------------
+    def update_deformation_velocity(self):
+
+        """Update ice velocity due to deformation.
+           Inputs: taubX, taubY, HX, HY, xcmpnt, ycmpnt
+           Outputs: UdxX, UdyY  """
+           
+#         if (ICEFLOW_TOGGLE):
+#             ( UdxX , UdyY ) = iceflow( taubX , taubY , HX , HY , xcmpnt , ycmpnt )
+#         else:
+#             UdxX = np.zeros( xcmpnt.shape , dtype='float64' )    #### INEFFICIENT TO HAVE INSIDE LOOP
+#             UdyY = np.zeros( ycmpnt.shape , dtype='float64' )
+        pass
+          
+    #   update_deformation_velocity()
+    #-------------------------------------------------------------------
+    def update_sliding_velocity(self):
+
+        """Update ice sliding velocity.
+           Inputs: taubX, taubY, xcmpnt, ycmpnt
+           Outputs: UsxX, UsyY  """
+            
+#         if (ICESLIDE_TOGGLE):
+#             ( UsxX , UsyY ) = ice_sliding( taubX , taubY , xcmpnt , ycmpnt )
+#         else:
+#             #### INEFFICIENT TO HAVE INSIDE LOOP
+#             UsxX = np.zeros( xcmpnt.shape , dtype='float64' )
+#             UsyY = np.zeros( ycmpnt.shape , dtype='float64' )
+        pass
+           
+    #   update_sliding_velocity()
+    #-------------------------------------------------------------------
+    def update_total_velocity(self):
+ 
+        """Sum all contributions to ice motion.
+           Inputs: UdxX, UdyY, UsxX, UsyY
+           Outputs: UxX, UyY"""
+
+        # ( UxX , UyY ) = sum_ice_motion( UdxX , UdyY , UsxX , UsyY )
+        pass
+        
+    #   update_total_velocity()
+    #-------------------------------------------------------------------
+    def update_dH_dt(self):
+
+        # ( dHdt , ( qxX , qyY ) ) =
+        # mass_conservation( H_ext , UxX , UyY , HX , HY ,
+        #                    dZidxX , dZidyY , dx=dx , dy=dy )
+        pass
+                                                      
+    #   update_dH_dt()
+    #-------------------------------------------------------------------
+    def update_specific_discharge(self):
+    
+        pass  # (code from mass_conservation() .)
+        
+    #   update_specific_discharge()
+    #-------------------------------------------------------------------
+    def update_bz(self):
+
+        # ( Bxy , ELA ) = mass_balance( Zi , t )
+        pass
+        
+    #   update_bz()
+    #-------------------------------------------------------------------
+    def update_timestep(self):
+
+#         if (VARIABLE_DT_TOGGLE):
+#             dt = get_timestep( H , Zi_ext , Zi , dHdt , Bxy )
+#         else:
+#             #### INEFFICIENT TO HAVE INSIDE LOOP
+#             dt = dtDefault
+        pass
+            
+    #   update_timestep()
+    #-------------------------------------------------------------------
+    def update_thickness(self):
+
+#         ( t, H, Zi, meltrate, conserveIce ) =
+#              update_vars( H, Zb, Zi, Bxy, qxX, qyY, dHdt, t, dt,
+#                           conserveIce, dx=dx, dy=dy )
+        pass
+                                                   
+    #   update_thickness()
+    #-------------------------------------------------------------------
+    def update_melt_rate(self):
+    
+        pass
+
+    #   update_melt_rate()
+    #-------------------------------------------------------------------
+    def update_time(self):
+    
+        pass
+
+    #   update_time()
     #-------------------------------------------------------------------
     def finalize(self):
 
