@@ -1,5 +1,7 @@
 
-#  Copyright (c) 2019-2021, Scott D. Peckham
+#  Copyright (c) 2019-2023, Scott D. Peckham
+#
+#  Aug. 2023.  K to C in create_rts_from_nc_files().
 #  August, September, October, Nov. 2019
 #  Jun. 2020.  Updated create_rts_from_nc_files() to suppport
 #              non-precip variables.
@@ -1052,6 +1054,7 @@ def create_rts_from_nc_files( rts_file='TEST.rts', NC4=False,
            DEM_bounds=None, DEM_xres_sec=None, DEM_yres_sec=None,
            DEM_ncols=None, DEM_nrows=None, SILENT=False):
 
+    VERBOSE = True
     #------------------------------------
     # Note: GPM and GLDAS are currently
     #       the only supported products
@@ -1113,10 +1116,9 @@ def create_rts_from_nc_files( rts_file='TEST.rts', NC4=False,
     #------------------------------------------------  
     if (GLDAS):
         if (var_name is None):
-            var_name = 'Rainf_tavg'   ## [kg m-2 s-1]
-        GLDAS_RAIN = (var_name == 'Rainf_tavg')
-    else:
-        GLDAS_RAIN = False
+            var_name = 'Rainf_f_tavg' # Total precip. rate [kg m-2 s-1] 
+            # var_name = 'Rainf_tavg' # Rain  precip. rate [kg m-2 s-1] 
+
     #------------------------------------------------     
     if (var_name is None):
         print('ERROR: var_name is required.')
@@ -1200,13 +1202,13 @@ def create_rts_from_nc_files( rts_file='TEST.rts', NC4=False,
 #         vmax  = max( vmax, gmax )
 #         vmin  = min( vmin, gmin )
         band  = ds_in.GetRasterBand(1)
-        nc_nodata = band.GetNoDataValue()
+        nc_nodata = band.GetNoDataValue()  # same as nodata just above
 
         if (VERBOSE):
             print( '===============================================================')
             print( 'count =', (count + 1) )
             print( '===============================================================')
-            print( 'grid1: min   =', grid1.min(), 'max =', grid1.max() )
+            print( 'grid1: min   =', grid1.min(), ', max =', grid1.max() )
             print( 'grid1.shape  =', grid1.shape )
             print( 'grid1.dtype  =', grid1.dtype )
             print( 'grid1 nodata =', nc_nodata, '(in original nc_file)' )
@@ -1225,7 +1227,7 @@ def create_rts_from_nc_files( rts_file='TEST.rts', NC4=False,
         #-----------------------------------------------        
         # Check if the bounding boxes actually overlap
         #-----------------------------------------------
-        if not(SILENT):  print('comparing bounds...')
+        if not(SILENT):  print('Comparing bounds...')
         ds_bounds = get_raster_bounds( ds_in, VERBOSE=False )
         if (bounds_disjoint( ds_bounds, DEM_bounds )):
             print( '###############################################')
@@ -1245,7 +1247,7 @@ def create_rts_from_nc_files( rts_file='TEST.rts', NC4=False,
         # then save to a temporary GeoTIFF file.
         #-------------------------------------------
         if not(BAD_FILE):
-            print('regridding to DEM grid...')
+            print('Regridding to DEM grid...')
             grid2 = gdal_regrid_to_dem_grid( ds_in, tmp_file,
                          DEM_bounds, DEM_xres_deg, DEM_yres_deg,
                          nodata=rts_nodata, IN_MEMORY=IN_MEMORY,
@@ -1257,7 +1259,7 @@ def create_rts_from_nc_files( rts_file='TEST.rts', NC4=False,
             ##    gdal.Unlink( tmp_file )
             
             if (VERBOSE):
-                print( 'grid2: min  =', grid2.min(), 'max =', grid2.max() )
+                print( 'grid2: min  =', grid2.min(), ', max =', grid2.max() )
                 print( 'grid2.shape =', grid2.shape )
                 print( 'grid2.dtype =', grid2.dtype )
                 if (rts_nodata is not None):
@@ -1270,23 +1272,39 @@ def create_rts_from_nc_files( rts_file='TEST.rts', NC4=False,
             grid2 = np.zeros( (DEM_nrows, DEM_ncols), dtype='float32' )
             if (rts_nodata is not None):
                 grid2 += rts_nodata
- 
-        if (GLDAS_RAIN):
-            #-------------------------------
-            # Convert [kg m-2 s-1] to mmph
-            #-------------------------------
-            print('converting units: [kg m-2 s-1] to [mmph]...')
-            w = (grid2 != -9999.0)        # (boolean array)
-            grid2[w] *= 3600.0  # (preserve nodata)
 
-        if (GLDAS) and (var_name == 'Tair_f_inst'):
-            #-----------------
-            # Convert K to C
-            #-----------------
-            print('converting units: Kelvin to Celsius...')
-            w = (grid2 != -9999.0)        # (boolean array)
-            grid2[w] -= 273.15  # (preserve nodata)
-                        
+        #----------------------------------------------- 
+        # Perform unit conversions for some GLDAS vars
+        # Usually, nc_nodata = -9999.0.
+        #-----------------------------------------------
+        if (GLDAS):
+            rain_vars = ['Rainf_f_tavg', 'Rainf_tavg']
+            if (var_name in rain_vars):
+                print('Converting units: [kg m-2 s-1] to [mmph]...')
+                w = (grid2 != nc_nodata)  # (boolean array)
+                grid2[w] *= 3600.0        # (preserve nodata)
+            #--------------------------------------------------------------                
+#             if (var_name == 'Snowf_tavg'):
+#                 print('Converting units: [kg m-2 s-1] to [mmph]...')
+#                 w = (grid2 != nc_nodata)  # (boolean array)
+#                 grid2[w] *= 3600.0        # (preserve nodata)            
+            #--------------------------------------------------------------
+            temp_vars = ['Tair_f_inst', 'AvgSurfT_tavg', 'AvgSurfT_inst', 'SnowT_tavg']
+            if (var_name in temp_vars):
+                print('Converting units: Kelvin to Celsius...')
+                w = (grid2 != nc_nodata)  # (boolean array)
+                grid2[w] -= 273.15        # (preserve nodata)
+            #--------------------------------------------------------------             
+            if (var_name == 'Albedo_inst'):
+                print('Converting units: % to [0,1]...')
+                w = (grid2 != nc_nodata)  # (boolean array)
+                grid2[w] /= 100.0         # (preserve nodata)
+            #--------------------------------------------------------------             
+            if (var_name == 'Psurf_f_inst'):
+                print('Converting units: Pa to mbar...')
+                w = (grid2 != nc_nodata)  # (boolean array)
+                grid2[w] /= 100.0         # (preserve nodata)
+                                
         #-------------------------  
         # Write grid to RTS file
         #-------------------------
@@ -1324,23 +1342,83 @@ def create_rts_from_nc_files( rts_file='TEST.rts', NC4=False,
     #---------------------------
     # Determine variable units
     #---------------------------
-    if (GPM or GLDAS_RAIN):
-        units = 'mmph'  # (GLDAS_RAIN is converted from mass flux)
+    if (GPM):
+        units = 'mmph'
     else:
-        #-----------------------------------------------
-        # Note: This is not all of the GLDAS variables
-        #-----------------------------------------------   
+        #--------------------------------------------------
+        # Note: The GLDAS Noah-LSM Parameters (Table 3.3) 
+        #       Other GLDAS products have other vars
+        #         and some of those are included here.
+        #       "_tavg" vars are backward 3-hour avg.
+        #       "_acc" vars are backward 3-hour accum.
+        #       "_inst" vars are instantaneous
+        #       "_f" vars are forcing vars.
+        #       Updated this map on 2023-08-28.
+        #------------------------------------------------  
         umap = {
-        'Swnet_tavg'         : 'W m-2',
-        'Lwnet_tavg'         : 'W m-2',
-        'Rainf_tavg'         : 'kg m-2 s-1',
-        'Evap_tavg'          : 'kg m-2 s-1',
-        'Qsb_acc'            : 'kg m-2',   # (baseflow groundwater runoff)
-        'SoilMoi0_10cm_inst' : 'kg m-2',  # (soil moisture content)
-        'Albedo_inst'        : '%',
-        'Wind_f_inst'        : 'm s-1',
-        'Tair_f_inst'        : 'K' }     # (air temperature)
-        units = umap[ var_name ]
+        'Swnet_tavg'         : 'W m-2',       # Net shortwave rad. flux
+        'Lwnet_tavg'         : 'W m-2',       # Net longwave rad. flux
+        'Qle_tavg'           : 'W m-2',       # Latent heat net flux
+        'Qh_tavg'            : 'W m-2',       # Sensible heat net flux
+        'Qg_tavg'            : 'W m-2',       # Ground heat flux
+        'SWdown_f_tavg'      : 'W m-2',       # Downward SW rad. flux
+        'LWdown_f_tavg'      : 'W m-2',       # Downward LW rad. flux
+        'PotEvap_tavg'       : 'W m-2',       # Potential evap. rate
+        'ECanop_tavg'        : 'W m-2',       # Canopy water evaporation
+        'Tveg_tavg'          : 'W m-2',       # Transpiration
+        'ESoil_tavg'         : 'W m-2',       # Direct evap. from bare soil
+        #-----------------------------------------------------------------------
+#       'Rainf_tavg'         : 'kg m-2 s-1',  # Rain precip. rate (see below)
+#       'Rainf_f_tavg'       : 'kg m-2 s-1',  # Total precip. rate (see below)
+        'Snowf_tavg'         : 'kg m-2 s-1',  # Snow precip. rate
+        'Evap_tavg'          : 'kg m-2 s-1',  # Evapotranspiration
+        'EvapSnow_tavg'      : 'kg m-2 s-1',  # Snow evaporation
+        'Qs_tavg'            : 'kg m-2 s-1',  # Storm surface runoff
+        'Qsb_tavg'           : 'kg m-2 s-1',  # Baseflow-gw runoff
+        'Qsm_tavg'           : 'kg m-2 s-1',  # Snow melt
+        #-----------------------------------------------------------------------
+        'Qs_acc'             : 'kg m-2',      # Storm surface runoff
+        'Qsb_acc'            : 'kg m-2',      # Baseflow-gw runoff
+        'Qsm_acc'            : 'kg m-2',      # Snow melt
+        'RootMoist_inst'     : 'kg m-2',      # Root zone soil moisture
+        'CanopInt_inst'      : 'kg m-2',      # Plant canopy surface water
+        #-----------------------------------------------------------------------
+        'Rainf_tavg'         : 'mm h-1',      # Rain precip. rate (converted)
+        'Rainf_f_tavg'       : 'mm h-1',      # Total precip. rate (converted)        
+        #-----------------------------------------------------------------------
+        'Tair_f_inst'        : 'C',           # Air temp. (K to C)
+        'SnowT_tavg'         : 'C',           # Snow surf. temp. (K to C)
+        'AvgSurfT_inst'      : 'C',           # Avg. surface skin temp. (K to C)
+        'AvgSurfT_tavg'      : 'C',           # Avg. surface skin temp. (K to C)
+        #-----------------------------------------------------------------------
+        'SnowDepth_inst'     : 'm',           # Snow depth (inst.)
+        'SnowDepth_tavg'     : 'm',           # Snow depth (time avg.)
+        'Albedo_inst'        : 'none [0,1]',  # Albedo  (% to [0,1])
+        'Psurf_f_inst'       : 'Pa',          # Surface pressure 
+#       'Psurf_f_tavg'       : 'Pa',          # Surface pressure  
+        'Qair_f_inst'        : 'kg kg-1',     # Specific humidity     
+        #-----------------------------------------------------------------------
+        'SWE_inst'              : 'kg m-2',   # Snow depth water equiv.
+        'SWE_tavg'              : 'kg m-2',   # Snow depth water equiv.
+        'Qsb_acc'               : 'kg m-2',   # Baseflow groundwater runoff
+        'SoilMoi0_10cm_inst'    : 'kg m-2',   # Soil moisture (0-10 cm)
+        'SoilMoi10_40cm_inst'   : 'kg m-2',   # Soil moisture (10-40 cm)
+        'SoilMoi40_100cm_inst'  : 'kg m-2',   # Soil moisture (40-100 cm) 
+        'SoilMoi100_200cm_inst' : 'kg m-2',   # Soil moisture (100-200 cm)  
+#       'SoilMoist_S_tavg'      : 'kg m-2',      # Surface soil moisture
+#       'SoilMoist_RZ_tavg'     : 'kg m-2',      # Root zone soil moisture
+#       'SoilMoist_P_tavg'      : 'kg m-2',      # Profile soil moisture
+        'CanopInt_inst'         : 'kg m-2',      # Plant canopy surface water
+#       'CanopInt_tavg'         : 'kg m-2',      # Plant canopy surface water
+        #-----------------------------------------------------------------------
+        'ACond_tavg'         : 'm s-1',       # Aerodynamic conductance
+        'Wind_f_inst'        : 'm s-1' }      # Wind speed
+
+        try:
+            units = umap[ var_name ]
+        except:
+            print("SORRY, Don't know units for this GLDAS var.")
+            units = 'not available (see docs)'
 
     #----------------------     
     # Print final message
@@ -1510,7 +1588,7 @@ def create_rts_from_chirps_files( rts_file='TEST.rts',
             print( '===============================================================')
             print( 'count =', (count + 1) )
             print( '===============================================================')
-            print( 'grid1: min   =', grid1.min(), 'max =', grid1.max() )
+            print( 'grid1: min   =', grid1.min(), ', max =', grid1.max() )
             print( 'grid1.shape  =', grid1.shape )
             print( 'grid1.dtype  =', grid1.dtype )
             print( 'grid1 nodata =', chirps_nodata, '(in original file)' )
@@ -1529,7 +1607,7 @@ def create_rts_from_chirps_files( rts_file='TEST.rts',
         #-----------------------------------------------        
         # Check if the bounding boxes actually overlap
         #-----------------------------------------------
-        if not(SILENT):  print('  comparing bounds...')
+        if not(SILENT):  print('  Comparing bounds...')
         ds_bounds = get_raster_bounds( ds_in, VERBOSE=False )
         if (bounds_disjoint( ds_bounds, DEM_bounds )):
             print( '###############################################')
@@ -1550,14 +1628,14 @@ def create_rts_from_chirps_files( rts_file='TEST.rts',
         # then save to a temporary GeoTIFF file.
         #-------------------------------------------
         if not(BAD_FILE):
-            print('  regridding to DEM grid...')
+            print('  Regridding to DEM grid...')
             grid2 = gdal_regrid_to_dem_grid( ds_in, tmp_file,
                          DEM_bounds, DEM_xres_deg, DEM_yres_deg,
                          nodata=rts_nodata, IN_MEMORY=False,
                          RESAMPLE_ALGO=resample_algo )
             
             if (VERBOSE):
-                print( 'grid2: min  =', grid2.min(), 'max =', grid2.max() )
+                print( 'grid2: min  =', grid2.min(), ', max =', grid2.max() )
                 print( 'grid2.shape =', grid2.shape )
                 print( 'grid2.dtype =', grid2.dtype )
                 if (rts_nodata is not None):

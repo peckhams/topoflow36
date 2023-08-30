@@ -1,6 +1,12 @@
 
-# S.D. Peckham
-# October 14, 2009
+#-----------------------------------------------------------------------
+#
+#  Copyright (c) 2009-2023, Scott D. Peckham
+#
+#  Aug 2023.  Added convert_units() and write_grid() methods.
+#  October 14, 2009
+#
+#-----------------------------------------------------------------------
 
 import os
 import os.path
@@ -22,8 +28,9 @@ from . import rti_files
 #       get_bounds()    # (2020-05-26)
 #       open_new_file()
 #       add_grid()
+#       write_grid()  # alias to add_grid()
 #       get_grid()
-#       read_grid()  # alias to get_grid()
+#       read_grid()   # alias to get_grid()
 #       close_file()
 #       close()
 #       --------------------
@@ -424,6 +431,13 @@ class rts_file():
 ##        self.time_index += 1
         
     #   add_grid()
+    #-------------------------------------------------------------------
+    def write_grid(self, grid, time_index=-1):
+    
+        # Note:  This is an alias to add_grid().
+        self.add_grid( grid, time_index=time_index )
+        
+    #   write_grid()
     #----------------------------------------------------------
     def get_grid(self, time_index, dtype='float32'):
 
@@ -490,5 +504,43 @@ class rts_file():
         
     #   number_of_grids()
     #-------------------------------------------------------------------
+    def convert_units(self, new_rts_file, factor=1, add_val=0):
 
+        #----------------------------------------
+        # Get info about original/open RTS file
+        #----------------------------------------
+        info    = self.info
+        n_grids = self.number_of_grids()
+ 
+        #--------------------------------
+        # Prepare to write new RTS file
+        #--------------------------------
+        print('Creating new RTS file:')
+        print('   ' + new_rts_file )
+        print('from existing RTS file:')
+        print('   ' + self.file_name)  
+        new_rts = rts_file()  
+        OK  = new_rts.open_new_file( new_rts_file, info )
+        
+        #--------------------------------------------
+        # Read each grid from old RTS file, convert
+        # units, then write to new RTS file.
+        # Data type is unchanged; usually 'float32'
+        #--------------------------------------------
+        print('by converting units: ')
+        print('   factor  =', factor )
+        print('   add_val =', add_val )        
+        for time_index in range(n_grids):
+            grid = self.read_grid( time_index=time_index )
+            if (factor != 1):
+                grid *= factor
+            if (add_val != 0):
+                grid += add_val
+            new_rts.add_grid( grid )
+        new_rts.close_file()
+        print('Finished.')
+        print()
+
+    #   convert_units()
+    #-------------------------------------------------------------------
     
