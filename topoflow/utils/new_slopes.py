@@ -1,6 +1,7 @@
 #------------------------------------------------------------------------
-#  Copyright (c) 2019, Scott D. Peckham
+#  Copyright (c) 2019-2023, Scott D. Peckham
 #
+#  Aug 2023.  Search for 2023-08-24 for extra exit condition. 
 #  Oct 2019.  First version to put in utils folder.
 #             remove_bad_slopes() is from channels_base.py.
 
@@ -255,7 +256,16 @@ def get_new_slope_grid(site_prefix=None, case_prefix=None,
         pv_max   = pID_vals.max()
         n_reps += 1
 
-        DONE = (nb == 0) or (pv_max == 0)
+        #---------------------------------------
+        # Added nreps condition on 2023-08-24.
+        # Occurred due to DEM data type issue.
+        #---------------------------------------
+        DONE = (nb == 0) or (pv_max == 0) or (n_reps > 4*d8.nx)
+
+    if (n_reps > d8.nx):
+        print('   ERROR:  Iteration terminated because')
+        print('   n_reps > 4 * ncols. Check DEM data type.')
+        print()
 
     #--------------------------
     # Print final slope values

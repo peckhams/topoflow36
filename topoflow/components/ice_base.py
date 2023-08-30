@@ -4,8 +4,12 @@
 #     file, such as "lapse_rate".
 #
 #-----------------------------------------------------------------------
-# Copyright (c) 2009-2020, Scott D. Peckham
+# Copyright (c) 2009-2023, Scott D. Peckham
 #
+# Aug 2023.  Renamed H, Zi, Zb, MR throughout.
+#            H = h_ice, Zi = z_ice, Zb = z_bed, MR = mr_ice.
+#            MR conflicts with MR in snow_base for SVO maps
+#            so added imr_gs_file, imr_ts_file synonyms.
 # May 2020.  Added disable_all_output().
 # Jan 2013.  Revised handling of input/output names.
 # Oct 2012.  CSDMS Standard Names and BMI.
@@ -116,9 +120,9 @@ class ice_component( BMI_base.BMI_component ):
     #---------------------------------------------------   
     _output_var_names = [
         'glacier_ice__domain_time_integral_of_melt_volume_flux', # vol_MR
-        'glacier_ice__melt_volume_flux',     # MR
-        'glacier_top_surface__elevation',    # Zi
-        'glacier_ice__thickness',            # H
+        'glacier_ice__melt_volume_flux',     # mr_ice
+        'glacier_top_surface__elevation',    # z_ice
+        'glacier_ice__thickness',            # h_ice
         ## 'glacier_ice__grid_sum_of_thickness', # conserveIce
         'model_grid_cell__x_length',  # dx
         'model_grid_cell__y_length',  # dy
@@ -129,10 +133,10 @@ class ice_component( BMI_base.BMI_component ):
         'land_surface__elevation': 'Zb',
         #---------------------------------------------------------------
         'glacier_ice__domain_time_integral_of_melt_volume_flux': 'vol_MR',
-        'glacier_ice__melt_volume_flux': 'MR',
-        'glacier_top_surface__elevation': 'Zi',
+        'glacier_ice__melt_volume_flux': 'mr_ice',
+        'glacier_top_surface__elevation': 'z_ice',
         ## 'glacier_ice__grid_sum_of_thickness': 'conserveIce',
-        'glacier_ice__thickness': 'H',
+        'glacier_ice__thickness': 'h_ice',
         'model_grid_cell__x_length': 'dx',
         'model_grid_cell__y_length': 'dy',
         'model__time_step': 'dt' }
@@ -242,9 +246,9 @@ class ice_component( BMI_base.BMI_component ):
                                                  GENERIC_ICE_TOGGLE=self.Toggles.GENERIC_ICE_TOGGLE)
         ny, nx = Zb.shape
         #------------------
-        self.H  = H
-        self.Zb = Zb
-        self.Zi = Zi
+        self.h_ice = H
+        self.z_bed = Zb
+        self.z_ice = Zi
         self.dx = dx
         self.dy = dy
         self.nx = nx
@@ -260,8 +264,8 @@ class ice_component( BMI_base.BMI_component ):
         # Read the DEM as Zb
         #---------------------
         DEM_file = (self.in_directory + self.DEM_file)
-        self.Zb  = rtg_files.read_grid(DEM_file, self.rti,
-                                       RTG_type=self.rti.data_type)
+        self.z_bed = rtg_files.read_grid(DEM_file, self.rti,
+                                    RTG_type=self.rti.data_type)
 
         #-----------------------------------
         # Read or define ice depth grid, H
@@ -270,14 +274,14 @@ class ice_component( BMI_base.BMI_component ):
         # to allow restarting from a previous run, etc.
         #-----------------------------------------------------
         if (self.H0_file.upper() == "NONE"):
-            self.H  = np.zeros((self.ny, self.nx), dtype='float32')
+            self.h_ice  = np.zeros((self.ny, self.nx), dtype='float32')
         else:
             H0_file = (self.in_directory + self.H0_file)
-            self.H  = rtg_files.read_grid(H0_file, self.rti,
-                                          RTG_type='FLOAT')
+            self.h_ice  = rtg_files.read_grid(H0_file, self.rti,
+                                         RTG_type='FLOAT')
 
-            
-        self.Zi = (self.Zb + self.H)
+        
+        self.z_ice = (self.z_bed + self.h_ice)
         
     #   initialize_vars_rtg()
     #-------------------------------------------------------------------
@@ -294,9 +298,10 @@ class ice_component( BMI_base.BMI_component ):
         #-----------------------        
         # Initialize more vars
         #-----------------------
-        self.MR          = np.zeros((self.ny, self.nx), dtype='float64')
+        self.mr_ice      = np.zeros((self.ny, self.nx), dtype='float64')
+        self.MR          = self.mr_ice   ## synonym
+        self.meltrate    = self.mr_ice   # (useful synonym ref)
         self.vol_MR      = self.initialize_scalar(0, dtype='float64')
-        self.meltrate    = self.MR   # (useful synonym ref)
         self.dt_min      = np.float64(99999.0)
 
         ################################################
@@ -436,9 +441,9 @@ class ice_component( BMI_base.BMI_component ):
             if not(self.SILENT):
                 print('Ice component: Disabled in CFG file.')
             self.disable_all_output()
-            self.MR       = self.initialize_scalar(0, dtype='float64')
+            self.mr_ice   = self.initialize_scalar(0, dtype='float64')
             self.vol_MR   = self.initialize_scalar(0, dtype='float64')
-            self.meltrate = self.MR
+            self.meltrate = self.mr_ice
             self.dt_min   = np.float64(99999.0)
             self.DONE     = True
             self.status   = 'initialized'
@@ -465,9 +470,9 @@ class ice_component( BMI_base.BMI_component ):
 
         #--------------------------------
         # Has component been disabled ?
-        #-------------------------------------------------
-        # Note: self.MR already set to 0 by initialize()
-        #-------------------------------------------------
+        #-----------------------------------------------------
+        # Note: self.mr_ice already set to 0 by initialize()
+        #-----------------------------------------------------
         if (self.comp_status.lower() == 'disabled'):
             # Note: self.status should be 'initialized'.
             return
@@ -487,9 +492,9 @@ class ice_component( BMI_base.BMI_component ):
         #-------------------------
         self.status = 'updating'
         # print '### CALLING GC2D.update()...'
-        (dt, t, H, Zi, MR, conserveIce) = gc2d.update( self.time, self.H,
-                                               self.Zb, self.dx,
-                                               self.dy, self.MR,
+        (dt, t, H, Zi, MR, conserveIce) = gc2d.update( self.time, self.h_ice,
+                                               self.z_bed, self.dx,
+                                               self.dy, self.mr_ice,
                                                ### self.dy, self.meltrate,
                                                self.conserveIce,
                                                ICEFLOW_TOGGLE=self.ICEFLOW_TOGGLE,
@@ -503,7 +508,25 @@ class ice_component( BMI_base.BMI_component ):
 ##                                           dtDefault=self.Parameters.dtDefault,
 ##                                           dtMax=self.Parameters.dtMax )
 
-
+        #----------------------------------
+        # Update computed values (FUTURE)
+        #----------------------------------
+        # self.status = 'updating'
+        # self.update_rectangle()
+        # self.update_boundary_values()
+        # self.update_basal_shear_stress()
+        # self.update_deformation_velocity()
+        # self.update_sliding_velocity()
+        # self.update_total_velocity()
+        # self.update_dH_dt()
+        # self.update_specific_discharge()
+        # self.update_mass_balance()   # or update_bz()
+        #### self.update_avalanches()
+        #### self.update_calving()
+        # self.update_thickness()
+        # self.update_melt_rate()
+        # self.update_time()
+        
         if (self.mode == 'driver'):
             self.print_time_and_value(H.max(), 'H_max', '[m]')
               
@@ -518,10 +541,9 @@ class ice_component( BMI_base.BMI_component ):
         #------------------------------------------
         # Save computed vars in component's state
         #------------------------------------------
-        self.H           = H
-        self.Zi          = Zi
-        self.MR          = MR
-        ## self.meltrate    = MR
+        self.h_ice       = H
+        self.z_ice       = Zi
+        self.mr_ice      = MR
         self.conserveIce = conserveIce
         
 ##        self.update_meltrate()
@@ -552,6 +574,186 @@ class ice_component( BMI_base.BMI_component ):
         self.status = 'updated'  # (OpenMI)
 
     #   update()
+    #-------------------------------------------------------------------
+    def update_rectangle(self):
+    
+        """Only simulate on sub-rectangle that contains ice.
+           Inputs: H, Zb, COMPRESS_TOGGLE, RESTART_TOGGLE, THERMAL_TOGGLE
+           Outputs: Zi, compression_ration, COMPRESSED_FLAG"""
+
+        #---------------------------------------------------------------------
+        # Notes: It seems like this might have a bug, because rectangle
+        #        with ice is dynamic and Zi, Zb & H get redefined each time.
+        #        Better to handle some other way?
+        #---------------------------------------------------------------------
+        if (self.COMPRESS_TOGGLE) and (self.h_ice.max() > 1) and \
+           (self.RESTART_TOGGLE != 2):
+            H_FullSpace  = self.h_ice.copy()
+            Zb_FullSpace = self.z_bed.copy()
+        
+            if (self.THERMAL_TOGGLE):
+                Ts_FullSpace = self.Ts.copy()  # Ts = surface temp. ?
+                Tb_FullSpace = self.Tb.copy()  # Tb = bed temp. ?
+                Tm_FullSpace = self.Tm.copy()  # Tm = ??? temp.
+
+            #[indrw,indcl] = find(H ~= 0);    # Matlab?
+            indrw, indcl = np.where( self.h_ice != 0 )
+
+            mxrw, mxcl = self.z_bed.shape
+
+            mnrw = max( 0    , min(indrw) - 2 )
+            mxrw = min( mxrw , max(indrw) + 2 )
+            mncl = max( 0    , min(indcl) - 2 )
+            mxcl = min( mxcl , max(indcl) + 2 )
+
+            self.h_ice = H [ mnrw:mxrw , mncl:mxcl ]  ##### H not defined yet
+            self.z_bed = Zb[ mnrw:mxrw , mncl:mxcl ]  ##### Zb not defined yet
+            ## Zi = Zb + max( H, 0 )
+            ## Zi = Zb + np.choose( H<0 , (H,0) )
+            self.z_ice = self.z_bed + np.maximum(H, 0)
+
+            if (self.THERMAL_TOGGLE):
+                Ts = Ts[ mnrw:mxrw , mncl:mxcl ]
+                Tb = Tb[ mnrw:mxrw , mncl:mxcl ]
+                Tm = Tm[ mnrw:mxrw , mncl:mxcl ]
+
+            ny, nx          = self.h_ice.shape
+            mx_ny, mx_nx    = Zb_FullSpace.shape
+            ny, nx          = Zb.shape
+            self.compression_ratio = (mx_nx * mx_ny) / (nx * ny)
+            self.COMPRESSED_FLAG   = 1
+        else:
+            ## Zi = Zb + max( H, 0 ) # included for restarts
+            ## Zi = Zb + np.choose( H<0 , (H,0) )
+            self.z_ice = self.z_bed + np.maximum(self.h_ice, 0)
+            self.compression_ratio = 1.
+            self.COMPRESSED_FLAG   = 0
+
+        ### return ( Zi , compression_ratio , COMPRESSED_FLAG )
+    
+    #   update_rectangle()
+    #-------------------------------------------------------------------
+    def update_boundary_values(self):
+    
+        """Modify boundary cells to enforce boundary conditions.
+           Inputs: H, Zb, Zi
+           Outputs: H_ext, Zb_ext, Zi_ext"""
+        # ( H_ext , Zb_ext , Zi_ext ) = set_bc( H , Zb , Zi )
+        # ( dZidxX , dZidyY ) = difference_grid( Zi_ext , dx , dy )
+        pass
+    
+    #   update_boundary_values()
+    #-------------------------------------------------------------------
+#     def update_Zi_gradient(self):
+#             
+#     #   update_Zi_gradient()    
+    #-------------------------------------------------------------------
+    def update_basal_shear_stress(self):
+
+        """Update the basal shear stress.
+           Inputs: H_ext, Zi_ext
+           Outputs: H_ext, Zb_ext, Zi_ext"""
+        #( ( xcmpnt , ycmpnt ) , ( taubX , taubY ) , ( HX , HY ) ) = 
+        #    basal_shear_stress( H_ext , Zi_ext , dx=dx , dy=dy )
+        pass
+        
+    #   update_basal_shear_stress()
+    #-------------------------------------------------------------------
+    def update_deformation_velocity(self):
+
+        """Update ice velocity due to deformation.
+           Inputs: taubX, taubY, HX, HY, xcmpnt, ycmpnt
+           Outputs: UdxX, UdyY  """
+           
+#         if (ICEFLOW_TOGGLE):
+#             ( UdxX , UdyY ) = iceflow( taubX , taubY , HX , HY , xcmpnt , ycmpnt )
+#         else:
+#             UdxX = np.zeros( xcmpnt.shape , dtype='float64' )    #### INEFFICIENT TO HAVE INSIDE LOOP
+#             UdyY = np.zeros( ycmpnt.shape , dtype='float64' )
+        pass
+          
+    #   update_deformation_velocity()
+    #-------------------------------------------------------------------
+    def update_sliding_velocity(self):
+
+        """Update ice sliding velocity.
+           Inputs: taubX, taubY, xcmpnt, ycmpnt
+           Outputs: UsxX, UsyY  """
+            
+#         if (ICESLIDE_TOGGLE):
+#             ( UsxX , UsyY ) = ice_sliding( taubX , taubY , xcmpnt , ycmpnt )
+#         else:
+#             #### INEFFICIENT TO HAVE INSIDE LOOP
+#             UsxX = np.zeros( xcmpnt.shape , dtype='float64' )
+#             UsyY = np.zeros( ycmpnt.shape , dtype='float64' )
+        pass
+           
+    #   update_sliding_velocity()
+    #-------------------------------------------------------------------
+    def update_total_velocity(self):
+ 
+        """Sum all contributions to ice motion.
+           Inputs: UdxX, UdyY, UsxX, UsyY
+           Outputs: UxX, UyY"""
+
+        # ( UxX , UyY ) = sum_ice_motion( UdxX , UdyY , UsxX , UsyY )
+        pass
+        
+    #   update_total_velocity()
+    #-------------------------------------------------------------------
+    def update_dH_dt(self):
+
+        # ( dHdt , ( qxX , qyY ) ) =
+        # mass_conservation( H_ext , UxX , UyY , HX , HY ,
+        #                    dZidxX , dZidyY , dx=dx , dy=dy )
+        pass
+                                                      
+    #   update_dH_dt()
+    #-------------------------------------------------------------------
+    def update_specific_discharge(self):
+    
+        pass  # (code from mass_conservation() .)
+        
+    #   update_specific_discharge()
+    #-------------------------------------------------------------------
+    def update_bz(self):
+
+        # ( Bxy , ELA ) = mass_balance( Zi , t )
+        pass
+        
+    #   update_bz()
+    #-------------------------------------------------------------------
+    def update_timestep(self):
+
+#         if (VARIABLE_DT_TOGGLE):
+#             dt = get_timestep( H , Zi_ext , Zi , dHdt , Bxy )
+#         else:
+#             #### INEFFICIENT TO HAVE INSIDE LOOP
+#             dt = dtDefault
+        pass
+            
+    #   update_timestep()
+    #-------------------------------------------------------------------
+    def update_thickness(self):
+
+#         ( t, H, Zi, meltrate, conserveIce ) =
+#              update_vars( H, Zb, Zi, Bxy, qxX, qyY, dHdt, t, dt,
+#                           conserveIce, dx=dx, dy=dy )
+        pass
+                                                   
+    #   update_thickness()
+    #-------------------------------------------------------------------
+    def update_melt_rate(self):
+    
+        pass
+
+    #   update_melt_rate()
+    #-------------------------------------------------------------------
+    def update_time(self):
+    
+        pass
+
+    #   update_time()
     #-------------------------------------------------------------------
     def finalize(self):
 
@@ -692,14 +894,13 @@ class ice_component( BMI_base.BMI_component ):
         self.hi_ts_file = (self.out_directory + self.hi_ts_file)
         self.zi_ts_file = (self.out_directory + self.zi_ts_file)
         self.mr_ts_file = (self.out_directory + self.mr_ts_file)
-        
-##        self.hi_gs_file = (self.case_prefix + '_2D-iceH.rts')
-##        self.zi_gs_file = (self.case_prefix + '_2D-iceZ.rts')
-##        self.mr_gs_file = (self.case_prefix + '_2D-iceMR.rts')
-##        #---------------------------------------------------------
-##        self.hi_ts_file = (self.case_prefix + '_0D-iceH.txt')
-##        self.zi_ts_file = (self.case_prefix + '_0D-iceZ.txt')
-##        self.mr_ts_file = (self.case_prefix + '_0D-iceMR.txt')
+
+        #-------------------------------------------------
+        # 2023-08-28.  Create synonym for mr_gs_file to
+        # avoid SVO name mapping conflict (svo_names.py)
+        #-------------------------------------------------
+        self.imr_gs_file = self.mr_gs_file
+        self.imr_ts_file = self.mr_ts_file
 
     #   update_outfile_names()
     #-------------------------------------------------------------------  
@@ -736,8 +937,8 @@ class ice_component( BMI_base.BMI_component ):
                                            units_name='m')
             
         if (self.SAVE_MR_GRIDS):
-            model_output.open_new_gs_file( self, self.mr_gs_file, self.rti,
-                                           var_name='mr',
+            model_output.open_new_gs_file( self, self.imr_gs_file, self.rti,
+                                           var_name='imr',
                                            long_name='ice_meltrate',
                                            units_name='mm/hr')
                                                #####  units_name='m/s')
@@ -761,8 +962,8 @@ class ice_component( BMI_base.BMI_component ):
                                            time_units='years')
             
         if (self.SAVE_MR_PIXELS):
-            model_output.open_new_ts_file( self, self.mr_ts_file, IDs,
-                                           var_name='mr',
+            model_output.open_new_ts_file( self, self.imr_ts_file, IDs,
+                                           var_name='imr',
                                            long_name='ice_meltrate',
                                            units_name='mm/hr',
                                            time_units='years')
@@ -811,11 +1012,11 @@ class ice_component( BMI_base.BMI_component ):
     
         if (self.SAVE_HI_GRIDS):  model_output.close_gs_file( self, 'hi') 
         if (self.SAVE_ZI_GRIDS):  model_output.close_gs_file( self, 'zi') 
-        if (self.SAVE_MR_GRIDS):  model_output.close_gs_file( self, 'mr')  
+        if (self.SAVE_MR_GRIDS):  model_output.close_gs_file( self, 'imr')  
         #-----------------------------------------------------------------
         if (self.SAVE_HI_PIXELS): model_output.close_ts_file( self, 'hi')
         if (self.SAVE_ZI_PIXELS): model_output.close_ts_file( self, 'zi')
-        if (self.SAVE_MR_PIXELS): model_output.close_ts_file( self, 'mr') 
+        if (self.SAVE_MR_PIXELS): model_output.close_ts_file( self, 'imr') 
 
     #   close_output_files()   
     #-------------------------------------------------------------------  
@@ -826,17 +1027,14 @@ class ice_component( BMI_base.BMI_component ):
         #         is a scalar or already a 2D grid.
         #------------------------------------------------------
         if (self.SAVE_HI_GRIDS):
-            model_output.add_grid( self, self.H, 'hi', self.time_min )
-            ## model_output.add_grid( self, self.H, 'H' )
+            model_output.add_grid( self, self.h_ice, 'hi', self.time_min )
 
         if (self.SAVE_ZI_GRIDS):
-            model_output.add_grid( self, self.Zi, 'zi', self.time_min )
-            ## model_output.add_grid( self, self.Zi, 'Z' )
+            model_output.add_grid( self, self.z_ice, 'zi', self.time_min )
 
         if (self.SAVE_MR_GRIDS):
-            MR_mmph = self.MR * self.mps_to_mmph
-            model_output.add_grid( self, MR_mmph, 'mr', self.time_min )
-            ## model_output.add_grid( self, MR_mmph, 'MR' )
+            MR_mmph = self.mr_ice * self.mps_to_mmph
+            model_output.add_grid( self, MR_mmph, 'imr', self.time_min )
 
     #   save_grids()            
     #-------------------------------------------------------------------  
@@ -846,17 +1044,17 @@ class ice_component( BMI_base.BMI_component ):
         time = self.time  # (Note that "self.time_units" = 'years')
          
         if (self.SAVE_HI_PIXELS):
-            model_output.add_values_at_IDs( self, time, self.H,
+            model_output.add_values_at_IDs( self, time, self.h_ice,
                                             'hi', IDs )
 
         if (self.SAVE_ZI_PIXELS):
-            model_output.add_values_at_IDs( self, time, self.Zi,
+            model_output.add_values_at_IDs( self, time, self.z_ice,
                                             'zi', IDs )
 
         if (self.SAVE_MR_PIXELS):
-            MR_mmph = self.MR * self.mps_to_mmph
+            MR_mmph = self.mr_ice * self.mps_to_mmph
             model_output.add_values_at_IDs( self, time, MR_mmph,
-                                            'mr', IDs )
+                                            'imr', IDs )
             
     #   save_pixel_values()
     #-------------------------------------------------------------------

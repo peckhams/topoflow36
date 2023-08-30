@@ -1,6 +1,7 @@
 
-#  Copyright (c) 2019-2020, Scott D. Peckham
+#  Copyright (c) 2019-2023, Scott D. Peckham
 #
+#  Aug. 2023.  Search for 2023-08-24 for small addition.
 #  Jun. 2020.  Cleaned up; added import_dem_as_rtg()
 #  Nov. 2019.
 #
@@ -387,6 +388,7 @@ def print_gdal_grid_info( filename, grid, ds ):
     print('lrx, lry     =', lrx, ',', lry)
     print('xskew, yskew =', xskew, ',', yskew)
     print('----------------------------------')
+    print( 'grid.dtype  =', grid.dtype )  # Added: 2023-08-24.
     print( 'grid.min()  =', grid.min() )
     print( 'grid.max()  =', grid.max() )
     print()

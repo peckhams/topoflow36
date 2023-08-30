@@ -1,10 +1,12 @@
 #   
-#  Copyright (c) 2020-2022, Scott D. Peckham
+#  Copyright (c) 2020-2023, Scott D. Peckham
 #
 #  Note: This file contains a set of functions for visualizing the
 #        contents of output files in netCDF format
 #        (e.g. TopoFlow or Stochastic Conflict Model)
 #
+#  Aug 2023.  Search for 2023-08-24 to see fixed bugs.
+#             Added rtg_type keyword to read_and_show_rtg().
 #  Feb 2022.  create_visualization_files -> create_media_files.
 #  Oct 2021.  create_visualization_files().
 #  Sep 2021.  Added LAND_SEA_BACKDROP option: show_grid_as_image() 
@@ -279,11 +281,17 @@ def read_grid_from_nc_file( nc_file, time_index=0, REPORT=True ):
 #   read_grid_from_nc_file()
 #--------------------------------------------------------------------
 def read_and_show_rtg( rtg_filename, long_name, VERBOSE=True,
+                       rtg_type='FLOAT',
                        cmap='jet', BLACK_ZERO=False,
                        stretch='hist_equal',
                        a=1, b=2, p=0.5, im_file=None,
                        xsize=8, ysize=8, dpi=None ):
-    
+
+    #-----------------------------------------------------------    
+    # Note:  Added "rtg_type" keyword on 2023-08-24 to support
+    #        data types other than FLOAT, like INTEGER.
+    #        rtg_type is then passed to rtg.read_grid().
+    #-----------------------------------------------------------
     rtg = rtg_files.rtg_file()
     OK  = rtg.open_file( rtg_filename )
     if not(OK):
@@ -291,7 +299,7 @@ def read_and_show_rtg( rtg_filename, long_name, VERBOSE=True,
         print( rtg_filename )
         return
     
-    grid   = rtg.read_grid( VERBOSE=VERBOSE )
+    grid   = rtg.read_grid( VERBOSE=VERBOSE, rtg_type=rtg_type )
     extent = rtg.get_bounds()
     rtg.close_file()
 
@@ -364,7 +372,13 @@ def show_grid_as_image( grid, long_name, extent=None,
     w_nodata = (grid <= nodata)  # boolean array
     emin = grid[ grid > nodata ].min()
     grid[ w_nodata ] = emin
-     
+
+    #---------------------------------------    
+    # This seems to be needed (2023-08-24)
+    #---------------------------------------
+    if ('int' in str(grid.dtype)):
+        grid = np.float32(grid)
+ 
     #-----------------------------
     # Apply a "stretch function"
     #-----------------------------

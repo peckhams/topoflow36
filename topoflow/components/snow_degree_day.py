@@ -180,13 +180,13 @@ class snow_component( snow_base.snow_component ):
         # None of these should be needed for the Degree-Day method.
         #------------------------------------------------------------
         # 'atmosphere_bottom_air__mass-per-volume_density':              'kg m-3',
-        # 'atmosphere_bottom_air__mass-specific_isobaric_heat_capacity': 'J kg-1 K-1 ', # (see Notes above)
+        # 'atmosphere_bottom_air__mass-specific_isobaric_heat_capacity': 'J kg-1 K-1', # (see Notes above)
         # 'atmosphere_bottom_air__pressure':                             'mbar',
         # 'atmosphere_bottom_air_flow__log_law_roughness_length':        'm',
         # 'atmosphere_bottom_air_flow__speed_reference_height':          'm',
         # 'atmosphere_bottom_air_flow__reference-height_speed':          'm s-1',
         # 'atmosphere_bottom_air_water-vapor__relative_saturation':      '1',
-        # 'snowpack__z_mean_of_mass-specific_isobaric_heat_capacity':    'J kg-1 K-1 ',
+        # 'snowpack__z_mean_of_mass-specific_isobaric_heat_capacity':    'J kg-1 K-1',
                                 
     #------------------------------------------------    
     # Return NumPy string arrays vs. Python lists ?

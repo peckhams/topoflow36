@@ -148,7 +148,7 @@ class MassBalance:    # (enumeration)
      EXTERNAL_FUNC ,
      ELA_LOWERING2 ,
      BALANCE_FILE ,
-     D180_TIME_SERIES ) = list(range( 9))
+     D18O_TIME_SERIES ) = list(range( 9))   # D18O vs. D180 (delta O18)
 
 #    class MassBalance
 #--------------------------------------------------------------------------------------------------        
@@ -1231,7 +1231,7 @@ def update( t , H , Zb , dx , dy , meltrate, conserveIce,
     # MASS CONSERVATION -- CONTINUITY
     #-----------------------------------------------------------
     ( dHdt , ( qxX , qyY ) ) = mass_conservation( H_ext , UxX , UyY , HX , HY ,
-                                                  dZidxX , dZidyY , dx=dx , dy=dy );
+                                                  dZidxX , dZidyY , dx=dx , dy=dy )
 
     #-----------------------------------------------------------
     # CALCULATE MASS BALANCE

@@ -52,6 +52,34 @@ def get_svo_name_map():
     svo_name_map   = dict( zip( short_name_map.values(),
                                 short_name_map.keys() ) )
 
+    #-------------------------------------------------
+    # Add some synonyms needed for mapping SVO names
+    # as done in open_new_file() in ncgs_files.py
+    #---------------------------------------------------------
+    # Note that "MR" is used in both ice_base and snow_base.
+    #-------------------------------------
+    # Abbreviations used in snow_base.py
+    #-------------------------------------
+    svo_name_map['hs']  = svo_name_map['h_snow']
+    svo_name_map['sw']  = svo_name_map['h_swe']
+    svo_name_map['mr']  = svo_name_map['SM']    ## See 'imr' below.
+    svo_name_map['cc']  = svo_name_map['Ecc']
+    #------------------------------------
+    # Abbreviations used in met_base.py
+    #------------------------------------
+    svo_name_map['ea']  = svo_name_map['e_air']
+    svo_name_map['es']  = svo_name_map['e_surf']
+    svo_name_map['ema'] = svo_name_map['em_air']
+    svo_name_map['Qsw'] = svo_name_map['Qn_SW']
+    svo_name_map['Qlw'] = svo_name_map['Qn_LW']
+    #------------------------------------
+    # Abbreviations used in ice_base.py
+    #------------------------------------
+    svo_name_map['hi']  = svo_name_map['H']
+    svo_name_map['zi']  = svo_name_map['Zi']
+    svo_name_map['imr'] = svo_name_map['MR']
+    ## svo_name_map['zb']  = svo_name_map['Zb']  # not used yet
+    
     return svo_name_map
     
 #   get_svo_name_map()

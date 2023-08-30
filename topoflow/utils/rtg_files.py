@@ -1,6 +1,7 @@
 
 # S.D. Peckham
-# October 16, 2009
+# Aug 2023.  Search for 2023-08-24 to see new comments.
+# Oct 16, 2009
 
 #-------------------------------------------------------------------
 # Notes: This could be implemented as a set of functions or
@@ -382,9 +383,30 @@ class rtg_file():
     def read_grid(self, dtype='float32', rtg_type=None,
                   REPORT=False, VERBOSE=False):
 
+        #------------------------------------------------
+        # Note: 2023-08-24.  Before this method can be
+        #       called, either the open_file() or the
+        #       open_new_file() method must be called.
+        #       In both cases, self.info contains all
+        #       of the RTI file attributes as read from
+        #       the RTI file, __for the DEM__, including
+        #       the data_type.  However, unless there is
+        #       a separate RTI file for other grids, like
+        #       d8-area, d8-slope, and d8-aspect, this
+        #       data type may not be the same as theirs.
+        #------------------------------------------------
         if (VERBOSE):    
             print('Reading grid values....')
-
+ 
+        #------------------------------------------------------      
+        # Note:  The data_type determined this way will be
+        #        correct for the DEM, but possibly incorrect
+        #        for other grids like d8-area & d8-slope.
+        #------------------------------------------------------
+#         if (rtg_type is None): 
+#             rtg_type = self.info.data_type
+#         dtype = rti_files.get_numpy_data_type( rtg_type )
+          
         #--------------------------------------
         # Different ways to specify data type
         #--------------------------------------
@@ -396,7 +418,7 @@ class rtg_file():
         #--------------------------------
         n_values = self.nx * self.ny
         grid = np.fromfile( self.rtg_unit, count=n_values,
-                               dtype=dtype )
+                            dtype=dtype )
         grid = grid.reshape( self.ny, self.nx )
 
         #----------------
@@ -453,13 +475,16 @@ class rtg_file():
     #   byte_swap_needed()
     #----------------------------------------------------------
 #--------------------------------------------------------------------
-def read_grid( RTG_file, rti, RTG_type='FLOAT',
+def read_grid( RTG_file, rti, RTG_type=None,
                REPORT=False, SILENT=True ):
 
     #----------------------------------------------------------
     # Notes: This function is outside of the "rtg_file" class
     #        and will be more convenient in many cases.
     #----------------------------------------------------------
+    # 2023-08-24.  Set RTG_type default to None and modified
+    #   to respect the RTG_type keyword.
+    #----------------------------------------------------------    
     if not(SILENT):    
         print('Reading grid values...')
         
@@ -467,14 +492,19 @@ def read_grid( RTG_file, rti, RTG_type='FLOAT',
     # Read in the grid
     #-------------------
     file_unit = open( RTG_file, 'rb' )
-    ############################################################
-    # Notice:  RTG_type keyword is ignored.   But this method
-    # is called with that keyword in several places.
-    ############################################################
-    RTG_type = rti.data_type   ### (07/12/18) ###
+    
+    #------------------------------------------------------      
+    # Note:  The data_type determined this way will be
+    #        correct for the DEM, but possibly incorrect
+    #        for other grids like d8-area & d8-slope.
+    #        So must specify RTG_type for other grids.
+    #------------------------------------------------------ 
+    if (RTG_type is None):
+        RTG_type = rti.data_type
+        
     dtype = rti_files.get_numpy_data_type( RTG_type )
     grid  = np.fromfile( file_unit, count=rti.n_pixels,
-                            dtype=dtype )
+                         dtype=dtype )
    
 #     print 'n_pixels = ', rti.n_pixels                         
 #     print 'nrows = ', rti.nrows

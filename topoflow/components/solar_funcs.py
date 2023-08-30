@@ -17,8 +17,10 @@ See also papers by:
 """
 #-----------------------------------------------------------------------
 #
-#  Copyright (c) 2005-2021, Scott D. Peckham
+#  Copyright (c) 2005-2023, Scott D. Peckham
 #
+#  Aug 2023.  Fixed bug in Optical_Air_Mass() function.
+#             Updated value in Solar_Constant() function.
 #  Jul 2021.  Added year keyword to True_Solar_Noon(), which is
 #             then passed to Equation_Of_Time().
 #             Note that met_base.py calls True_Solar_Noon().
@@ -46,7 +48,7 @@ See also papers by:
 #  Note:  NB!  Not yet ready to create grids of lats & 
 #         lons for DEM with fixed-length pixels (e.g. UTM).
 #
-#  Nots:  Functions that should be double-checked include:
+#  Note:  Functions that should be double-checked include:
 #           Vernal_Equinox, Earth_Perihelion and
 #           ET_Radiation_Flux_Slope
 #------------------------------------------------------------------------
@@ -122,7 +124,15 @@ def Current_Year():
 #------------------------------------------------------------------------
 def Solar_Constant():
 
-    return np.float64(1367)   # [Watts / m^2]
+    #---------------------------------------------------------
+    # See: Wikipedia: Solar Constant (2023-08-29)
+    # It varies from 1361 at solar min to 1362 at solar max
+    # as measured by satellite.
+    # The value 1367 is widely used, see:
+    # https://www.sciencedirect.com/science/article/pii/S0360544210007565
+    # Dingman may have used: 1367.
+    #---------------------------------------------------------
+    return np.float64(1361.5)   # [Watts / m^2]
     
 #   Solar_Constant()
 #------------------------------------------------------------------------
@@ -173,10 +183,10 @@ def Eccentricity_Correction( day_angle ):
 #------------------------------------------------------------------------
 def Declination( day_angle, DEGREES=False, DMS=False ):
 
-    ################################################################
-    # NB! Make sure that DEGREES and DMS should default to False.
-    ################################################################
-    
+    ########################################################
+    # NB! Make sure that DEGREES and DMS default to False.
+    ########################################################
+
     #-----------------------------------------------------------
     # Note:  The declination reaches its lowest value of -23.5
     #        degrees on the Winter Solstice (Dec. 21/22) and
@@ -236,6 +246,7 @@ def Zenith_Angle( lat_deg, declination, th ):
     #        th is number of hours before (-) or or after (+)
     #        the true solar noon.
 
+    #        Note that zenith_angle < 0 at night.
     #        Sunrise and sunset occur when zenith angle is
     #        equal to pi/2, so cos(Z)=0 and we can then
     #        solve for time offsets as th.
@@ -317,7 +328,7 @@ def ET_Radiation_Flux( lat_deg, Julian_day, th ):
     #---------------------------------
     Gamma = Day_Angle(Julian_day)              # [radians]
     delta = Declination(Gamma)                 # [radians]
-    E0 = Eccentricity_Correction(Gamma)        # [unitless]
+    E0    = Eccentricity_Correction(Gamma)     # [unitless]
     lat_rad = lat_deg * (np.pi / np.float64(180))
     #------------------------------------------------------------
     term1 = np.cos(delta) * np.cos(lat_rad) * np.cos(omega * th)
@@ -375,6 +386,9 @@ def Dew_Point( T, rel_humidity ):
 #------------------------------------------------------------------------
 def Precipitable_Water_Content(T, rel_humidity):
 
+    #---------------------------------------
+    # Note: Wp > 0 always, even if Td < 0.
+    #---------------------------------------
     Td = Dew_Point(T, rel_humidity)   # [degrees C]
     Wp = np.float64(1.12) * np.exp(np.float64(0.0614) * Td)    # [centimeters]
     
@@ -384,13 +398,13 @@ def Precipitable_Water_Content(T, rel_humidity):
 #------------------------------------------------------------------------
 def Optical_Air_Mass( lat_deg, declination, th ):
 
-    #----------------------------------------------------------
+    #------------------------------------------------------------
     # Notes: This is a dimensionless number that gives the
     #        relative path length (greater than 1) that
     #        radiation must travel through the atmosphere as
     #        the result of not entering at a right angle.
 
-    #        t is number of hours before (-) or or after (+)
+    #        th is number of hours before (-) or or after (+)
     #        the true solar noon.
 
     #        Dingman gives only a table (Figure E-4, p. 605)
@@ -399,12 +413,61 @@ def Optical_Air_Mass( lat_deg, declination, th ):
 
     #        The approximation formula used here is widely
     #        used and is from Kasten and Young (1989).
-    #----------------------------------------------------------
-    Z = Zenith_Angle(lat_deg, declination, th)  # [radians]
-    term1 = (np.float64(96.07995) - Z) ** (-np.float64(1.6364))
-    denom = np.cos(Z) + (np.float64(0.50572) * term1)
-    M_opt = (np.float64(1) / denom)
+    #------------------------------------------------------------
+    # Note: This version was used up to 2023-08-29, but is
+    #       wrong because Z was not converted to degrees in
+    #       term1.  In term1, note that 96.07995 = (90 + c),
+    #       in degrees, but Z is in radians.  Note also that
+    #       sin(gamma_rad) = cos(Z_rad).  
+    #------------------------------------------------------------    
+#     Z = Zenith_Angle(lat_deg, declination, th)  # [radians]
+#     term1 = (np.float64(96.07995) - Z) ** (-np.float64(1.6364))
+#     denom = np.cos(Z) + (np.float64(0.50572) * term1)
+#     M_opt = (np.float64(1) / denom)
     
+    #----------------------------------------------------------
+    # Kasten (1965) gave an approximation formula for the
+    # "relative optical air mass" that was widely used.
+    # (The relative optical air mass is dimensionless.)
+    # This formula was a function of the "solar elevation
+    # angle", denoted by gamma, which is the complement of
+    # the solar zenith angle.  The formula had 3 fitting
+    # parameters: a, b and c.  Kasten and Young (1989) gave
+    # an improved approximation formula (equation 3) in
+    # which only the 3 fitting parameters were different.
+    # This monotonic, rapidly decreasing function has:
+    #    f[0] = 37.9196, and f[90] = 0.999712.   
+    #----------------------------------------------------------
+    a = 0.50572
+    b = 6.07995  # [degrees]
+    c = 1.6364
+#     KASTEN_1965 = False
+#     if (KASTEN_1965):
+#         a = 0.1500
+#         b = 3.885  # [degrees]
+#         c = 1.253
+
+    Z = Zenith_Angle(lat_deg, declination, th)  # [radians]
+    Z_deg = Z * (180 / np.pi)  # [degrees]
+    gamma = (90.0 - Z_deg)     # [degrees]
+    #------------------------------------------------------
+    # NB!  Zenith angle = pi/2 (or 90 degrees) at sunrise
+    #      and sunset and is > 90 degrees at night.
+    #      Therefore, gamma < 0 at night, but formula
+    #      doesn't allow gamma < 0.
+    #      To avoid error, set gamma = 0 at night.
+    #      Can use gamma.size if 0D or 2D ndarray.
+    #      Check if gamma is an ndarray. (2023-08-29)
+    #------------------------------------------------------
+    if (isinstance(gamma, np.ndarray)):
+        np.maximum( gamma, 0.0, gamma)  # in-place
+    else:
+        gamma = max(gamma, 0)
+ 
+    term1 = np.sin( gamma * (np.pi / 180) )
+    term2 = a / (gamma + b)**c
+    M_opt = (np.float64(1) / (term1 + term2))
+
     return M_opt   # [unitless]
     
 #   Optical_Air_Mass()
@@ -440,6 +503,8 @@ def Atmospheric_Transmissivity( lat_deg, Julian_day, W_p,
     Gamma  = Day_Angle(Julian_day)   # [radians]
     delta  = Declination(Gamma)      # [radians]
     #----------------------------------------------------
+    # Note: 0 <= M_opt <= 37.9196, and a_sa & b_sa < 0.
+    #----------------------------------------------------    
     a_sa   = -np.float64(0.1240) - (np.float64(0.0207) * W_p)
     b_sa   = -np.float64(0.0682) - (np.float64(0.0248) * W_p)
     M_opt  = Optical_Air_Mass(lat_deg, delta, th) # [unitless]
