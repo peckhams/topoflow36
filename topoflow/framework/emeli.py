@@ -725,7 +725,7 @@ class framework():
 
         p_bmi = self.comp_set[ provider_name ]
         u_bmi = self.comp_set[ user_name ]
-        
+
         #---------------------------------------------
         # Get a reference to long_var_name from the
         # component with provider_name (a comp_name)
@@ -754,8 +754,15 @@ class framework():
         #------------------------------
         p_units = p_bmi.get_var_units( long_var_name )
         u_units = u_bmi.get_var_units( long_var_name )
+     
         if (u_units != p_units):
-            values = Units.conform( values, Units(p_units), Units(u_units) )
+            print('########   WARNING  #########')  #### 2023-08
+            print('Provider units != User units')
+            print('long_var_name =', long_var_name)
+            print('p_units =', p_units + '___')
+            print('u_units =', u_units + '___')
+            print()
+            ### values = Units.conform( values, Units(p_units), Units(u_units) )
 
         #---------------------------------------------------
         # Embed a reference to long_var_name from the
@@ -1487,7 +1494,7 @@ class framework():
                     # a variable in the provider component.
                     #---------------------------------------------
                     self.connect_comps( provider_name, user_name,
-                                  long_var_name, REPORT=REPORT )
+                                 long_var_name, REPORT=REPORT )
 
         return OK
     
