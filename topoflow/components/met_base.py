@@ -9,8 +9,10 @@ in BMI_base.py.
 """
 #-----------------------------------------------------------------------
 #
-# Copyright (c) 2001-2022, Scott D. Peckham
+#  Copyright (c) 2001-2023, Scott D. Peckham
 #
+#  Aug 2023.  Fixed "CONVERT_K_TO_C" bug in read_input_files().
+#             Fixed another possible bug.  Search for 2023-08-28.
 #  Jul 2021.  Added start_year to CFG file and also in:
 #             set_missing_cfg_options().  Now passed to functions
 #             in solar_funcs.py that have a "year" keyword.
@@ -79,6 +81,7 @@ in BMI_base.py.
 #      update_sensible_heat_flux()
 #      update_saturation_vapor_pressure()
 #      update_vapor_pressure()
+#      update_relative_humidity() # (8/29/23, unused, need spec. humidity)
 #      update_dew_point()                    # (7/6/10)
 #      update_precipitable_water_content()   # (7/6/10)
 #      ------------------------------------
@@ -1528,7 +1531,7 @@ class met_component( BMI_base.BMI_component ):
         #        of Brutsaert (1975) is used.  However, the SATTERLUND
         #        keyword is set then the method of Satterlund (1979) is
         #        used.  When plotted, they look almost identical.  See
-        #        the Compare_em_air_Method routine in Qnet_file.pro.
+        #        the compare_em_air_method routine in this file.
         #        Dingman (2002) uses the Brutsaert method.
         #        Liston (1995, EnBal) uses the Satterlund method.
 
@@ -1540,6 +1543,8 @@ class met_component( BMI_base.BMI_component ):
         #NB!     Here, 237.3 is correct, and not a misprint of 273.2.
         #        See footnote on p. 586 in Dingman (Appendix D).
         #----------------------------------------------------------------
+        # Also see: topoflow.utils.met_utils.py   #################
+        #----------------------------------------------------------------        
         if (SURFACE):
 ##            if (self.T_surf_type in ['Scalar', 'Grid']):
 ##                return
@@ -1876,8 +1881,17 @@ class met_component( BMI_base.BMI_component ):
         T_surf_K = self.T_surf + self.C_to_K
         LW_in    = self.em_air  * self.sigma * (T_air_K)** 4.0
         LW_out   = self.em_surf * self.sigma * (T_surf_K)** 4.0
-        LW_out   = LW_out + ((1.0 - self.em_surf) * LW_in)
-               
+
+        #----------------------------------------------------        
+        # 2023-08-29.  The next line was here before today,
+        # and accounts for the amount of longwave radiation
+        # from the air that is reflected from the surface.
+        # See: https://daac.ornl.gov/FIFE/guides/
+        #        Longwave_Radiation_UNL.html
+        # It reduces the net longwave radiation.
+        #----------------------------------------------------
+        LW_out += ((1.0 - self.em_surf) * LW_in)
+
         self.Qn_LW[:] = (LW_in - LW_out)   # [W m-2]
 
         #--------------------------------------------------------------  
@@ -1891,25 +1905,25 @@ class met_component( BMI_base.BMI_component ):
         
     #   update_net_longwave_radiation()
     #-------------------------------------------------------------------
-    def update_net_total_radiation(self):
-
-        #-----------------------------------------------
-        # Notes: Added this on 9/11/14.  Not used yet.
-        #------------------------------------------------------------
-        #        Qn_SW = net shortwave radiation flux (solar)
-        #        Qn_LW = net longwave radiation flux (air, surface)
-        #------------------------------------------------------------       
-        if (self.DEBUG):
-            print('Calling update_net_total_radiation()...')
-            
-        Qn_tot = self.Qn_SW + self.Qn_LW   # [W m-2]
-
-        if (np.ndim( self.Qn_tot ) == 0):
-            self.Qn_tot.fill( Qn_tot )   #### (mutable scalar)
-        else:
-            self.Qn_tot[:] = Qn_tot  # [W m-2]
-                       
-    #   update_net_total_radiation()
+#     def update_net_total_radiation(self):
+# 
+#         #-------------------------------------------------------
+#         # Notes: Added this on 9/11/14.  Not used;  see Q_sum.
+#         #------------------------------------------------------------
+#         #        Qn_SW = net shortwave radiation flux (solar)
+#         #        Qn_LW = net longwave radiation flux (air, surface)
+#         #------------------------------------------------------------       
+#         if (self.DEBUG):
+#             print('Calling update_net_total_radiation()...')
+#             
+#         Qn_tot = self.Qn_SW + self.Qn_LW   # [W m-2]
+# 
+#         if (np.ndim( self.Qn_tot ) == 0):
+#             self.Qn_tot.fill( Qn_tot )   #### (mutable scalar)
+#         else:
+#             self.Qn_tot[:] = Qn_tot  # [W m-2]
+#                        
+#     #   update_net_total_radiation()
     #-------------------------------------------------------------------
     def update_net_energy_flux(self):
 
@@ -2126,9 +2140,12 @@ class met_component( BMI_base.BMI_component ):
             # print('T_air.dtype =', T_air.dtype )
             # print('T_air.shape =', T_air.shape )
             # print('Assuming air temperature units are Kelvin.')
-            CONVERT_K_TO_C = True   ######################################
-            if (CONVERT_K_TO_C):
-                T_air -= 273.15
+            #------------------------------------------------
+            # 2023-08-28.  This is a bug.  Already Celsius.
+            #------------------------------------------------
+#             CONVERT_K_TO_C = True   ###############
+#             if (CONVERT_K_TO_C):
+#                 T_air -= 273.15
             self.update_var( 'T_air', T_air )
 
         T_surf = model_input.read_next(self.T_surf_unit, self.T_surf_type, rti)
@@ -2362,12 +2379,14 @@ class met_component( BMI_base.BMI_component ):
         if (self.SAVE_QSW_GRIDS):
             model_output.open_new_gs_file( self, self.Qsw_gs_file, self.rti,
                                            var_name='Qsw',
+                                           ## var_name='Qn_SW',
                                            long_name='net_shortwave_radiation',
                                            units_name='W/m^2')
             
         if (self.SAVE_QLW_GRIDS):
             model_output.open_new_gs_file( self, self.Qlw_gs_file, self.rti,
                                            var_name='Qlw',
+                                           ## var_name='Qn_LW',
                                            long_name='net_longwave_radiation',
                                            units_name='W/m^2')
         if (self.SAVE_EMA_GRIDS):

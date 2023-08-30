@@ -5,8 +5,10 @@ functions.  It inherits from the snowmelt "base class" in
 """
 #-----------------------------------------------------------------------
 #
-#  Copyright (c) 2001-2014, Scott D. Peckham
+#  Copyright (c) 2001-2023, Scott D. Peckham
 #
+#  Aug 2023.  Removed trailing space in 'J kg-1 K-1 '.
+#             Added missing "vol_swe" in initialize_computed_vars.
 #  Sep 2014.  Cleanup and testing.
 #             Own versions of input file routines, at end.
 #  Aug 2014.  Customized initialize_computed_vars(), which calls
@@ -166,7 +168,7 @@ class snow_component( snow_base.snow_component ):
     #-----------------------------------------------------------------       
     _var_units_map = {
         'atmosphere_bottom_air__mass-per-volume_density': 'kg m-3',
-        'atmosphere_bottom_air__mass-specific_isobaric_heat_capacity': 'J kg-1 K-1 ', # (see Notes above)
+        'atmosphere_bottom_air__mass-specific_isobaric_heat_capacity': 'J kg-1 K-1', # (see Notes above)
         'atmosphere_bottom_air__temperature': 'deg_C',  # (see Notes above)
         'atmosphere_water__snowfall_leq-volume_flux': 'm s-1',
         'land_surface_net-total-energy__energy_flux': 'W m-2',
@@ -318,6 +320,11 @@ class snow_component( snow_base.snow_component ):
     #-------------------------------------------------------------------
     def initialize_computed_vars(self):
 
+        #----------------------------------------------
+        # NOTE:  This function overrides the version
+        #        that is inherited from snow_base.py.
+        #----------------------------------------------
+        
         #------------------------------------------
         # If T_air or precip are grids, then make
         # sure that h_snow and h_swe are grids
@@ -350,9 +357,13 @@ class snow_component( snow_base.snow_component ):
         else:
             self.h_swe = h_swe    # (is already a grid)          
 
-        self.SM     = np.zeros([self.ny, self.nx], dtype='float64')
-        self.vol_SM = self.initialize_scalar( 0, dtype='float64') # (m3)
-
+        self.SM      = np.zeros([self.ny, self.nx], dtype='float64')
+        self.vol_SM  = self.initialize_scalar( 0, dtype='float64') # (m3)
+        #-------------------------------------------
+        # 2023-08-28.  Added next line to fix bug.
+        #-------------------------------------------
+        self.vol_swe = self.initialize_scalar( 0, dtype='float64') # (m3)
+        
         #----------------------------------------------------
         # Compute density ratio for water to snow.
         # rho_H2O is for liquid water close to 0 degrees C.

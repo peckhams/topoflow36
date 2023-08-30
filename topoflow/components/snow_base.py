@@ -472,7 +472,7 @@ class snow_component( BMI_base.BMI_component ):
             self.vol_swe += (volume * self.rti.n_pixels)
         else:
             self.vol_swe += np.sum(volume)
-            
+                        
     #   update_swe_integral()   
     #-------------------------------------------------------------------
     def update_depth(self):
@@ -616,6 +616,7 @@ class snow_component( BMI_base.BMI_component ):
             model_output.open_new_gs_file( self, self.mr_gs_file, self.rti,
                                            ## var_name='MR',
                                            var_name='mr',
+                                           ## var_name='SM', 
                                            long_name='snow_meltrate',
                                            units_name='m/s')
             
@@ -630,7 +631,7 @@ class snow_component( BMI_base.BMI_component ):
             model_output.open_new_gs_file( self, self.sw_gs_file, self.rti,
                                            ## var_name='SWE',
                                            var_name='sw',
-                                           long_name='snow_water_equivalent',
+                                           long_name='snow_water_equivalent_depth',
                                            units_name='m')
             
         if (self.SAVE_CC_GRIDS):
