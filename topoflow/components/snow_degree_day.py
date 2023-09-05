@@ -5,7 +5,7 @@ functions.  It inherits from the snow "base class" in
 """
 #-----------------------------------------------------------------------
 #
-#  Copyright (c) 2001-2014, Scott D. Peckham
+#  Copyright (c) 2001-2023, Scott D. Peckham
 #
 #  Sep 2014.  Cleanup and testing.
 #             Own versions of input file routines, at end.
@@ -104,14 +104,13 @@ class snow_component( snow_base.snow_component ):
     # Note: Cp_snow is a constant set in the "set_constants()"
     #       function in snow_base.py.
     #------------------------------------------------------------
-    #       vol_SM was "basin_cumulative_snow_meltwater_volume"
-    #------------------------------------------------------------
     _output_var_names = [
         'model__time_step',                                   # dt 
         'snowpack__degree-day_coefficient',                   # c0   (read from CFG)
         'snowpack__degree-day_threshold_temperature',         # T0   (read from CFG)
-        'snowpack__domain_time_integral_of_melt_volume_flux', # vol_SM
-        'snowpack__domain_time_integral_of_liquid-equivalent_depth', # vol_swe
+        'snowpack__domain_time_integral_of_melt_volume_flux',   # vol_SM
+        'snowpack__initial_domain_integral_of_liquid-equivalent_depth', # vol_swe_start
+        'snowpack__domain_integral_of_liquid-equivalent_depth', # vol_swe
         'snowpack__depth',                                    # h_snow
         'snowpack__initial_depth',                            # h0_snow
         'snowpack__initial_liquid-equivalent_depth',          # h0_swe
@@ -130,8 +129,9 @@ class snow_component( snow_base.snow_component ):
         'water-liquid__mass-per-volume_density':              'rho_H2O',
         #------------------------------------------------------------------
         'model__time_step':                                   'dt',
-        'snowpack__domain_time_integral_of_melt_volume_flux': 'vol_SM',
-        'snowpack__domain_time_integral_of_liquid-equivalent_depth': 'vol_swe',
+        'snowpack__domain_time_integral_of_melt_volume_flux':   'vol_SM',
+        'snowpack__initial_domain_integral_of_liquid-equivalent_depth': 'vol_swe_start',
+        'snowpack__domain_integral_of_liquid-equivalent_depth':         'vol_swe',
         'snowpack__degree-day_coefficient':                   'c0',
         'snowpack__degree-day_threshold_temperature':         'T0',
         'snowpack__depth':                                    'h_snow',
@@ -167,7 +167,8 @@ class snow_component( snow_base.snow_component ):
         #----------------------------------------------------------------
         'model__time_step':                                   's',
         'snowpack__domain_time_integral_of_melt_volume_flux': 'm3',
-        'snowpack__domain_time_integral_of_liquid-equivalent_depth': 'm3',
+        'snowpack__initial_domain_integral_of_liquid-equivalent_depth': 'm3',
+        'snowpack__domain_integral_of_liquid-equivalent_depth': 'm3',
         'snowpack__degree-day_coefficient':                   'mm day-1 K-1 ',
         'snowpack__degree-day_threshold_temperature':         'deg_C',
         'snowpack__depth':                                    'm',

@@ -12,8 +12,9 @@ infil_richards_1D.py.
 """
 #-----------------------------------------------------------------------
 #
-#  Copyright (c) 2001-2020, Scott D. Peckham
+#  Copyright (c) 2001-2023, Scott D. Peckham
 #
+#  Sep 2023.  .storage -> .vol_soil, .storage_init -> .vol_soil_start
 #  May 2020.  Added update_total_storage(), vol_soil.
 #  Apr 2020.  Added set_new_defaults(), disable_all_output().
 #  Jan 2013.  Removed CCA "get_port_data" calls, etc.
@@ -55,7 +56,7 @@ infil_richards_1D.py.
 #      update_Rg_integral()
 #      update_I()
 #      update_q0()
-#      update_total_storage()
+#      update_total_storage()  # set vol_soil
 #      check_infiltration()
 #      -------------------------
 #      open_input_files()
@@ -254,6 +255,7 @@ class infil_component( BMI_base.BMI_component):
             self.vol_v0 = self.initialize_scalar( 0, dtype='float64' )
             self.vol_Rg = self.initialize_scalar( 0, dtype='float64' )
             self.vol_soil = self.initialize_scalar( 0, dtype='float64' )
+            self.vol_soil_start = self.initialize_scalar( 0, dtype='float64' )
             self.DONE   = True
             self.status = 'initialized'  # (OpenMI 2.0 convention)
             return
@@ -284,10 +286,12 @@ class infil_component( BMI_base.BMI_component):
         if not(self.SILENT):        
             print('INFIL calling initialize_computed_vars()...')
         self.initialize_computed_vars()
-        
+ 
+        #---------------------------------------------       
         # Get and save initial total storage in soil
-        self.update_total_storage(REPORT=False)
-        self.storage_init = self.storage.copy()
+        #---------------------------------------------
+        self.update_total_storage(REPORT=False)  # set self.vol_soil
+        self.vol_soil_start = self.vol_soil.copy()
 
         self.open_output_files()
         self.status = 'initialized'  # (OpenMI 2.0 convention)
@@ -824,7 +828,9 @@ class infil_component( BMI_base.BMI_component):
 
         #------------------------------------------------------
         # Note:  Update total volume of water stored in soil.
-        #        Call this from finalize() for mass balance.
+        #        Call this from initialize to store initial
+        #        value and from finalize() for final value.
+        #        These are used for a mass balance report.
         #        Vw = volume of water, Vc = volume of cell
         #        theta = (Vw/Vc) = q = soil water content
         #------------------------------------------------------
@@ -841,7 +847,7 @@ class infil_component( BMI_base.BMI_component):
             Vc = self.da * self.dz  # 0D or 1D array
             Vw = self.q * Vc        # 1D array
             Vw_profile = Vw.sum()
-            self.storage = (Vw_profile * self.rti.n_pixels)
+            self.vol_soil = (Vw_profile * self.rti.n_pixels)
         else:
            #--------------------------
            # theta = q is a 3D array
@@ -876,23 +882,21 @@ class infil_component( BMI_base.BMI_component):
                Vw = self.q * Vc[:,None,None]
            else:
                Vw = self.q * Vc   # (3D * 1D, or 3D * 3D, elementwise)
-    
-           self.storage = Vw.sum()
+           self.vol_soil = Vw.sum()
 
         #-------------------------------------------------
         # Save water added to vol_soil, for final report
         #-------------------------------------------------
-        if not(hasattr(self, 'storage_init')):
-            self.storage_init = np.float64(0)
-        vol_added = (self.storage - self.storage_init)
-        self.vol_soil.fill( vol_added )
-        
+        if not(hasattr(self, 'vol_soil_start')):
+            self.vol_soil_start = np.float64(0)
+        vol_added = (self.vol_soil - self.vol_soil_start)
+
         if (REPORT):
             print()
             print('Total volume of water in soil at start =')
-            print( self.storage_init, '[m3]')
+            print( self.vol_soil_start, '[m3]')
             print('Total volume of water in soil at end =')
-            print( self.storage, '[m3]')
+            print( self.vol_soil, '[m3]')
             print('Difference in volume =')
             print( vol_added, '[m3]')
             print()

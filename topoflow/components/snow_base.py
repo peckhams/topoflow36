@@ -11,8 +11,13 @@ See snow_degree_day.py and snow_energy_balance.py.
 """
 #-----------------------------------------------------------------------
 #
-#  Copyright (c) 2001-2020, Scott D. Peckham
+#  Copyright (c) 2001-2023, Scott D. Peckham
 #
+#  Aug 2023.  Removed update_swe_integral().
+#             Added update_total_snowpack_water_volume(),
+#               called from finalize().
+#             More careful to distinguish volumes that are area-time
+#             integrals of fluxes and those that are area integrals.
 #  May 2020.  Added update_swe_integral() and vol_swe.
 #             Added disable_all_output().
 #  Sep 2014.  Bug fix: enforce_max_meltrate() was called after update_SM_integral().
@@ -52,8 +57,8 @@ See snow_degree_day.py and snow_energy_balance.py.
 #      enforce_max_meltrate()
 #      update_SM_integral()
 #      update_swe()
-#      update_swe_integral()     # (2020-05-05)
 #      update_depth()
+#      update_total_snowpack_water_volume()
 #      -----------------------
 #      open_input_files()
 #      read_input_files()
@@ -164,7 +169,10 @@ class snow_component( BMI_base.BMI_component ):
             self.h_snow  = self.initialize_scalar(0, dtype='float64')
             self.h_swe   = self.initialize_scalar(0, dtype='float64')
             self.SM      = self.initialize_scalar(0, dtype='float64')
+            # vol_SM is an area-time integral over all cells in DEM
             self.vol_SM  = self.initialize_scalar(0, dtype='float64') # [m3]
+            # vol_swe is an area integral over all cells in DEM.
+            self.vol_swe_start = self.initialize_scalar(0, dtype='float64') # [m3]
             self.vol_swe = self.initialize_scalar(0, dtype='float64') # [m3]
             self.DONE    = True
             self.status  = 'initialized'
@@ -237,7 +245,6 @@ class snow_component( BMI_base.BMI_component ):
         # Call update_swe() before update_depth()
         #------------------------------------------
         self.update_swe()
-        self.update_swe_integral()  # (2020-05-05)
         self.update_depth()
 
         #----------------------------------------------
@@ -266,7 +273,8 @@ class snow_component( BMI_base.BMI_component ):
             # Note: self.status should be 'initialized'.
             return
 
-        self.status = 'finalizing' 
+        self.status = 'finalizing'
+        self.update_total_snowpack_water_volume()  # (2023-08-31)
         self.close_input_files()   ##  TopoFlow input "data streams"
         self.close_output_files()
         if not(self.SILENT):
@@ -354,10 +362,16 @@ class snow_component( BMI_base.BMI_component ):
             self.h_snow = self.initialize_scalar( h_snow, dtype='float64')
             self.h_swe  = self.initialize_scalar( h_swe,  dtype='float64')
 
-        # vol_swe is to track volume of water in the snowpack.
+        #---------------------------------------------------------------------
+        # vol_SM is the time integral of the total volume (over all
+        #   grid cells in the DEM) of snow that has ever melted.
+        # vol_swe is the current (or final) total volume (over all
+        #   grid cells in the DEM) of liquid water stored in the snowpack.
+        #---------------------------------------------------------------------
         self.vol_SM  = self.initialize_scalar( 0, dtype='float64') # (m3)
         self.vol_swe = self.initialize_scalar( 0, dtype='float64') # (m3)
-
+        self.vol_swe_start = self.initialize_scalar( 0, dtype='float64') # (m3)
+        
         #----------------------------------------------------
         # Compute density ratio for water to snow.
         # rho_H2O is for liquid water close to 0 degrees C.
@@ -422,7 +436,7 @@ class snow_component( BMI_base.BMI_component ):
         if (np.size(volume) == 1):
             self.vol_SM += (volume * self.rti.n_pixels)
         else:
-            self.vol_SM += np.sum(volume)  #### np.sum vs. sum ???
+            self.vol_SM += np.sum(volume)
             
     #   update_SM_integral()
     #-------------------------------------------------------------------
@@ -444,36 +458,28 @@ class snow_component( BMI_base.BMI_component ):
         #------------------------------------------------
         # Increase snow water equivalent due to snowfall
         #------------------------------------------------
+        # P_snow is a "water equivalent" volume flux
+        # that was determined from a total volume flux
+        # and a rain-snow temperature threshold.
+        #------------------------------------------------        
         # Meteorology and Channel components may have
         # different time steps, but then self.P_snow
         # will be a time-interpolated value.
         #------------------------------------------------
-        dh1_swe  = (self.P_snow * self.dt)
+        dh1_swe = (self.P_snow * self.dt)  # [m]
         self.h_swe += dh1_swe
-                
+
         #------------------------------------------------
         # Decrease snow water equivalent due to melting
-        # Note that SM depends partly on h_snow.
+        #------------------------------------------------
+        # Note that SM depends partly on h_snow due to
+        # enforce_max_meltrate() in snow_base.py.
         #------------------------------------------------
         dh2_swe    = self.SM * self.dt
         self.h_swe -= dh2_swe
         np.maximum(self.h_swe, np.float64(0), self.h_swe)  # (in place)
         
-    #   update_swe()
-    #-------------------------------------------------------------------
-    def update_swe_integral(self):
-
-        #------------------------------------------------
-        # Update mass total for water in the snowpack,
-        # sum over all pixels. (2020-05-05)
-        #------------------------------------------------   
-        volume = np.float64(self.h_swe * self.da)  # [m^3]
-        if (np.size(volume) == 1):
-            self.vol_swe += (volume * self.rti.n_pixels)
-        else:
-            self.vol_swe += np.sum(volume)
-                        
-    #   update_swe_integral()   
+    #   update_swe() 
     #-------------------------------------------------------------------
     def update_depth(self):
 
@@ -494,15 +500,23 @@ class snow_component( BMI_base.BMI_component ):
         #     rho_H2O  = (mass_H20  / (h_swe * A))
         # Since mass_snow = mass_H20 (for SWE):
         #     rho_snow * h_snow = rho_H2O * h_swe
-        #     (h_snow / h_swe)  = (rho_H2O / rho_snow)
+        #     (h_snow / h_swe)  = (rho_H2O / rho_snow) = density_ratio > 1
         #      h_snow = h_swe * density_ratio
         # Since liquid water is denser than snow:
         #      density_ratio > 1 and
         #      h_snow > h_swe
-        # self.density_ratio = (self.rho_H2O / self.rho_snow)
-        # rho_H2O is for liquid water close to 0 degrees C.
         #------------------------------------------------------------
 
+        # See TopoFlow_Rainfall_Inputs.ipynb, GLDAS section for
+        #   how to convert mass_flux to volume_flux.
+        # Suppose we are given total precip as [kg m-2 s-1] from GLDAS.
+        # For precip that falls as rain (liquid):
+        #   volume_flux = 3600 * mass_flux  [mm h-1]
+        # For precip that falls as snow (rho_snow = 300 kg m-3)
+        #   volume_flux = 3600 * (1000 / rho_snow) * mass_flux [mm h-1]
+        #   volume_flux = 12000 * mass_flux  [mm h-1]
+        
+        
         #------------------------------------------        
         # Increase snow depth due to falling snow
         #-------------------------------------------
@@ -513,7 +527,10 @@ class snow_component( BMI_base.BMI_component ):
         
         #-------------------------------------
         # Decrease snow depth due to melting
-        #-------------------------------------   
+        #-------------------------------------------
+        # Don't need this; the loss due to melting
+        # was already removed in update_swe().
+        #-------------------------------------------   
 #         dh     = self.SM * (self.density_ratio * self.dt)
 #         h_snow = np.maximum((h_snow - dh), np.float64(0))
 
@@ -535,7 +552,46 @@ class snow_component( BMI_base.BMI_component ):
         else:
             self.h_snow[:] = h_snow
         
-    #   update_depth() 
+    #   update_depth()
+    #-------------------------------------------------------------------  
+    def update_total_snowpack_water_volume(self):
+
+        #--------------------------------------------------------   
+        # Note:  Compute the total volume of water stored
+        #        in the snowpack for all grid cells in the DEM.
+        #        Use this in the final mass balance reporting.
+        #        (2023-08-31)
+        #--------------------------------------------------------        
+        # Note:  This is called from initialize() & finalize().
+        #--------------------------------------------------------
+
+        #----------------------------------------------------
+        # Update total volume of liquid water stored in the
+        # INITIAL snowpack, sum over all grid cells but no
+        # integral over time.  (2023-08-31)
+        #----------------------------------------------------   
+        volume0 = np.float64(self.h0_swe * self.da)  # [m^3]
+        if (np.size(volume0) == 1):
+            vol_swe0 = (volume0 * self.rti.n_pixels)
+        else:
+            vol_swe0 = np.sum(volume0)
+
+        self.vol_swe_start.fill( vol_swe0 )
+        
+        #----------------------------------------------------
+        # Update total volume of liquid water stored in the
+        # CURRENT snowpack, sum over all grid cells but no
+        # integral over time.  (2023-08-31)
+        #----------------------------------------------------   
+        volume = np.float64(self.h_swe * self.da)  # [m^3]
+        if (np.size(volume) == 1):
+            vol_swe = (volume * self.rti.n_pixels)
+        else:
+            vol_swe = np.sum(volume)
+
+        self.vol_swe.fill( vol_swe )
+    
+    #   update_total_snowpack_water_volume() 
     #-------------------------------------------------------------------  
     def open_input_files(self):
 

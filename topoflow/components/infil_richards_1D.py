@@ -18,34 +18,38 @@ Water Resources Monograph 15, AGU.
 #        enforce_theta_range() function.
 #        Also, stbc.psi_of_sat() has optional MIN_VALUE keyword.
 #------------------------------------------------------------------- 
-# Copyright (c) 2001-2020, Scott D. Peckham
+#  Copyright (c) 2001-2023, Scott D. Peckham
 #
-# May 2020. Updated:  update_infil_rate();  IN vs. v0
-#           q[:,None,None] trick to avoid all for loops in z.
-#           Testing for Baro_Gam_1m (Test2).
-#           https://stackoverflow.com/questions/33303348/
-#           numpy-subtract-add-1d-array-from-2d-array/33303590
+#  Aug 2023. Added vol_soil_start to all infil components.
+#            Bug fix: "domain_time_integral_of_volume_fraction" ->
+#               "domain_integral_of_volume_fraction"
+#  May 2020. Added vol_soil to all infil components.
+#            Updated:  update_infil_rate();  IN vs. v0
+#            q[:,None,None] trick to avoid all for loops in z.
+#            Testing for Baro_Gam_1m (Test2).
+#            https://stackoverflow.com/questions/33303348/
+#            numpy-subtract-add-1d-array-from-2d-array/33303590
 #------------------------------------------------------------------- 
-# Apr 2020. Updated to use stbc.psi_of_sat() and K_of_sat().
-#           Added update_saturation().
-#           Updated upper BC for theta.
-#           Jupyter notebook to test Richards eqn soln method.
+#  Apr 2020. Updated to use stbc.psi_of_sat() and K_of_sat().
+#            Added update_saturation().
+#            Updated upper BC for theta.
+#            Jupyter notebook to test Richards eqn soln method.
 #------------------------------------------------------------------- 
-# Jan 2020  Separate functions to apply boundary conditions.
-#           All trans. Brooks-Corey functions in soil_trans_BC.py.
-#           Conditioning in various places for stability.
-#           Soil properties from ISRIC plus pedotransfer.py
-#           Applications to Ethiopian river basins.
+#  Jan 2020  Separate functions to apply boundary conditions.
+#            All trans. Brooks-Corey functions in soil_trans_BC.py.
+#            Conditioning in various places for stability.
+#            Soil properties from ISRIC plus pedotransfer.py
+#            Applications to Ethiopian river basins.
 #-------------------------------------------------------------------              
-# Jan 2013.  Revised handling of input/output names.
-# Oct 2012.  Updated to use CSDMS Standard Names and BMI.
-# Aug 2009.  Updates
-# May 2009.  Updates
-# Jan 2009.  Converted from IDL.
-# May 2010.  Changes to unit_test() and read_cfg_file()
-# Jun 2010.  Bug fix: Added qH_list and eta_list in
-#            set_computed_input_vars(). Unit test.
-# Nov 2010.  New approach to BCs and update_theta().
+#  Jan 2013.  Revised handling of input/output names.
+#  Oct 2012.  Updated to use CSDMS Standard Names and BMI.
+#  Nov 2010.  New approach to BCs and update_theta().
+#  Jun 2010.  Bug fix: Added qH_list and eta_list in
+#             set_computed_input_vars(). Unit test.
+#  May 2010.  Changes to unit_test() and read_cfg_file()
+#  Aug 2009.  Updates
+#  May 2009.  Updates
+#  Jan 2009.  Converted from IDL.
 #
 #---------------------------------------------------------------------
 #
@@ -224,7 +228,8 @@ class infil_component(infil_base.infil_component):
         'soil_water__brooks-corey-smith_c_parameter',      # c
         'soil_water__brooks-corey-smith_pressure_head_offset_parameter',  # pA
         'soil_water__bubbling_pressure_head',              # pB
-        'soil_water__domain_time_integral_of_volume_fraction',  # vol_soil
+        'soil_water__initial_domain_integral_of_volume_fraction',  # vol_soil_start
+        'soil_water__domain_integral_of_volume_fraction',          # vol_soil
         # 'soil_water__field-capacity_volume_fraction',    # qf  ######## CHECK
         'soil_water__hydraulic_conductivity',              # K
         'soil_water__hygroscopic_volume_fraction',         # qH
@@ -263,7 +268,8 @@ class infil_component(infil_base.infil_component):
         'soil_water__brooks-corey-smith_c_parameter':      'c',
         'soil_water__brooks-corey-smith_pressure_head_offset_parameter': 'pA',      
         'soil_water__bubbling_pressure_head':              'pB',
-        'soil_water__domain_time_integral_of_volume_fraction': 'vol_soil',  
+        'soil_water__initial_domain_integral_of_volume_fraction': 'vol_soil_start',  
+        'soil_water__domain_integral_of_volume_fraction':         'vol_soil',  
         # 'soil_water__field-capacity_volume_fraction':    'qf',  ######  CHECK
         'soil_water__hydraulic_conductivity':              'K',
         'soil_water__hygroscopic_volume_fraction':         'qH',
@@ -302,7 +308,8 @@ class infil_component(infil_base.infil_component):
         'soil_water__brooks-corey-smith_c_parameter': '1',
         'soil_water__brooks-corey-smith_pressure_head_offset_parameter': 'm',     
         'soil_water__bubbling_pressure_head': 'm',
-        'soil_water__domain_time_integral_of_volume_fraction': 'm3', 
+        'soil_water__initial_domain_integral_of_volume_fraction': 'm3',  
+        'soil_water__domain_integral_of_volume_fraction': 'm3',
         # 'soil_water__field-capacity_volume_fraction': '1',
         'soil_water__hydraulic_conductivity': 'm s-1',
         'soil_water__initial_hydraulic_conductivity': 'm s-1',
@@ -567,6 +574,7 @@ class infil_component(infil_base.infil_component):
         self.vol_v0   = self.initialize_scalar( 0, dtype=dtype)
         self.vol_Rg   = self.initialize_scalar( 0, dtype=dtype)
         self.vol_soil = self.initialize_scalar( 0, dtype=dtype)
+        self.vol_soil_start = self.initialize_scalar( 0, dtype=dtype)
 
         #---------------------------------------
         # Get surface influx to initialize "v"

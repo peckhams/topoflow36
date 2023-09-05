@@ -7,15 +7,19 @@ This class inherits from the infiltration "base class" in "infil_base.py".
 See: Smith, R.E. (2002) Infiltration Theory for Hydrologic Applications,
 Water Resources Monograph 15, AGU.
 """
-# Copyright (c) 2009-2020, Scott D. Peckham
+#-----------------------------------------------------------------------
+#  Copyright (c) 2009-2023, Scott D. Peckham
 #
-# May 2020. Added vol_soil to all infil components.
-# Jan 2013. Revised handling of input/output names.
-# Oct 2012. CSDMS Standard Names and BMI
-# May 2010. Changes to initialize(), read_cfg_file(), etc.
-# Aug 2009. Updates.
-# May 2009. Updates
-# Jan 2009. Converted from IDL.
+#  Aug 2023. Added vol_soil_start to all infil components.
+#            Bug fix: "domain_time_integral_of_volume_fraction" ->
+#               "domain_integral_of_volume_fraction"
+#  May 2020. Added vol_soil to all infil components.
+#  Jan 2013. Revised handling of input/output names.
+#  Oct 2012. CSDMS Standard Names and BMI
+#  May 2010. Changes to initialize(), read_cfg_file(), etc.
+#  Aug 2009. Updates.
+#  May 2009. Updates
+#  Jan 2009. Converted from IDL.
 #
 #-----------------------------------------------------------------------
 # 
@@ -92,7 +96,8 @@ class infil_component(infil_base.infil_component):
         'soil_surface_water__domain_time_integral_of_infiltration_volume_flux', # vol_IN
         'soil_surface_water__infiltration_volume_flux',                   # IN
         'soil_surface_water__time_integral_of_infiltration_volume_flux',  # I
-        'soil_water__domain_time_integral_of_volume_fraction',  # vol_soil
+        'soil_water__initial_domain_integral_of_volume_fraction',  # vol_soil_start
+        'soil_water__domain_integral_of_volume_fraction',          # vol_soil
         'soil_water__green-ampt_capillary_length',         # G (Also used for S-P.)
         'soil_water__potential_infiltration_volume_flux',  # fc
         'soil_water__initial_hydraulic_conductivity',      # Ki
@@ -117,7 +122,8 @@ class infil_component(infil_base.infil_component):
         'soil_surface_water__domain_time_integral_of_infiltration_volume_flux': 'vol_IN',
         'soil_surface_water__infiltration_volume_flux':   'IN',
         'soil_surface_water__time_integral_of_infiltration_volume_flux': 'I',
-        'soil_water__domain_time_integral_of_volume_fraction': 'vol_soil',
+        'soil_water__initial_domain_integral_of_volume_fraction': 'vol_soil_start',
+        'soil_water__domain_integral_of_volume_fraction':         'vol_soil',
         'soil_water__green-ampt_capillary_length':        'G',  # (Also used for S-P.)
         'soil_water__initial_hydraulic_conductivity':     'Ki',
         'soil_water__initial_volume_fraction':            'qi',
@@ -142,7 +148,8 @@ class infil_component(infil_base.infil_component):
         'soil_surface_water__time_integral_of_infiltration_volume_flux': 'm',
         'soil_surface_water__infiltration_volume_flux': 'm s-1',
         'soil_surface_water__domain_time_integral_of_infiltration_volume_flux': 'm3',
-        'soil_water__domain_time_integral_of_volume_fraction': 'm3',
+        'soil_water__initial_domain_integral_of_volume_fraction': 'm3',
+        'soil_water__domain_integral_of_volume_fraction': 'm3',
         'soil_water__green-ampt_capillary_length': 'm',  # (Also used for S-P.)
         'soil_water__initial_hydraulic_conductivity': 'm s-1',
         'soil_water__initial_volume_fraction': '1',
@@ -345,7 +352,8 @@ class infil_component(infil_base.infil_component):
         self.vol_v0   = self.initialize_scalar( 0, dtype='float64')
         self.vol_Rg   = self.initialize_scalar( 0, dtype='float64')
         self.vol_soil = self.initialize_scalar( 0, dtype='float64')
-                
+        self.vol_soil_start = self.initialize_scalar( 0, dtype='float64')
+                        
         if (self.ALL_SCALARS):
             #-----------------------------------------------------
             # Note: "I" is initialized to 1e-6 to avoid a divide
