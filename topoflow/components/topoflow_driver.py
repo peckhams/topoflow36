@@ -2,8 +2,12 @@
 # NB!   update_diversion() in channels_base.py is now COMMENTED OUT.
 #
 #--------------------------------------------------------------------
-# Copyright (c) 2001-2022, Scott D. Peckham
+# Copyright (c) 2001-2023, Scott D. Peckham
 #
+# Aug 2023. Improved print_final_report() mass balance info.
+#           Careful to distinguish between volumes that are
+#           domain-time integrals of fluxes and volumes that
+#           are domain_integrals for storage quantities.
 # Oct 2021. Added CREATE_MEDIA_FILES, CREATE_INDICATORS.
 #           Added set_missing_cfg_options().
 #           Modified CFG file and finalize().
@@ -97,14 +101,14 @@ class topoflow_driver( BMI_base.BMI_component ):
     # But source and sink files provide "dt" for Diversions, so check.
     #------------------------------------------------------------------------------
     _input_var_names = [
-        'atmosphere_water__domain_time_integral_of_precipitation_leq-volume_flux', # vol_P@meteorology
+        'atmosphere_water__domain_time_integral_of_precipitation_leq-volume_flux', # vol_P
         'atmosphere_water__domain_time_max_of_precipitation_leq-volume_flux',    # P_max@meteorology
         'basin_outlet_water_flow__half_of_fanning_friction_factor',              # f_outlet@channels
         'basin_outlet_water_x-section__mean_depth',                              # d_outlet@channels
         'basin_outlet_water_x-section__peak_time_of_depth',                      # Td_peak@channels
         'basin_outlet_water_x-section__peak_time_of_volume_flow_rate',           # T_peak@channels
         'basin_outlet_water_x-section__peak_time_of_volume_flux',                # Tu_peak@channels
-        'basin_outlet_water_x-section__time_integral_of_volume_flow_rate',       # vol_Q@channels
+        'basin_outlet_water_x-section__time_integral_of_volume_flow_rate',       # vol_Q
         'basin_outlet_water_x-section__time_max_of_mean_depth',                  # d_peak@channels
         'basin_outlet_water_x-section__time_max_of_volume_flow_rate',            # Q_peak@channels
         'basin_outlet_water_x-section__time_max_of_volume_flux',                 # u_peak@channels
@@ -128,22 +132,25 @@ class topoflow_driver( BMI_base.BMI_component ):
 #         'snowpack__domain_max_of_depth',                                       # hs_max
 #         'snowpack__domain_min_of_depth',                                       # hs_min
         #-----------------------------------------------------------       
-        'glacier_ice__domain_time_integral_of_melt_volume_flux',                 # vol_MR@ice
-        'land_surface_water__baseflow_volume_flux',                              # GW@satzone
-        'land_surface_water__domain_time_integral_of_baseflow_volume_flux',      # vol_GW@satzone
-        'land_surface_water__domain_time_integral_of_evaporation_volume_flux',   # vol_ET@evap
-        'land_surface_water__domain_time_integral_of_runoff_volume_flux',        # vol_R@channels
-        'land_surface_water__runoff_volume_flux',                                # R@channels
-        'snowpack__domain_time_integral_of_liquid-equivalent_depth',             # vol_swe@snow
-        'snowpack__domain_time_integral_of_melt_volume_flux',                    # vol_SM@snow
-        'soil_surface_water__domain_time_integral_of_infiltration_volume_flux',  # vol_IN@infil
-        'soil_water__domain_time_integral_of_volume_fraction',                   # vol_soil    
+        'glacier_ice__domain_time_integral_of_melt_volume_flux',                 # vol_MR
+        'land_surface_water__baseflow_volume_flux',                              # GW
+        'land_surface_water__domain_time_integral_of_baseflow_volume_flux',      # vol_GW
+        'land_surface_water__domain_time_integral_of_evaporation_volume_flux',   # vol_ET
+        'land_surface_water__domain_time_integral_of_runoff_volume_flux',        # vol_R
+        'land_surface_water__runoff_volume_flux',                                # R
+        'snowpack__initial_domain_integral_of_liquid-equivalent_depth',          # vol_swe_start
+        'snowpack__domain_integral_of_liquid-equivalent_depth',                  # vol_swe
+        'snowpack__domain_time_integral_of_melt_volume_flux',                    # vol_SM
+        'soil_surface_water__domain_time_integral_of_infiltration_volume_flux',  # vol_IN
+        'soil_water__initial_domain_integral_of_volume_fraction',                # vol_soil_start
+        'soil_water__domain_integral_of_volume_fraction',                        # vol_soil     
         'soil_water_sat-zone_top__domain_time_integral_of_recharge_volume_flux', # vol_Rg
         #-----------------------------------------------------------
         'channel_water_x-section__boundary_time_integral_of_volume_flow_rate',   # vol_edge
-        'river-network_channel_water__initial_volume',                           # vol_chan_sum0
-        'river-network_channel_water__volume',                                   # vol_chan_sum
-        'land_surface_water__area_integral_of_depth' ]                           # vol_flood_sum
+        'river-network_channel_water__initial_volume',                           # vol_chan_start
+        'river-network_channel_water__volume',                                   # vol_chan
+        #'land_surface_water__initial_area_integral_of_depth' ]                  # vol_flood_start
+        'land_surface_water__area_integral_of_depth' ]                           # vol_flood
         
         #----------------------------------------------------------------
         # The TopoFlow driver no longer needs to get the time_steps of
@@ -158,16 +165,6 @@ class topoflow_driver( BMI_base.BMI_component ):
 ##        'meteorology:model__time_step',
 ##        'satzone:model__time_step',
 ##        'snow:model__time_step' ]
-
-        ###################################################################
-        #### Bolton comments, 5/12/2012  ---
-        ####          Not sure what to do with these missing /unknow vars
-         ####          cp.get_status()
-        ####          save_pixels_dt@channels    'model__save_pixels_flag' ? 
-        ####          MANNING@channels           'model__manning_flag' ?
-        ####          LAW_OF_WALL@channels       'model__wall_law_flag ?
-        ####          RICHARDS@infiltration      'model__richards_flag' ?
-        ###################################################################
 
     _output_var_names = [
         'model__time_step' ]   # dt
@@ -208,19 +205,29 @@ class topoflow_driver( BMI_base.BMI_component ):
         'land_surface_water__domain_time_integral_of_baseflow_volume_flux':      'vol_GW',
         'land_surface_water__domain_time_integral_of_evaporation_volume_flux':   'vol_ET',
         'land_surface_water__domain_time_integral_of_runoff_volume_flux':        'vol_R',
-        'land_surface_water__runoff_volume_flux':                                'R',        
-        'snowpack__domain_time_integral_of_liquid-equivalent_depth':             'vol_swe',
+        'land_surface_water__runoff_volume_flux':                                'R',
+        'snowpack__initial_domain_integral_of_liquid-equivalent_depth':          'vol_swe_start',        
+        'snowpack__domain_integral_of_liquid-equivalent_depth':                  'vol_swe',
         'snowpack__domain_time_integral_of_melt_volume_flux':                    'vol_SM',       
         'soil_surface_water__domain_time_integral_of_infiltration_volume_flux':  'vol_IN',
-        'soil_water__domain_time_integral_of_volume_fraction':                   'vol_soil',    
+        'soil_water__initial_domain_integral_of_volume_fraction':                'vol_soil_start', 
+        'soil_water__domain_integral_of_volume_fraction':                        'vol_soil',    
         'soil_water_sat-zone_top__domain_time_integral_of_recharge_volume_flux': 'vol_Rg',
         #---------------------
         'model__time_step':                                      'dt',
-        #----------------------------------------------------------------------------
+        #------------------------------------------------------------------
+        # Note: vol_chan and vol_flood are DEM-sized grids for the volume
+        # of water in each grid cell channel and each grid cell extent.
+        # In all other components, variables starting with "vol_" are
+        # scalars that hold area-time integrals of fluxes or area
+        # integrals of stored quantities.  Here, those end in "_sum" or
+        # "sum0".  (2023-09-01)
+        #------------------------------------------------------------------ 
         'channel_water_x-section__boundary_time_integral_of_volume_flow_rate': 'vol_edge',   
-        'river-network_channel_water__initial_volume' : 'vol_chan_sum0',
-        'river-network_channel_water__volume':          'vol_chan_sum',
-        'land_surface_water__area_integral_of_depth':   'vol_flood_sum' }       
+        'river-network_channel_water__initial_volume' :       'vol_chan_sum0',
+        'river-network_channel_water__volume':                'vol_chan_sum',
+        'land_surface_water__initial_area_integral_of_depth': 'vol_flood_sum0',   
+        'land_surface_water__area_integral_of_depth':         'vol_flood_sum' }       
 
             
     _var_units_map = {
@@ -261,10 +268,12 @@ class topoflow_driver( BMI_base.BMI_component ):
         'land_surface_water__domain_time_integral_of_runoff_volume_flux':          'm3',
         'land_surface_water__runoff_volume_flux':                                  'm s-1',
         'network_channel_water__volume':                                           'm3',
-        'snowpack__domain_time_integral_of_liquid-equivalent_depth':               'm3',
+        'snowpack__initial_domain_integral_of_liquid-equivalent_depth':            'm3',
+        'snowpack__domain_integral_of_liquid-equivalent_depth':                    'm3',
         'snowpack__domain_time_integral_of_melt_volume_flux':                      'm3',        
         'soil_surface_water__domain_time_integral_of_infiltration_volume_flux':    'm3',
-        'soil_water__domain_time_integral_of_volume_fraction':                     'm3',
+        'soil_water__initial_domain_integral_of_volume_fraction':                  'm3',
+        'soil_water__domain_integral_of_volume_fraction':                          'm3',
         'soil_water_sat-zone_top__domain_time_integral_of_recharge_volume_flux':   'm3',
         #----------------------------
         'model__time_step': 's',
@@ -272,7 +281,8 @@ class topoflow_driver( BMI_base.BMI_component ):
         'channel_water_x-section__boundary_time_integral_of_volume_flow_rate': 'm3',  
         'river-network_channel_water__initial_volume' : 'm3',
         'river-network_channel_water__volume':          'm3',
-        'land_surface_water__area_integral_of_depth':   'm3'  }  
+        'land_surface_water__initial_area_integral_of_depth': 'm3',
+        'land_surface_water__area_integral_of_depth':         'm3'  }  
     
     #------------------------------------------------    
     # Return NumPy string arrays vs. Python lists ?
@@ -1030,38 +1040,37 @@ class topoflow_driver( BMI_base.BMI_component ):
         #--------------------------
         P_max      = self.P_max
         #--------------------------
-        vol_P   = self.vol_P
-        vol_Q   = self.vol_Q 
-        vol_SM  = self.vol_SM
-        vol_MR  = self.vol_MR
-        vol_ET  = self.vol_ET
-        vol_IN  = self.vol_IN
-        vol_Rg  = self.vol_Rg
-        vol_GW  = self.vol_GW
-        vol_R   = self.vol_R
-        #--------------------------
-        # vol_soil0 = self.vol_soil0   # (2020-05-08)
-        vol_soil0 = 0.0  ##### placeholder        
-        vol_soil  = self.vol_soil    # (2020-05-08)
-        vol_chan_sum0 = self.vol_chan_sum0   # (2020-06-15)
-        vol_chan_sum  = self.vol_chan_sum    # (2019-09-17)
-        vol_flood_sum = self.vol_flood_sum   # (2019-09-17)
-        # vol_swe0  = self.vol_swe0    # (2020-05-05)
-        vol_swe0  = 0.0  ##### placeholder
-        vol_swe   = self.vol_swe       # (2020-05-05)
-        vol_edge  = self.vol_edge    # (2020-06-15)
-        #-----------------------------        
+        vol_P  = self.vol_P   ##### maybe:  vol_sum_P
+        vol_Q  = self.vol_Q   ##### maybe:  vol_sum_Q
+        vol_SM = self.vol_SM
+        vol_MR = self.vol_MR
+        vol_ET = self.vol_ET
+        vol_IN = self.vol_IN
+        vol_Rg = self.vol_Rg
+        vol_GW = self.vol_GW
+        vol_R  = self.vol_R
+        vol_edge = self.vol_edge
+        #------------------------------------------------------------------
+        # Note: vol_chan and vol_flood are DEM-sized grids for the volume
+        # of water in each grid cell channel and each grid cell extent.
+        # In all other components, variables starting with "vol_" are
+        # scalars that hold area-time integrals of fluxes or area
+        # integrals of stored quantities.  Here, those end in "_sum" or
+        # "sum0".  (2023-09-01)
+        #------------------------------------------------------------------
+        vol_chan_start  = self.vol_chan_sum0
+        vol_chan_final  = self.vol_chan_sum
+        #--------------------------------------
+        vol_flood_start = 0.0  ## placeholder
+        vol_flood_final = self.vol_flood_sum
+        #--------------------------------------
+        vol_soil_start  = self.vol_soil_start      
+        vol_soil_final  = self.vol_soil
+        #--------------------------------------
+        vol_swe_start   = self.vol_swe_start
+        vol_swe_final   = self.vol_swe
+        #--------------------------------------        
         basin_area = self.basin_area
-
-        ##################################################################
-#         TRACK_VOLUME = False    ##### (since not ready yet) ######
-#         volume_in    = self.initialize_scalar( 0, dtype='float64')
-#         if (TRACK_VOLUME):  
-#             if (volume_in != 0):    
-#                 percent_out = np.float64(100) * vol_Q / volume_in
-#             else:    
-#                 percent_out = np.float64(0)
-
           
         #----------------------------
         # Construct run time string
@@ -1132,65 +1141,82 @@ class topoflow_driver( BMI_base.BMI_component ):
         report.append('d_peak:            ' + str(d_peak)  + ' [m]')
         report.append('d_peak_time:       ' + str(Td_peak) + ' [min]')
         report.append(' ')
-        
-        ##############################################################################
-#         if (TRACK_VOLUME):    
-#             report.append('Total volume out:  ' + str(vol_Q) + ' [m^3]')
-#             if (basin_area != 0):    
-#                 report.append('Rain volume in:    ' + str(volume_in)   + ' [m^3]')
-#                 report.append('Percentage out:    ' + str(percent_out) + ' [%]')
-#                 report.append(' ')
-        ##############################################################################
-                
+            
         #--------------------------------
         # Print the maximum precip rate
         #--------------------------------
         MPR = (P_max * self.mps_to_mmph)   # ([m/s] -> [mm/hr])
         report.append('Max(precip rate):  ' + str(MPR) + ' [mm/hr]')
         report.append(' ')
-
-        #--------------------------------------------
-        # Print the area_time integrals over domain
-        #--------------------------------------------
-        report.append('Total accumulated volumes over entire DEM: (fluxes)')
-        report.append('vol_P    (precip):        ' + self.vol_str(vol_P) + '   (incl. leq snowfall)')
-        report.append('vol_Q    (discharge):     ' + self.vol_str(vol_Q) + '   (main basin outlet)')
-        report.append('vol_SM   (snowmelt):      ' + self.vol_str(vol_SM))
-        report.append('vol_MR   (icemelt):       ' + self.vol_str(vol_MR))
-        report.append('vol_ET   (evaporation):   ' + self.vol_str(vol_ET))
-        report.append('vol_IN   (infiltration):  ' + self.vol_str(vol_IN))
-        report.append('vol_Rg   (recharge):      ' + self.vol_str(vol_Rg) + '   (bottom loss)')
-        report.append('vol_GW   (baseflow):      ' + self.vol_str(vol_GW))
-        report.append('vol_R    (runoff):        ' + self.vol_str(vol_R)  + '  R = (P+SM+MR) - (ET+IN)')
+    
+        #------------------------------------------------
+        # Print the area_time integrals over entire DEM
+        #------------------------------------------------
+        vol_in  = (vol_P + vol_SM + vol_MR + vol_GW)
+        vol_out = (vol_IN + vol_ET + vol_edge)
+        ## report.append('Total accumulated volumes over entire DEM: (fluxes)')
+        report.append('Total flux volumes:  Area-time integrals over the DEM:')
+        report.append('___Input fluxes___:')
+        report.append('  vol_P    (precip):       ' + self.vol_str(vol_P)    + '  (incl. leq snowfall)')
+        report.append('  vol_SM   (snowmelt):     ' + self.vol_str(vol_SM))
+        report.append('  vol_MR   (icemelt):      ' + self.vol_str(vol_MR))
+        report.append('  vol_GW   (baseflow):     ' + self.vol_str(vol_GW))
+        report.append('  vol_in   (total):        ' + self.vol_str(vol_in)   + '  (P + SM + MR + GW)')
+        report.append('___Output fluxes___:')
+        report.append('  vol_ET   (evaporation):  ' + self.vol_str(vol_ET))
+        report.append('  vol_IN   (infiltration): ' + self.vol_str(vol_IN))
+        report.append('  vol_Rg   (recharge):     ' + self.vol_str(vol_Rg)   + '  (bottom loss)')
+        report.append('  vol_Q    (discharge):    ' + self.vol_str(vol_Q)    + '  (main basin outlet)')
+        report.append('  vol_edge (boundary):     ' + self.vol_str(vol_edge) + '  (tot. boundary discharge)' )
+        report.append('  vol_out  (total):        ' + self.vol_str(vol_out)  + '  (IN + ET + edge_out)')
+        report.append('___Net flux___:')
+        report.append('  vol_R    (runoff):       ' + self.vol_str(vol_R)    + '  R = (P+SM+MR+GW) - (ET+IN)')
         report.append(' ')
 
-        #---------------------------------
-        # Print various forms of storage
-        #---------------------------------
-        report.append('Total accumulated volumes over entire DEM: (storage)')
-        report.append('vol_soil_sum  (infiltration): ' + self.vol_str(vol_soil) + '  (change in storage)') 
-        report.append('vol_chan_sum0 (channels):  ' + self.vol_str(vol_chan_sum0) + '  (initial)')
-        report.append('vol_chan_sum  (channels):  ' + self.vol_str(vol_chan_sum)  + '  (final)')
-        report.append('vol_flood_sum  (surface):  ' + self.vol_str(vol_flood_sum))
-        report.append('vol_swe_sum   (snowpack):  ' + self.vol_str(vol_swe))
-        #-----------------------------------------------------------------------
-        report.append('vol_edge_sum  (boundary):  ' + self.vol_str(vol_edge) + '  (time-integrated)')
+        #-----------------------------------------------------
+        # Print area integrals over domain (forms of storage
+        #-----------------------------------------------------
+        vol_stored_start  = vol_chan_start
+        vol_stored_start += vol_soil_start
+        vol_stored_start += vol_swe_start
+        vol_stored_start += vol_flood_start
+        #--------------------------------------
+        ## report.append('Total accumulated volumes over entire DEM: (storage)')
+        report.append('Total storage volumes:  Area-integrals over the DEM:')
+        report.append('___Initial storage volumes___:')
+        report.append('vol_soil_start (subsurface): ' + self.vol_str(vol_soil_start)) 
+        report.append('vol_chan_start (channels):   ' + self.vol_str(vol_chan_start))
+        report.append('vol_flood_start (surface):   ' + self.vol_str(vol_flood_start))
+        report.append('vol_swe_start  (snowpack):   ' + self.vol_str(vol_swe_start))
+        report.append('vol_start      (total):      ' + self.vol_str(vol_stored_start))
+        #------------------------------------------------------------------------------
+        vol_stored_final  = vol_chan_final
+        vol_stored_final += vol_soil_final
+        vol_stored_final += vol_swe_final
+        vol_stored_final += vol_flood_final
+        #--------------------------------------
+        report.append('___Final storage volumes___:')      
+        report.append('vol_soil_final (subsurface): ' + self.vol_str(vol_soil_final)) 
+        report.append('vol_chan_final (channels):   ' + self.vol_str(vol_chan_final))
+        report.append('vol_flood_final (surface):   ' + self.vol_str(vol_flood_final))
+        report.append('vol_swe_final  (snowpack):   ' + self.vol_str(vol_swe_final))
+        report.append('vol_final      (total):      ' + self.vol_str(vol_stored_final))
+        #------------------------------------------------------------------------------
+        vol_stored_change = (vol_stored_final - vol_stored_start)
+        report.append('vol_change      (total):     ' + self.vol_str(vol_stored_change))
         report.append(' ')
 
         #---------------------------------------------
         # Print mass balance check (over entire DEM)
         #---------------------------------------------
-        vol_in      = (vol_P + vol_SM + vol_MR + vol_GW)
-        vol_out     = (vol_IN + vol_ET + vol_edge)
-        vol_stored  = (vol_chan_sum - vol_chan_sum0)  # change in storage
-        vol_stored += (vol_soil - vol_soil0)
-        vol_stored += (vol_swe  - vol_swe0)
-        vol_stored += vol_flood_sum   # (due to flood water depth)
-        vol_error   = (vol_out + vol_stored) - vol_in
+        # Storage equation (mass conservation):
+        # (vol_in - vol_out) = change in vol stored
+        #---------------------------------------------
+        vol_error = (vol_in - vol_out) - vol_stored_change
         report.append('Mass balance check:')
         report.append('volume in         = ' + self.vol_str(vol_in) )
         report.append('volume out        = ' + self.vol_str(vol_out) )
-        report.append('change in storage = ' + self.vol_str(vol_stored) )
+        report.append('change in storage = ' + self.vol_str(vol_stored_change) )
         if (vol_error > 0):
             msg_prefix = 'volume gain error = '
         else:

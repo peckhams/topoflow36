@@ -15,8 +15,9 @@ flag in their CFG file.
 # NB!   update_diversion() is currently COMMENTED OUT.
 #
 #------------------------------------------------------------------------
-#  Copyright (c) 2001-2022, Scott D. Peckham
+#  Copyright (c) 2001-2023, Scott D. Peckham
 #
+#  Aug 2023.  Changed how vol_chan_sum0 is computed for clarity.
 #  Jul 2021.  Added ATTENUATE option for flashy hydrographs.
 #             Added min_baseflow_flux cfg parameter.
 #  Jul 2020.  Separate initialize_input_file_vars().
@@ -268,7 +269,7 @@ class channels_component( BMI_base.BMI_component ):
         'model__time_step',                                        # dt
         'model_grid_cell__area',                                   # da
         #---------------------------------------------------------------------
-        'channel_water_x-section__boundary_time_integral_of_volume_flow_rate', # vol_edge_sum
+        'channel_water_x-section__boundary_time_integral_of_volume_flow_rate', # vol_edge
         'river-network_channel_water__initial_volume',             # vol_chan_sum0
         'river-network_channel_water__volume',                     # vol_chan_sum
         'land_surface_water__area_integral_of_depth'  ]            # vol_flood_sum
@@ -369,7 +370,14 @@ class channels_component( BMI_base.BMI_component ):
         'sources__y_coordinate':                  'sources_y',
         'sources_water__volume_flow_rate':        'Q_sources',
         #------------------------------------------------------------------
-        'channel_water_x-section__boundary_time_integral_of_volume_flow_rate': 'vol_edge_sum',
+        # Note: vol_chan and vol_flood are DEM-sized grids for the volume
+        # of water in each grid cell channel and each grid cell extent.
+        # In all other components, variables starting with "vol_" are
+        # scalars that hold area-time integrals of fluxes or area
+        # integrals of stored quantities.  Here, those end in "_sum" or
+        # "sum0".  (2023-09-01)
+        #------------------------------------------------------------------        
+        'channel_water_x-section__boundary_time_integral_of_volume_flow_rate': 'vol_edge',
         'river-network_channel_water__initial_volume':  'vol_chan_sum0',
         'river-network_channel_water__volume':          'vol_chan_sum',
         'land_surface_water__area_integral_of_depth':   'vol_flood_sum' }
@@ -1287,15 +1295,15 @@ class channels_component( BMI_base.BMI_component ):
         # These are used to check mass balance
         #---------------------------------------
         # vol_edge is total flow to noflow_IDs.
-        # Rename vol_edge_sum to ???????
         #----------------------------------------
         self.vol_R    = self.initialize_scalar( 0, dtype=dtype)
         self.vol_Q    = self.initialize_scalar( 0, dtype=dtype)
         #------------------------------------------------------------- 
-        self.vol_edge_sum  = self.initialize_scalar( 0, dtype=dtype)
-        self.vol_chan_sum  = self.initialize_scalar( 0, dtype=dtype) 
+        self.vol_edge      = self.initialize_scalar( 0, dtype=dtype)
+        self.vol_chan_sum  = self.initialize_scalar( 0, dtype=dtype)
+        self.vol_chan_sum0 = self.initialize_scalar( 0, dtype=dtype)  
         self.vol_flood_sum = self.initialize_scalar( 0, dtype=dtype) 
-                           
+
         #-------------------------------------------
         # Make sure all slopes are valid & nonzero
         # since otherwise flow will accumulate
@@ -1319,7 +1327,9 @@ class channels_component( BMI_base.BMI_component ):
         self.A_wet    = self.d * (self.width + L2)
         self.P_wet    = self.width + (np.float64(2) * self.d / np.cos(self.angle) )
         self.vol_chan = self.A_wet * self.d8.ds   # [m3]
-        self.vol_chan_sum0 = self.vol_chan.sum()
+        self.update_total_channel_water_volume()
+        self.vol_chan_sum0 = self.vol_chan_sum.copy()
+        ### self.vol_chan_sum0 = self.vol_chan.sum()
         
         #--------------------------------------------       
         # Used to reduce flashiness of hydrograph
@@ -2938,13 +2948,13 @@ class channels_component( BMI_base.BMI_component ):
         #-------------------------------------------------------
         # Now, since adding "rectangle over trapezoid" floodplain
         # method, self.vol is TOTAL volume (channel + floodplain).
-        # So don't add vol_flood to vol_edge_sum or will get
+        # So don't add vol_flood to vol_edge or will get
         # double counting and incorrect mass balance report.
         #-------------------------------------------------------        
         vol = self.vol   # (from R, and flow in and out)
-        noflow_IDs         = self.d8.noflow_IDs
-        vol_edge_sum       = vol[ noflow_IDs ].sum()
-        self.vol_edge_sum += vol_edge_sum
+        noflow_IDs     = self.d8.noflow_IDs
+        vol_edge       = vol[ noflow_IDs ].sum()
+        self.vol_edge += vol_edge
         #----------------------------------------------  
         self.vol[ noflow_IDs ] = 0.0   ## (important)
         self.d[ noflow_IDs ]   = 0.0
@@ -2955,10 +2965,10 @@ class channels_component( BMI_base.BMI_component ):
             # Can cause double counting. See note above.
             # Notice use of self.d8f for flood vars
             #---------------------------------------------
-            # vol_flood     = self.vol_flood
-            # noflow_IDs2   = self.d8f.noflow_IDs
-            # vol_edge_sum2 = vol_flood[ noflow_IDs2 ].sum()
-            # self.vol_edge_sum += vol_edge_sum2
+            # vol_flood      = self.vol_flood
+            # noflow_IDs2    = self.d8f.noflow_IDs
+            # vol_edge2      = vol_flood[ noflow_IDs2 ].sum()
+            # self.vol_edge += vol_edge2
             # self.vol_flood[ noflow_IDs2 ] = 0.0
             # self.d_flood[ noflow_IDs2 ]   = 0.0
             #--------------------------------------------
@@ -3116,7 +3126,7 @@ class channels_component( BMI_base.BMI_component ):
         #--------------------------------------       
         # Compute total volume of flood water
         #--------------------------------------         
-        vol_flood_sum = np.sum( self.vol_flood )
+        vol_flood_sum = np.sum( self.vol_flood )   #######
         self.vol_flood_sum.fill( vol_flood_sum )
  
     #   update_total_flood_water_volume()

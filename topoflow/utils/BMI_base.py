@@ -1,9 +1,11 @@
 #
 #  We should use "initialize_scalar()" for all scalar assignments.
 #  See the Notes for that method.  Search for "np.float64(0".
-#      
-#  Copyright (c) 2009-2022, Scott D. Peckham
 #
+#-----------------------------------------------------------------------      
+#  Copyright (c) 2009-2023, Scott D. Peckham
+#
+#  Sep 2023. Improved how read_config_file() handles boolean vars.
 #  Nov 2022. Minor changes to support NOAA NextGen.
 #  Oct 2022. Full compliance with BMI v2.1.  Cleaned up.
 #  May 2020. Revamped version of set_directories()
@@ -46,8 +48,6 @@
 #          CCA framework concepts such as ports.
 #
 #          Some "private" utility methods are defined at the end.
-#
-#          Need to figure out UDUNITS and use in get_var_units().
 #
 #-----------------------------------------------------------------------
 #
@@ -1826,19 +1826,46 @@ class BMI_component:
                         value_str = s
 
                     #-----------------------------------------------
-                    # If var_name starts with "SAVE_" and value is
-                    # Yes or No, then convert to Python boolean.
+                    # If value_str indicates True or False, then
+                    # convert to Python boolean.  This is a more
+                    # general method than before for handling
+                    # yes/no booleans like PRECIP_ONLY that don't
+                    # start with 'SAVE_'. Note that both 'Yes' and
+                    # 'No' evaluate to True, regardless of case.
+                    # 2023-09-01.
                     #-----------------------------------------------
-                    if (var_name[:5] == 'SAVE_'):
+                    # Should we include "1" and "0" if string??
+                    # As integers, they evaluate to True & False,
+                    # as occurs with FLOOD_OPTION & ATTENUATE
+                    # in the channel component CFG file.
+                    #-----------------------------------------------
+                    true_list  = ['yes', 'true', 'on', '1']
+                    false_list = ['no', 'false', 'off', '0']
+                    bool_list  = true_list + false_list  # join lists
+                    if (s.lower() in bool_list):
                         VALUE_SET = True
-                        if (s.lower() == 'yes'):
+                        if (s.lower() in true_list):
                             exec( "self." + var_name + " = True", {}, locals() )
-                        elif (s.lower() == 'no'):
-                            exec( "self." + var_name + " = False", {}, locals() )
                         else:
-                            VALUE_SET = False
+                            exec( "self." + var_name + " = False", {}, locals() )
                     else:
                         VALUE_SET = False
+
+                    #-----------------------------------------------
+                    # If var_name starts with "SAVE_" and value is
+                    # Yes or No, then convert to Python boolean.
+                    # See more general method above. 2023-09-01
+                    #-----------------------------------------------                   
+#                     if (var_name[:5] == 'SAVE_'):
+#                         VALUE_SET = True
+#                         if (s.lower() == 'yes'):
+#                             exec( "self." + var_name + " = True", {}, locals() )
+#                         elif (s.lower() == 'no'):
+#                             exec( "self." + var_name + " = False", {}, locals() )
+#                         else:
+#                             VALUE_SET = False
+#                     else:
+#                         VALUE_SET = False
                     #----------------------------------------------------------
                     if not(VALUE_SET):
                         if (READ_FILENAME):

@@ -8,7 +8,10 @@ functions.  It inherits from the snowmelt "base class" in
 #  Copyright (c) 2001-2023, Scott D. Peckham
 #
 #  Aug 2023.  Removed trailing space in 'J kg-1 K-1 '.
+#             Added "vol_swe_start".
 #             Added missing "vol_swe" in initialize_computed_vars.
+#             Bug fix: "domain_time_integral_of_liquid-equivalent_depth"
+#               "domain_integral_of_liquid-equivalent_depth"
 #  Sep 2014.  Cleanup and testing.
 #             Own versions of input file routines, at end.
 #  Aug 2014.  Customized initialize_computed_vars(), which calls
@@ -115,12 +118,11 @@ class snow_component( snow_base.snow_component ):
     # Note: Cp_snow is a constant set in the "set_constants()"
     #       function in snow_base.py.
     #------------------------------------------------------------
-    #       vol_SM was "basin_cumulative_snow_meltwater_volume"
-    #------------------------------------------------------------
     _output_var_names = [
         'model__time_step',                            # dt   
         'snowpack__domain_time_integral_of_melt_volume_flux',   # vol_SM
-        'snowpack__domain_time_integral_of_liquid-equivalent_depth', # vol_swe
+        'snowpack__initial_domain_integral_of_liquid-equivalent_depth', # vol_swe_start'
+        'snowpack__domain_integral_of_liquid-equivalent_depth',         # vol_swe
         'snowpack__energy-per-area_cold_content',      # Ecc
         'snowpack__depth',                             # h_snow
         'snowpack__initial_depth',                     # h0_snow
@@ -151,8 +153,9 @@ class snow_component( snow_base.snow_component ):
         #'land_surface_net-shortwave-radiation__energy_flux': 'Qn_SW',        
         #----------------------------------------------------------
         'model__time_step': 'dt',     
-        'snowpack__domain_time_integral_of_melt_volume_flux': 'vol_SM',
-        'snowpack__domain_time_integral_of_liquid-equivalent_depth': 'vol_swe',        
+        'snowpack__domain_time_integral_of_melt_volume_flux':   'vol_SM',
+        'snowpack__initial_domain_integral_of_liquid-equivalent_depth': 'vol_swe_start',
+        'snowpack__domain_integral_of_liquid-equivalent_depth':         'vol_swe',      
         'snowpack__depth': 'h_snow',
         'snowpack__energy-per-area_cold_content': 'Ecc',
         'snowpack__initial_depth': 'h0_snow',
@@ -188,7 +191,8 @@ class snow_component( snow_base.snow_component ):
         #--------------------------------------------------------------
         'model__time_step': 's',
         'snowpack__domain_time_integral_of_melt_volume_flux': 'm3',
-        'snowpack__domain_time_integral_of_liquid-equivalent_depth': 'm3',        
+        'snowpack__initial_domain_integral_of_liquid-equivalent_depth': 'm3',  
+        'snowpack__domain_integral_of_liquid-equivalent_depth': 'm3',        
         'snowpack__depth': 'm',
         'snowpack__energy-per-area_cold_content': 'J m-2',
         'snowpack__initial_depth': 'm',
@@ -358,11 +362,14 @@ class snow_component( snow_base.snow_component ):
             self.h_swe = h_swe    # (is already a grid)          
 
         self.SM      = np.zeros([self.ny, self.nx], dtype='float64')
+        # This is a area-time integral over all cells in DEM.
         self.vol_SM  = self.initialize_scalar( 0, dtype='float64') # (m3)
-        #-------------------------------------------
+        #--------------------------------------------------
         # 2023-08-28.  Added next line to fix bug.
-        #-------------------------------------------
+        # This is an area integral over all cells in DEM.
+        #--------------------------------------------------
         self.vol_swe = self.initialize_scalar( 0, dtype='float64') # (m3)
+        self.vol_swe_start = self.initialize_scalar( 0, dtype='float64') # (m3)
         
         #----------------------------------------------------
         # Compute density ratio for water to snow.
@@ -489,7 +496,10 @@ class snow_component( snow_base.snow_component ):
         # E_in  = energy input over one time step
         # E_rem = energy remaining in excess of Ecc
         #-----------------------------------------------
-        E_in  = (self.Q_sum * self.dt)
+        # 1 Watt = 1 Joule / second
+        # W m-2 = J s-1 m-2
+        #-----------------------------------------------        
+        E_in  = (self.Q_sum * self.dt)  # [J m-2]
         E_rem = np.maximum( E_in - self.Ecc, np.float64(0) )
         Qm    = (E_rem / self.dt)  # [W m-2]
         
@@ -503,9 +513,11 @@ class snow_component( snow_base.snow_component ):
         #-------------------------------------
         # Convert melt energy to a melt rate
         #------------------------------------------
-        # Lf = latent heat of fusion [J/kg]
-        # Lv = latent heat of vaporization [J/kg]
+        # Lf = latent heat of fusion [J/kg]       (solid to liquid)
+        # Lv = latent heat of vaporization [J/kg] (liquid to gas)
         # M  = (Qm / (rho_w * Lf))
+        # [m s-1] = [W m-2] / ([kg m-3]*[J kg-1])
+        # [m s-1] = [J s-1 m-2] * m3 J-1
         #------------------------------------------
         # rho_w = 1000d       ;[kg/m^3]
         # Lf    = 334000d     ;[J/kg = W*s/kg]
