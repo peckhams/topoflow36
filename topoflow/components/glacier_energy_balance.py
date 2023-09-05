@@ -1,7 +1,7 @@
 """
-This file defines an "energy balance" snowmelt component and related
-functions.  It inherits from the snowmelt "base class" in
-"snow_base.py".
+This file defines an "energy balance" glacier melt and snowmelt component and related
+functions.  It inherits from the glacier "base class" in
+"glacier_base.py".
 """
 #-----------------------------------------------------------------------
 #
@@ -48,27 +48,27 @@ functions.  It inherits from the snowmelt "base class" in
 import numpy as np
 
 from topoflow.utils import model_input
-from topoflow.components import snow_base
+from topoflow.components import glacier_base
 
 #-----------------------------------------------------------------------
-class snow_component( snow_base.snow_component ):
+class glacier_component( glacier_base.glacier_component ):
 
     #-------------------------------------------------------------------
     _att_map = {
-        'model_name':         'TopoFlow_Snowmelt_Energy_Balance',
+        'model_name':         'TopoFlow_Glacier_Energy_Balance',
         'version':            '3.1',
-        'author_name':        'Scott D. Peckham',
+        'author_name':        'Scott D. Peckham, Lauren A. Bolotin',
         'grid_type':          'uniform',
         'time_step_type':     'fixed',
         'step_method':        'explicit',
         #-------------------------------------------------------------
-        'comp_name':          'SnowEnergyBalance',
+        'comp_name':          'GlacierEnergyBalance',
         'model_family':       'TopoFlow',
-        'cfg_template_file':  'Snow_Energy_Balance.cfg.in',
-        'cfg_extension':      '_snow_energy_balance.cfg',
-        'cmt_var_prefix':     '/SnowEnergyBalance/Input/Var/',
-        'gui_xml_file':       '/home/csdms/cca/topoflow/3.1/src/share/cmt/gui/Snow_Energy_Balance.xml',
-        'dialog_title':       'Snowmelt: Energy Balance Parameters',  # (Snowmelt ?)
+        'cfg_template_file':  'Glacier_Energy_Balance.cfg.in',
+        'cfg_extension':      '_glacier_energy_balance.cfg',
+        'cmt_var_prefix':     '/GlacierEnergyBalance/Input/Var/',
+        'gui_xml_file':       '/home/csdms/cca/topoflow/3.1/src/share/cmt/gui/Snow_Energy_Balance.xml', # LB: ??
+        'dialog_title':       'Snow and Glacier Melt: Energy Balance Parameters', 
         'time_units':         'seconds' }
 
     #----------------------------------------------------------
@@ -128,7 +128,13 @@ class snow_component( snow_base.snow_component ):
         'snowpack__liquid-equivalent_depth',           # h_swe
         'snowpack__melt_volume_flux',                  # SM
         'snowpack__z_mean_of_mass-per-volume_density', # rho_snow 
-        'snowpack__z_mean_of_mass-specific_isobaric_heat_capacity' ]  # Cp_snow   
+        'snowpack__z_mean_of_mass-specific_isobaric_heat_capacity', # Cp_snow   
+        'glacier_ice__domain_time_integral_of_melt_volume_flux', # vol_IM
+        'glacier_ice__thickness', # h_ice
+        'glacier_ice__initial_thickness', #h0_ice
+        'glacier_ice__melt_volume_flux', # IM
+        'glacier_ice__mass-per-volume_density', # rho_ice
+        'glacier_ice__mass-specific_isobaric_heat_capacity' ] # Cp_ice 
     
     _var_name_map = {
         'atmosphere_bottom_air__mass-per-volume_density': 'rho_air',
@@ -160,7 +166,13 @@ class snow_component( snow_base.snow_component ):
         'snowpack__liquid-equivalent_depth': 'h_swe',
         'snowpack__melt_volume_flux': 'SM',
         'snowpack__z_mean_of_mass-per-volume_density': 'rho_snow',
-        'snowpack__z_mean_of_mass-specific_isobaric_heat_capacity': 'Cp_snow' }
+        'snowpack__z_mean_of_mass-specific_isobaric_heat_capacity': 'Cp_snow',
+        'glacier_ice__domain_time_integral_of_melt_volume_flux': 'vol_IM', 
+        'glacier_ice__thickness': 'h_ice',
+        'glacier_ice__initial_thickness': 'h0_ice',
+        'glacier_ice__melt_volume_flux': 'IM',
+        'glacier_ice__mass-per-volume_density': 'rho_ice',
+        'glacier_ice__mass-specific_isobaric_heat_capacity': 'Cp_ice' }
     
     #-----------------------------------------------------------------
     # Note: We need to be careful with whether units are C or K,
@@ -196,7 +208,14 @@ class snow_component( snow_base.snow_component ):
         'snowpack__liquid-equivalent_depth': 'm',
         'snowpack__melt_volume_flux': 'm s-1',
         'snowpack__z_mean_of_mass-per-volume_density': 'kg m-3',
-        'snowpack__z_mean_of_mass-specific_isobaric_heat_capacity': 'J kg-1 K-1' }
+        'snowpack__z_mean_of_mass-specific_isobaric_heat_capacity': 'J kg-1 K-1',
+        'glacier_ice__domain_time_integral_of_melt_volume_flux': 'm3', 
+        'glacier_ice__thickness': 'm',
+        'glacier_ice__initial_thickness': 'm',
+        'glacier_ice__melt_volume_flux': 'm s-1',
+        'glacier_ice__mass-per-volume_density': 'kg m-3',
+        'glacier_ice__mass-specific_isobaric_heat_capacity': 'J kg-1 K-1' 
+          }
 
     #------------------------------------------------    
     # Return NumPy string arrays vs. Python lists ?
@@ -207,7 +226,7 @@ class snow_component( snow_base.snow_component ):
     #-------------------------------------------------------------------
     def get_component_name(self):
   
-        return 'TopoFlow_Snow_Energy_Balance'
+        return 'TopoFlow_Glacier_Energy_Balance'
 
     #   get_component_name()      
     #-------------------------------------------------------------------
@@ -287,7 +306,10 @@ class snow_component( snow_base.snow_component ):
                           self.is_scalar('rho_snow'),
                           self.is_scalar('Cp_snow'),
                           self.is_scalar('h0_snow'),
-                          self.is_scalar('h0_swe') ])
+                          self.is_scalar('h0_swe'),
+                          self.is_scalar('rho_ice'),
+                          self.is_scalar('Cp_ice'),
+                          self.is_scalar('h0_ice')  ])
 
 
         self.ALL_SCALARS = np.all(are_scalars)
@@ -314,7 +336,13 @@ class snow_component( snow_base.snow_component ):
         if (self.h0_snow_type.lower() != 'scalar'):
             self.h0_snow = self.initialize_var(self.h0_snow_type, dtype=dtype)    
         if (self.h0_swe_type.lower() != 'scalar'):
-            self.h0_swe = self.initialize_var(self.h0_swe_type, dtype=dtype)     
+            self.h0_swe = self.initialize_var(self.h0_swe_type, dtype=dtype)    
+        if (self.Cp_ice_type.lower() != 'scalar'):
+            self.Cp_ice = self.initialize_var(self.Cp_ice_type, dtype=dtype)
+        if (self.rho_ice_type.lower() != 'scalar'):
+            self.rho_ice = self.initialize_var(self.rho_ice_type, dtype=dtype)
+        if (self.h0_ice_type.lower() != 'scalar'):
+            self.h0_ice = self.initialize_var(self.h0_ice_type, dtype=dtype)
     
     #   initialize_input_file_vars()
     #-------------------------------------------------------------------
@@ -333,6 +361,7 @@ class snow_component( snow_base.snow_component ):
         P_IS_GRID = self.is_grid('P_snow')
         H0_SNOW_IS_SCALAR = self.is_scalar('h0_snow')
         H0_SWE_IS_SCALAR  = self.is_scalar('h0_swe') 
+        H0_ICE_IS_SCALAR  = self.is_scalar('h0_ice')
 
         #------------------------------------------------------
         # If h0_snow or h0_swe are scalars, the use of copy()
@@ -341,12 +370,13 @@ class snow_component( snow_base.snow_component ):
         #------------------------------------------------------
         h_snow = self.h0_snow.copy()    # [meters]
         h_swe  = self.h0_swe.copy()     # [meters]
+        h_ice  = self.h0_ice.copy()     # [meters]
 
         #------------------------------------------------------       
-        # For the Energy Balance method, SM, h_snow and h_swe
+        # For the Energy Balance method, SM, IM, h_snow, h_swe, and h_ice
         # are always grids because Q_sum is always a grid.
         #--------------------------------------------------------------
-        # Convert both h_snow and h_swe to grids if not already grids
+        # Convert both h_snow, h_swe, and h_ice to grids if not already grids
         #--------------------------------------------------------------
         if (H0_SNOW_IS_SCALAR):
             self.h_snow = h_snow + np.zeros([self.ny, self.nx], dtype='float64')
@@ -355,22 +385,20 @@ class snow_component( snow_base.snow_component ):
         if (H0_SWE_IS_SCALAR):
             self.h_swe = h_swe + np.zeros([self.ny, self.nx], dtype='float64')
         else:
-            self.h_swe = h_swe    # (is already a grid)          
+            self.h_swe = h_swe    # (is already a grid) 
+        if (H0_ICE_IS_SCALAR):
+            self.h_ice = h_ice + np.zeros([self.ny, self.nx], dtype='float64')
+        else:
+            self.h_ice = h_ice # (is already a grid)         
 
         self.SM      = np.zeros([self.ny, self.nx], dtype='float64')
+        self.IM      = np.zeros([self.ny, self.nx], dtype='float64')
         self.vol_SM  = self.initialize_scalar( 0, dtype='float64') # (m3)
+        self.vol_IM  = self.initialize_scalar( 0, dtype='float64') # (m3)
         #-------------------------------------------
         # 2023-08-28.  Added next line to fix bug.
         #-------------------------------------------
-        self.vol_swe = self.initialize_scalar( 0, dtype='float64') # (m3)
-        
-        #----------------------------------------------------
-        # Compute density ratio for water to snow.
-        # rho_H2O is for liquid water close to 0 degrees C.
-        # Water is denser than snow, so density_ratio > 1.
-        #----------------------------------------------------
-        self.density_ratio = (self.rho_H2O / self.rho_snow)
-                                                       
+        self.vol_swe = self.initialize_scalar( 0, dtype='float64') # (m3)             
         #----------------------------------------------------
         # Initialize the cold content of snowpack (2/21/07)
         #-------------------------------------------------------------
@@ -509,9 +537,8 @@ class snow_component( snow_base.snow_component ):
         #------------------------------------------
         # rho_w = 1000d       ;[kg/m^3]
         # Lf    = 334000d     ;[J/kg = W*s/kg]
-        # So (rho_w * Lf) = 3.34e+8  [J/m^3]
         #------------------------------------------
-        M       = (Qm / np.float64(3.34E+8))   #[m/s]
+        M       = (Qm / (self.rho_H2O * self.Lf))   #[m/s]
         self.SM = np.maximum(M, np.float64(0))
 
         #--------------------------------------------------
@@ -538,12 +565,18 @@ class snow_component( snow_base.snow_component ):
         self.T0_file       = self.in_directory + self.T0_file
         self.h0_snow_file  = self.in_directory + self.h0_snow_file
         self.h0_swe_file   = self.in_directory + self.h0_swe_file
+        self.Cp_ice_file   = self.in_directory + self.Cp_ice_file
+        self.rho_ice_file  = self.in_directory + self.rho_ice_file
+        self.h0_ice_file   = self.in_directory + self.h0_ice_file
 
         self.Cp_snow_unit  = model_input.open_file(self.Cp_snow_type,  self.Cp_snow_file)
         self.rho_snow_unit = model_input.open_file(self.rho_snow_type, self.rho_snow_file)
         self.T0_unit       = model_input.open_file(self.T0_type,       self.T0_file)
         self.h0_snow_unit  = model_input.open_file(self.h0_snow_type,  self.h0_snow_file)
         self.h0_swe_unit   = model_input.open_file(self.h0_swe_type,   self.h0_swe_file)
+        self.Cp_ice_unit   = model_input.open_file(self.Cp_ice_type,   self.Cp_ice_file)
+        self.rho_ice_unit  = model_input.open_file(self.rho_ice_type,  self.rho_ice_file)
+        self.h0_ice_unit   = model_input.open_file(self.h0_ice_type,   self.h0_ice_file)
 
     #   open_input_files()
     #-------------------------------------------------------------------  
@@ -573,6 +606,18 @@ class snow_component( snow_base.snow_component ):
         h0_swe = model_input.read_next(self.h0_swe_unit, self.h0_swe_type, rti)
         if (h0_swe is not None):
             self.update_var( 'h0_swe', h0_swe )
+
+        Cp_ice = model_input.read_next(self.Cp_ice_unit, self.Cp_ice_type, rti)
+        if (Cp_ice is not None):
+            self.update_var( 'Cp_ice', Cp_ice)
+
+        rho_ice = model_input.read_next(self.rho_ice_unit, self.rho_ice_type, rti)
+        if (rho_ice is not None):
+            self.update_var( 'rho_ice', rho_ice)
+        
+        h0_ice = model_input.read_next(self.h0_ice, self.h0_ice_type, rti)
+        if (h0_ice is not None):
+            self.update_var( 'h0_ice', h0_ice)
         
     #   read_input_files()       
     #-------------------------------------------------------------------  
@@ -583,6 +628,9 @@ class snow_component( snow_base.snow_component ):
         if (self.T0_type       != 'Scalar'): self.T0_unit.close()
         if (self.h0_snow_type  != 'Scalar'): self.h0_snow_unit.close()
         if (self.h0_swe_type   != 'Scalar'): self.h0_swe_unit.close()
+        if (self.Cp_ice_type   != 'Scalar'): self.Cp_ice_unit.close()
+        if (self.rho_ice_type  != 'Scalar'): self.rho_ice_unit.close()
+        if (self.h0_ice_type   != 'Scalar'): self.h0_ice_unit.close()
             
 ##        if (self.T0_file       != ''): self.T0_unit.close()
 ##        if (self.rho_snow_file != ''): self.rho_snow_unit.close()
