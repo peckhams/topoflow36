@@ -37,7 +37,8 @@ functions.  It inherits from the glacier "base class" in
 #      initialize_input_file_vars()   # (7/3/20)
 #      initialize_cold_content()   # (9/13/14, from snow_base.py)
 #      initialize_computed_vars()  # (9/13/14, from snow_base.py)
-#      update_meltrate()
+#      update_snow_meltrate()
+#      update_ice_meltrate()
 #      ----------------------
 #      open_input_files()
 #      read_input_files()
@@ -444,7 +445,7 @@ class glacier_component( glacier_base.glacier_component ):
         
     #   initialize_cold_content()
     #-------------------------------------------------------------------
-    def update_meltrate(self):
+    def update_snow_meltrate(self):
 
         #------------------------------------------------------------
         # Notes: This computes a "potential" meltrate, which can't
@@ -547,6 +548,121 @@ class glacier_component( glacier_base.glacier_component ):
         #--------------------------------------------------
         # (9/13/14) Bug fix: Ecc wasn't stored into self.
         #--------------------------------------------------        
+        self.Ecc = np.maximum((self.Ecc - E_in), np.float64(0))
+
+        #-------------------------------------------------------
+        # Note: enforce_max_meltrate() method is always called
+        #       by the base class to make sure that meltrate
+        #       does not exceed the max possible.
+        #-------------------------------------------------------
+        #  self.enforce_max_meltrate()
+
+    def update_ice_meltrate(self):
+
+        #------------------------------------------------------------
+        # Notes: This computes a "potential" meltrate, which can't
+        #        be realized unless there is enough snow.
+        #        See snow_base.enforce_max_meltrate().
+        #------------------------------------------------------------        
+        # Notes: See notes in "met_base.py" for the method called
+        #        "update_net_energy_flux()".
+
+        #        This version uses "Q_sum" which is computed as a
+        #        state variable for a meteorology component
+        #        (e.g. met_base.py).
+
+        #        Arguments are assumed to be references to a scalar
+        #            or grid so that:
+
+        #        M  = water equivalent of snowmelt [m/s]
+        #        M_max  = max possible meltrate if all snow melts
+        #        T_air  = air temperature [deg_C]
+
+        #        Model must start when snow is isothermal. (CHECK)
+        #        Cooling of the snowpack is not considered.
+
+        #        86400000d = 1000 [mm/m] * 60 [sec/min] *
+        #                    60 [min/sec] * 24 [hrs/day]
+
+        #        rho_snow is not needed in formula here, but is
+        #        needed to convert snowmelt to water equivalent?
+        #-------------------------------------------------------------
+     
+        #----------------------------------
+        # Compute energy-balance meltrate   
+        #------------------------------------------------------
+        # Ecc is initialized by initialize_cold_content().
+        #------------------------------------------------------
+        # The following pseudocode only works for scalars but
+        # is otherwise equivalent to that given below and
+        # clarifies the logic:
+        #------------------------------------------------------
+        #  if (Q_sum gt 0) then begin
+        #      if ((Q_sum * dt) gt Ecc) then begin
+        #          ;-------------------------------------------
+        #          ; Snow is melting.  Use some of Q_sum to
+        #          ; overcome Ecc, and remainder to melt snow
+        #          ;-------------------------------------------
+        #          Qm  = Q_sum - (Ecc/dt)
+        #          Ecc = 0
+        #          M   = (Qm / (rho_w * Lf))
+        #      endif else begin
+        #          ;------------------------------
+        #          ; Snow is warming; reduce Ecc
+        #          ;------------------------------
+        #          Ecc = (Ecc - (Q_sum * dt))
+        #          M   = 0d
+        #      endelse
+        #  endif else begin
+        #      ;--------------------------------
+        #      ; Snow is cooling; increase Ecc
+        #      ;--------------------------------
+        #      Ecc = Ecc - (Q_sum * dt)
+        #      M   = 0d
+        #  endelse
+        #---------------------------------------------------------
+        # Q_sum = Qn_SW + Qn_LW + Qh + Qe + Qa + Qc    # [W m-2]
+        #---------------------------------------------------------
+        
+        #-----------------------------------------------        
+        # New approach; easier to understand (9/14/14)
+        #----------------------------------------------- 
+        # E_in  = energy input over one time step
+        # E_rem = energy remaining in excess of Ecc
+        #-----------------------------------------------
+        E_in  = (self.Q_sum * self.dt)
+        # LB: does glacier ice have an equivalent phenomenon to cold content that takes away from melt energy?
+        # LB: in other words, do we need a snow and an ice value for Ecc?
+        E_rem = np.maximum( E_in - self.Ecc, np.float64(0) )
+        Qm    = (E_rem / self.dt)  # [W m-2]
+        
+        ##################################
+        # Used before 9/14/14/.
+        ##################################        
+        # Q_sum = self.Q_sum  # (2/3/13, new framework)
+        # Qcc   = (self.Ecc / self.dt)                   # [W m-2]
+        # Qm    = np.maximum((Q_sum - Qcc), float64(0))  # [W m-2]
+        
+        #-------------------------------------
+        # Convert melt energy to a melt rate
+        #------------------------------------------
+        # Lf = latent heat of fusion [J/kg]
+        # Lv = latent heat of vaporization [J/kg]
+        # M  = (Qm / (rho_w * Lf))
+        #------------------------------------------
+        # rho_w = 1000d       ;[kg/m^3]
+        # Lf    = 334000d     ;[J/kg = W*s/kg]
+        #------------------------------------------
+        M       = (Qm / (self.rho_H2O * self.Lf))   #[m/s]
+        self.IM = np.maximum(M, np.float64(0))
+
+        #--------------------------------------------------
+        # Update the cold content of the snowpack [J m-2]
+        # If this is positive, there was no melt so far.
+        #--------------------------------------------------
+        # (9/13/14) Bug fix: Ecc wasn't stored into self.
+        #--------------------------------------------------     
+        # LB: see comment at lines 633-634   
         self.Ecc = np.maximum((self.Ecc - E_in), np.float64(0))
 
         #-------------------------------------------------------
