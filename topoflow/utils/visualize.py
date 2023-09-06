@@ -5,6 +5,7 @@
 #        contents of output files in netCDF format
 #        (e.g. TopoFlow or Stochastic Conflict Model)
 #
+#  Sep 2023.  Added xticks and yticks to plot_data().
 #  Aug 2023.  Search for 2023-08-24 to see fixed bugs.
 #             Added rtg_type keyword to read_and_show_rtg().
 #  Feb 2022.  create_visualization_files -> create_media_files.
@@ -1206,7 +1207,7 @@ def create_movie_from_images( mp4_file, png_dir, fps=10, REPORT=True):
 def plot_data( x, y, y2=None, xmin=None, xmax=None, ymin=None, ymax=None,
                x_name='x', x_units='', marker=',', title=None,
                y_name='y', y_units='',
-               x_size=8,   y_size=4):
+               x_size=8,   y_size=4, xticks=None, yticks=None):
 
     figure = plt.figure(1, figsize=(x_size, y_size))
     # fig, ax = plt.subplots( figsize=(x_size, y_size))
@@ -1241,6 +1242,8 @@ def plot_data( x, y, y2=None, xmin=None, xmax=None, ymin=None, ymax=None,
 
     plt.ylim( ymin, ymax )
     plt.xlim( xmin, xmax )
+    plt.xticks( xticks )
+    plt.yticks( yticks )
     #-------------------------------------
     # This may be necessary depending on
     # the data type of ymin, ymax
