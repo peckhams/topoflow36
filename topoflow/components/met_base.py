@@ -1742,7 +1742,6 @@ class met_component( BMI_base.BMI_component ):
         b = 18.678
         c = 257.14   # [deg C]
         # d = 234.5    # [deg C]
-        # print('#### e_air =', self.e_air, ' [mbar]')
         log_term   = np.log( self.e_air / a)
         self.T_dew =  c * log_term / (b - log_term)  # [deg C]
 
@@ -2263,39 +2262,6 @@ class met_component( BMI_base.BMI_component ):
                     print('   max(P) = ' + Pmax_str + ' [mmph]')
                     print(' ')
 
-        #----------------------------------------------------------
-        # 2023-09-01.  Note that in CFG files, boolean flags are
-        # set to "Yes" or "No".  However, both strings evaluate
-        # to True in Python, so need to make sure it is correctly
-        # remapped to True of False.  Modified read_config_file()
-        # in BMI_base.py to always do this for any CFG var whose
-        # value is set to Yes/True/On or No/False/Off.
-        #---------------------------------------------------------- 
-#         if (self.DEBUG):
-#            print('In read_input_files(), self.PRECIP_ONLY =', self.PRECIP_ONLY)         
-        if (self.PRECIP_ONLY):  # 2022-11-28, for speed.
-            return
-        ###########################################
-           
-        #------------------------------------------------------------
-        # EXPERIMENTAL, NOT FINISHED
-        # Read variables from files into scalars or grids while
-        # making sure to preserve references (in-place). (11/15/16)
-        #------------------------------------------------------------
-#         model_input.read_next2(self, 'T_air',   rti)
-#         model_input.read_next2(self, 'T_surf',  rti)
-#         model_input.read_next2(self, 'RH',      rti)
-#         model_input.read_next2(self, 'p0',      rti)
-#         model_input.read_next2(self, 'uz',      rti)
-#         model_input.read_next2(self, 'z',       rti)
-#         model_input.read_next2(self, 'z0_air',  rti)
-#         #----------------------------------------------------
-#         model_input.read_next2(self, 'albedo',  rti)
-#         model_input.read_next2(self, 'em_surf', rti)
-#         model_input.read_next2(self, 'dust_atten',    rti)
-#         model_input.read_next2(self, 'cloud_factor',  rti)
-#         model_input.read_next2(self, 'canopy_factor', rti)
-
         ###############################################################
         # If any of these are scalars (read from a time series file)
         # then we'll need to use "fill()" method to prevent breaking
@@ -2317,6 +2283,23 @@ class met_component( BMI_base.BMI_component ):
 #             if (CONVERT_K_TO_C):
 #                 T_air -= 273.15
             self.update_var( 'T_air', T_air )
+
+        #----------------------------------------------------------
+        # 2023-09-01.  Note that in CFG files, boolean flags are
+        # set to "Yes" or "No".  However, both strings evaluate
+        # to True in Python, so need to make sure it is correctly
+        # remapped to True of False.  Modified read_config_file()
+        # in BMI_base.py to always do this for any CFG var whose
+        # value is set to Yes/True/On or No/False/Off.
+        #----------------------------------------------------------
+        # 2023-09-05.  Moved this down so we also read T_air for
+        # the degree-day snow component.
+        #----------------------------------------------------------         
+#         if (self.DEBUG):
+#            print('In read_input_files(), self.PRECIP_ONLY =', self.PRECIP_ONLY)         
+        if (self.PRECIP_ONLY):  # 2022-11-28, for speed.
+            return
+        ###########################################
 
         T_surf = model_input.read_next(self.T_surf_unit, self.T_surf_type, rti)
         if (T_surf is not None):
@@ -2372,6 +2355,26 @@ class met_component( BMI_base.BMI_component ):
         if (canopy_factor is not None):
             self.update_var( 'canopy_factor', canopy_factor )
             ## self.canopy_factor = canopy_factor
+
+        #------------------------------------------------------------
+        # EXPERIMENTAL, NOT FINISHED
+        # Read variables from files into scalars or grids while
+        # again making sure to preserve references (in-place),
+        # but all in one function call. (11/15/16)
+        #------------------------------------------------------------
+#         model_input.read_next2(self, 'T_air',   rti)
+#         model_input.read_next2(self, 'T_surf',  rti)
+#         model_input.read_next2(self, 'RH',      rti)
+#         model_input.read_next2(self, 'p0',      rti)
+#         model_input.read_next2(self, 'uz',      rti)
+#         model_input.read_next2(self, 'z',       rti)
+#         model_input.read_next2(self, 'z0_air',  rti)
+#         #----------------------------------------------------
+#         model_input.read_next2(self, 'albedo',  rti)
+#         model_input.read_next2(self, 'em_surf', rti)
+#         model_input.read_next2(self, 'dust_atten',    rti)
+#         model_input.read_next2(self, 'cloud_factor',  rti)
+#         model_input.read_next2(self, 'canopy_factor', rti)
 
         #-------------------------------------------------------------
         # Compute Qsw_prefactor from cloud_factor and canopy factor.

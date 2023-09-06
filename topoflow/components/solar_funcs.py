@@ -19,6 +19,10 @@ See also papers by:
 #
 #  Copyright (c) 2005-2023, Scott D. Peckham
 #
+#  Sep 2023.  Added Day_Length() function to match Day_Length_Slope().
+#             Added Solar_Elevation_Angle() for completeness.
+#             Added Saturation_Vapor_Pressure() & Vapor_Pressure();
+#               these were in met_base.py but not here.
 #  Aug 2023.  Fixed bug in Optical_Air_Mass() function.
 #             Updated value in Solar_Constant() function.
 #  Jul 2021.  Added year keyword to True_Solar_Noon(), which is
@@ -63,10 +67,14 @@ See also papers by:
 #   Declination
 #   Earth_Angular_Velocity    # (See Earth_Rotation_Rate)
 #   Zenith_Angle
+#   Solar_Elevation_Angle
 #   Sunrise_Offset
 #   Sunset_Offset
+#   Day_Length
 #   ET_Radiation_Flux
 #------------------------------
+#   Saturation_Vapor_Pressure
+#   Vapor_Pressure
 #   Dew_Point                  
 #   Precipitable_Water_Content
 #   Optical_Air_Mass
@@ -260,6 +268,18 @@ def Zenith_Angle( lat_deg, declination, th ):
     
 #   Zenith_Angle()
 #------------------------------------------------------------------------
+def Solar_Elevation_Angle( lat_deg, declination, th ):
+
+    #---------------------------------------------------------- 
+    # Note: This is the complement of the solar zenith angle.
+    #       At sunrise and sunset, this angle is zero.
+    #       See notes for that function for more info.
+    #----------------------------------------------------------
+    theta = Zenith_Angle( lat_deg, declination, th )
+    return (np.pi/2 - theta)    # [radians]
+    
+#   Solar_Elevation_Angle()
+#------------------------------------------------------------------------
 def Sunrise_Offset( lat_deg, declination ):
 
     #----------------------------------------------------------
@@ -316,6 +336,18 @@ def Sunset_Offset( lat_deg, declination ):
     
 #   Sunset_Offset()
 #------------------------------------------------------------------------
+def Day_Length( lat_deg, Julian_day):
+
+    day_angle   = Day_Angle( Julian_day )
+    declination = Declination( day_angle, DEGREES=False )
+
+    t_sr = Sunrise_Offset(lat_deg, declination)
+    t_ss = Sunset_Offset(lat_deg,  declination)
+    
+    return (t_ss - t_sr)  # [hours]
+    
+#   Day_Length()
+#------------------------------------------------------------------------
 def ET_Radiation_Flux( lat_deg, Julian_day, th ):
 
     #------------------------------------------------------------
@@ -369,13 +401,50 @@ def ET_Radiation_Flux( lat_deg, Julian_day, th ):
     
 #   ET_Radiation_Flux()
 #------------------------------------------------------------------------
+def Saturation_Vapor_Pressure(T, method='BRUTSAERT', MBAR=False):
+
+        if (method == 'BRUTSAERT'):  
+            #------------------------------
+            # Use Brutsaert (1975) method
+            #------------------------------
+            term1 = (np.float64(17.3) * T) / (T + np.float64(237.3))
+            e_sat = np.float64(0.611) * np.exp(term1)  # [kPa]
+        else:    
+            #-------------------------------
+            # Use Satterlund (1979) method     #### DOUBLE CHECK THIS (7/26/13)
+            #-------------------------------
+            term1 = np.float64(2353) / (T + np.float64(273.15))
+            e_sat = np.float64(10) ** (np.float64(11.4) - term1)   # [Pa]
+            e_sat = (e_sat / np.float64(1000))  # [kPa]
+
+        #-----------------------------------
+        # Convert units from kPa to mbars?
+        #-----------------------------------
+        if (MBAR):    
+            e_sat = (e_sat * np.float64(10))   # [mbar]
+        return e_sat
+        
+#   Saturation_Vapor_Pressure()
+#------------------------------------------------------------------------
+def Vapor_Pressure(T, rel_humidity, MBAR=False):
+
+        #-------------------------------------------------         
+        # RH is in [0,1], so e gets same units as e_sat.
+        # So we never need to convert units of e.
+        #-------------------------------------------------
+        e_sat = Saturation_Vapor_Pressure(T, MBAR=MBAR)   
+        e = (rel_humidity * e_sat)
+        return e
+
+#   Vapor_Pressure()
+#------------------------------------------------------------------------
 def Dew_Point( T, rel_humidity ):
 
     #---------------------------------------------------------
     # Notes:  Temps are in degrees C, and vapor pressure
     #         units are kPa.  Relative humidity is unitless.
     #---------------------------------------------------------    
-    vp  = Vapor_Pressure(T, rel_humidity)
+    vp  = Vapor_Pressure(T, rel_humidity, MBAR=False)  # [kPa]
     top = np.log(vp) + np.float64(0.4926)
     bot = np.float64(0.0708) - np.float64(0.00421) * np.log(vp)
     Td  = (top / bot)
@@ -862,24 +931,22 @@ def Julian_Day( month_num, day_num, hour_num=None, year=None ):
 
     #-----------------------------------------------------------
     # NB!  month_num is an integer between 1 and 12 inclusive.
+    #      day_num is day of the month.
+    #      hour_num is in [0,24], in UTC time zone.
     #      This function can handle leap years, given year.
-    #      This function returns numbers in [1, 365.96].
-    #         Julian_Day(1,1,0)    = 1.0
-    #         Julian_Day(2,1,0)    = 32.0
-    #         Julian_Day(12,31,0)  = 365.0
-    #         Julian_Day(12,31,23.99) = 365.999
-    #------------------------------------------------------------
-    #  But it seems like we should instead have:
-    #      Julian_Day(1,1,0)= 0.0,
-    #      Julian_Day(12,31,23.99) = 364.999 (non-leap years)
-    #      Julian_Day(12,31,23.99) = 365.999 (leap years)
-    #  Especially when thinking about Day_Angle().
-    #------------------------------------------------------------
+    #         Julian_Day(1,1,0)    = 0.0  # Jan 1 starts at midnight.
+    #         Julian_Day(1,1,24)   = 1.0
+    #         Julian_Day(2,1,0)    = 31.0
+    #         Julian_Day(12,31,0)  = 364.0
+    #         Julian_Day(12,31,24) = 365.0
+    #         Julian_Day(12,31,24, year=2024) = 366.0
+    #      We are using Julian_Day to compute Day_Angle.   
+    #-----------------------------------------------------------
     # NB!  For our purposes we need the Julian day of the year,
     #      not the Julian day from the start of Julian period.
-    #      See:  https://en.wikipedia.org/wiki/Julian_day 
-    #------------------------------------------------------------    
-
+    #      See:  https://en.wikipedia.org/wiki/Julian_day
+    #      https://calendars.fandom.com/wiki/Julian_day_number
+    #------------------------------------------------------------
     if (year is None) or ((year % 4) != 0):
         month_days = np.array([0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31])        
     else:
@@ -888,7 +955,12 @@ def Julian_Day( month_num, day_num, hour_num=None, year=None ):
 
     #-------------------------------------------------------   
     # This method gives JD in [0,365]
-    # That is, JD < 1 between midnights of 01-01 and 01-02
+    # Note that JD < 1 between midnight of 12-31 (start of
+    # the day 01-01) to midnight of 01-01 (start of the
+    # day 01-02).  That is, JD=1 when one, full 24-hour
+    # day has elapsed in the given year, and JD=365 when
+    # a full 24-day has elapsed on the last day of the
+    # year (or 366 for leap years).
     #-------------------------------------------------------
     JD = np.sum(month_days[:month_num]) + np.maximum(day_num - 1, 0)
     
