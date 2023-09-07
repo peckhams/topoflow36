@@ -35,7 +35,8 @@ functions.  It inherits from the glacier "base class" in
 #      ----------------------
 #      check_input_types()
 #      initialize_input_file_vars()   # (7/3/20)
-#      initialize_cold_content()   # (9/13/14, from snow_base.py)
+#      initialize_snow_cold_content()   # (9/13/14, from snow_base.py)
+#      initialize_ice_cold_content()   
 #      initialize_computed_vars()  # (9/13/14, from snow_base.py)
 #      update_snow_meltrate()
 #      update_ice_meltrate()
@@ -122,7 +123,7 @@ class glacier_component( glacier_base.glacier_component ):
         'model__time_step',                            # dt   
         'snowpack__domain_time_integral_of_melt_volume_flux',   # vol_SM
         'snowpack__domain_time_integral_of_liquid-equivalent_depth', # vol_swe
-        'snowpack__energy-per-area_cold_content',      # Ecc
+        'snowpack__energy-per-area_cold_content',      # Eccs
         'snowpack__depth',                             # h_snow
         'snowpack__initial_depth',                     # h0_snow
         'snowpack__initial_liquid-equivalent_depth',   # h0_swe
@@ -161,7 +162,7 @@ class glacier_component( glacier_base.glacier_component ):
         'snowpack__domain_time_integral_of_melt_volume_flux': 'vol_SM',
         'snowpack__domain_time_integral_of_liquid-equivalent_depth': 'vol_swe',        
         'snowpack__depth': 'h_snow',
-        'snowpack__energy-per-area_cold_content': 'Ecc',
+        'snowpack__energy-per-area_cold_content': 'Eccs',
         'snowpack__initial_depth': 'h0_snow',
         'snowpack__initial_liquid-equivalent_depth': 'h0_swe',
         'snowpack__liquid-equivalent_depth': 'h_swe',
@@ -406,11 +407,12 @@ class glacier_component( glacier_base.glacier_component ):
         # This is the only difference from initialize_computed_vars()
         # method in snow_base.py.
         #-------------------------------------------------------------
-        self.initialize_cold_content()
+        self.initialize_snow_cold_content()
+        self.initialize_ice_cold_content()
         
     #   initialize_computed_vars()
     #---------------------------------------------------------------------
-    def initialize_cold_content( self ):
+    def initialize_snow_cold_content( self ):
 
         #----------------------------------------------------------------
         # NOTES: This function is used to initialize the cold content
@@ -433,17 +435,52 @@ class glacier_component( glacier_base.glacier_component ):
         #--------------------------------------------
         T_snow    = self.T_surf
         del_T     = (self.T0 - T_snow)
-        self.Ecc  = (self.rho_snow * self.Cp_snow) * self.h0_snow * del_T
+        self.Eccs  = (self.rho_snow * self.Cp_snow) * self.h0_snow * del_T
 
         #------------------------------------        
         # Cold content must be nonnegative.
         #----------------------------------------------
-        # Ecc > 0 if (T_snow < T0).  i.e. T_snow < 0.
+        # Eccs > 0 if (T_snow < T0).  i.e. T_snow < 0.
         #----------------------------------------------
-        self.Ecc = np.maximum( self.Ecc, np.float64(0))
+        self.Eccs = np.maximum( self.Eccs, np.float64(0))
         ### np.maximum( self.Ecc, np.float64(0), self.Ecc)  # (in place)
         
-    #   initialize_cold_content()
+    #   initialize_snow_cold_content()
+    #-------------------------------------------------------------------
+    def initialize_ice_cold_content( self ):
+
+        #----------------------------------------------------------------
+        # NOTES: This function is used to initialize the cold content
+        #        of glacier ice.
+        #        The cold content has units of [J m-2] (_NOT_ [W m-2]).
+        #        It is an energy (per unit area) threshold (or deficit)
+        #        that must be overcome before melting of ice can occur.
+        #        Cold content changes over time as the ice warms or
+        #        cools, but must always be non-negative.
+        #
+        #        K_snow is between 0.063 and 0.71  [W m-1 K-1]
+        #        All of the Q's have units of W m-2 = J s-1 m-2).
+        #
+        #        T0 is read from the config file.  This is a different
+        #        T0 from the one used by the Degree-Day method.
+        #---------------------------------------------------------------
+
+        #--------------------------------------------
+        # Compute initial cold content of ice
+        #--------------------------------------------
+        T_ice    = self.T_surf
+        del_T     = (self.T0 - T_ice)
+        self.Ecci  = (self.rho_ice * self.Cp_ice) * self.h0_ice * del_T
+
+        #------------------------------------        
+        # Cold content must be nonnegative.
+        #----------------------------------------------
+        # Ecci > 0 if (T_ice < T0).  i.e. T_ice < 0.
+        #----------------------------------------------
+        self.Ecci = np.maximum( self.Ecci, np.float64(0))
+        ### np.maximum( self.Ecci, np.float64(0), self.Ecci)  # (in place)
+        
+    #   initialize_ice_cold_content()
     #-------------------------------------------------------------------
     def update_snow_meltrate(self):
 
@@ -479,33 +516,33 @@ class glacier_component( glacier_base.glacier_component ):
         #----------------------------------
         # Compute energy-balance meltrate   
         #------------------------------------------------------
-        # Ecc is initialized by initialize_cold_content().
+        # Eccs is initialized by initialize_snow_cold_content().
         #------------------------------------------------------
         # The following pseudocode only works for scalars but
         # is otherwise equivalent to that given below and
         # clarifies the logic:
         #------------------------------------------------------
         #  if (Q_sum gt 0) then begin
-        #      if ((Q_sum * dt) gt Ecc) then begin
+        #      if ((Q_sum * dt) gt Eccs) then begin
         #          ;-------------------------------------------
         #          ; Snow is melting.  Use some of Q_sum to
-        #          ; overcome Ecc, and remainder to melt snow
+        #          ; overcome Eccs, and remainder to melt snow
         #          ;-------------------------------------------
-        #          Qm  = Q_sum - (Ecc/dt)
-        #          Ecc = 0
+        #          Qm  = Q_sum - (Eccs/dt)
+        #          Eccs = 0
         #          M   = (Qm / (rho_w * Lf))
         #      endif else begin
         #          ;------------------------------
-        #          ; Snow is warming; reduce Ecc
+        #          ; Snow is warming; reduce Eccs
         #          ;------------------------------
-        #          Ecc = (Ecc - (Q_sum * dt))
+        #          Eccs = (Eccs - (Q_sum * dt))
         #          M   = 0d
         #      endelse
         #  endif else begin
         #      ;--------------------------------
-        #      ; Snow is cooling; increase Ecc
+        #      ; Snow is cooling; increase Eccs
         #      ;--------------------------------
-        #      Ecc = Ecc - (Q_sum * dt)
+        #      Eccs = Eccs - (Q_sum * dt)
         #      M   = 0d
         #  endelse
         #---------------------------------------------------------
@@ -516,17 +553,17 @@ class glacier_component( glacier_base.glacier_component ):
         # New approach; easier to understand (9/14/14)
         #----------------------------------------------- 
         # E_in  = energy input over one time step
-        # E_rem = energy remaining in excess of Ecc
+        # E_rem = energy remaining in excess of Eccs
         #-----------------------------------------------
         E_in  = (self.Q_sum * self.dt)
-        E_rem = np.maximum( E_in - self.Ecc, np.float64(0) )
+        E_rem = np.maximum( E_in - self.Eccs, np.float64(0) )
         Qm    = (E_rem / self.dt)  # [W m-2]
         
         ##################################
         # Used before 9/14/14/.
         ##################################        
         # Q_sum = self.Q_sum  # (2/3/13, new framework)
-        # Qcc   = (self.Ecc / self.dt)                   # [W m-2]
+        # Qcc   = (self.Eccs / self.dt)                   # [W m-2]
         # Qm    = np.maximum((Q_sum - Qcc), float64(0))  # [W m-2]
         
         #-------------------------------------
@@ -546,9 +583,9 @@ class glacier_component( glacier_base.glacier_component ):
         # Update the cold content of the snowpack [J m-2]
         # If this is positive, there was no melt so far.
         #--------------------------------------------------
-        # (9/13/14) Bug fix: Ecc wasn't stored into self.
+        # (9/13/14) Bug fix: Eccs wasn't stored into self.
         #--------------------------------------------------        
-        self.Ecc = np.maximum((self.Ecc - E_in), np.float64(0))
+        self.Eccs = np.maximum((self.Eccs - E_in), np.float64(0))
 
         #-------------------------------------------------------
         # Note: enforce_max_meltrate() method is always called
@@ -557,12 +594,14 @@ class glacier_component( glacier_base.glacier_component ):
         #-------------------------------------------------------
         #  self.enforce_max_meltrate()
 
+    #   update_snow_meltrate()
+    #---------------------------------------------------------------------
     def update_ice_meltrate(self):
 
         #------------------------------------------------------------
         # Notes: This computes a "potential" meltrate, which can't
-        #        be realized unless there is enough snow.
-        #        See snow_base.enforce_max_meltrate().
+        #        be realized unless there is enough ice.
+        #        See glacier_base.enforce_max_ice_meltrate().
         #------------------------------------------------------------        
         # Notes: See notes in "met_base.py" for the method called
         #        "update_net_energy_flux()".
@@ -574,50 +613,50 @@ class glacier_component( glacier_base.glacier_component ):
         #        Arguments are assumed to be references to a scalar
         #            or grid so that:
 
-        #        M  = water equivalent of snowmelt [m/s]
-        #        M_max  = max possible meltrate if all snow melts
+        #        M  = water equivalent of ice melt [m/s]
+        #        M_max  = max possible meltrate if all ice melts
         #        T_air  = air temperature [deg_C]
 
-        #        Model must start when snow is isothermal. (CHECK)
-        #        Cooling of the snowpack is not considered.
+        #        Model must start when ice is isothermal. (CHECK) # LB: full ice column?
+        #        Cooling of ice is not considered.
 
         #        86400000d = 1000 [mm/m] * 60 [sec/min] *
         #                    60 [min/sec] * 24 [hrs/day]
 
-        #        rho_snow is not needed in formula here, but is
+        #        rho_ice is not needed in formula here, but is
         #        needed to convert snowmelt to water equivalent?
         #-------------------------------------------------------------
      
         #----------------------------------
         # Compute energy-balance meltrate   
         #------------------------------------------------------
-        # Ecc is initialized by initialize_cold_content().
+        # Ecci is initialized by initialize_ice_cold_content().
         #------------------------------------------------------
         # The following pseudocode only works for scalars but
         # is otherwise equivalent to that given below and
         # clarifies the logic:
         #------------------------------------------------------
         #  if (Q_sum gt 0) then begin
-        #      if ((Q_sum * dt) gt Ecc) then begin
+        #      if ((Q_sum * dt) gt Ecci) then begin
         #          ;-------------------------------------------
-        #          ; Snow is melting.  Use some of Q_sum to
-        #          ; overcome Ecc, and remainder to melt snow
+        #          ; Ice is melting.  Use some of Q_sum to
+        #          ; overcome Ecci, and remainder to melt ice
         #          ;-------------------------------------------
-        #          Qm  = Q_sum - (Ecc/dt)
-        #          Ecc = 0
+        #          Qm  = Q_sum - (Ecci/dt)
+        #          Ecci = 0
         #          M   = (Qm / (rho_w * Lf))
         #      endif else begin
         #          ;------------------------------
-        #          ; Snow is warming; reduce Ecc
+        #          ; Ice is warming; reduce Ecci
         #          ;------------------------------
-        #          Ecc = (Ecc - (Q_sum * dt))
+        #          Ecci = (Ecci - (Q_sum * dt))
         #          M   = 0d
         #      endelse
         #  endif else begin
         #      ;--------------------------------
-        #      ; Snow is cooling; increase Ecc
+        #      ; Ice is cooling; increase Ecci
         #      ;--------------------------------
-        #      Ecc = Ecc - (Q_sum * dt)
+        #      Ecci = Ecci - (Q_sum * dt)
         #      M   = 0d
         #  endelse
         #---------------------------------------------------------
@@ -628,19 +667,17 @@ class glacier_component( glacier_base.glacier_component ):
         # New approach; easier to understand (9/14/14)
         #----------------------------------------------- 
         # E_in  = energy input over one time step
-        # E_rem = energy remaining in excess of Ecc
+        # E_rem = energy remaining in excess of Ecci
         #-----------------------------------------------
         E_in  = (self.Q_sum * self.dt)
-        # LB: does glacier ice have an equivalent phenomenon to cold content that takes away from melt energy?
-        # LB: in other words, do we need a snow and an ice value for Ecc?
-        E_rem = np.maximum( E_in - self.Ecc, np.float64(0) )
+        E_rem = np.maximum( E_in - self.Ecci, np.float64(0) )
         Qm    = (E_rem / self.dt)  # [W m-2]
         
         ##################################
         # Used before 9/14/14/.
         ##################################        
         # Q_sum = self.Q_sum  # (2/3/13, new framework)
-        # Qcc   = (self.Ecc / self.dt)                   # [W m-2]
+        # Qcc   = (self.Ecci / self.dt)                   # [W m-2]
         # Qm    = np.maximum((Q_sum - Qcc), float64(0))  # [W m-2]
         
         #-------------------------------------
@@ -657,22 +694,22 @@ class glacier_component( glacier_base.glacier_component ):
         self.IM = np.maximum(M, np.float64(0))
 
         #--------------------------------------------------
-        # Update the cold content of the snowpack [J m-2]
+        # Update the cold content of the ice [J m-2]
         # If this is positive, there was no melt so far.
         #--------------------------------------------------
-        # (9/13/14) Bug fix: Ecc wasn't stored into self.
+        # (9/13/14) Bug fix: Ecci wasn't stored into self.
         #--------------------------------------------------     
         # LB: see comment at lines 633-634   
-        self.Ecc = np.maximum((self.Ecc - E_in), np.float64(0))
+        self.Ecci = np.maximum((self.Ecci - E_in), np.float64(0))
 
         #-------------------------------------------------------
         # Note: enforce_max_meltrate() method is always called
         #       by the base class to make sure that meltrate
         #       does not exceed the max possible.
         #-------------------------------------------------------
-        #  self.enforce_max_meltrate()
+        #  self.enforce_max_ice_meltrate()
             
-    #   update_meltrate()
+    #   update_ice_meltrate()
     #---------------------------------------------------------------------
     def open_input_files(self):
 
@@ -877,7 +914,7 @@ class glacier_component( glacier_base.glacier_component ):
 ##    #Qn_SW, Qn_SW & Ecc are pointers,
 ##    #others are local variables
 ##    #----------------------------------------------------
-##    #Ecc is initialized with the Initial_Cold_Content
+##    #Eccs is initialized with the Initial_Cold_Content
 ##    #function by Initialize_Snow_Vars function (2/21/07)
 ##    #----------------------------------------------------
 ##    #The following pseudocode only works for scalars but
