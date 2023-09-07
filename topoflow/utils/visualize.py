@@ -1204,7 +1204,9 @@ def create_movie_from_images( mp4_file, png_dir, fps=10, REPORT=True):
 
 #   create_movie_from_images()
 #--------------------------------------------------------------------
-def plot_data( x, y, y2=None, xmin=None, xmax=None, ymin=None, ymax=None,
+def plot_data( x, y, y2=None, y3=None, y4=None, y5=None,
+               y6=None, y7=None, y8=None,
+               xmin=None, xmax=None, ymin=None, ymax=None,
                x_name='x', x_units='', marker=',', title=None,
                y_name='y', y_units='',
                x_size=8,   y_size=4, xticks=None, yticks=None):
@@ -1234,7 +1236,19 @@ def plot_data( x, y, y2=None, xmin=None, xmax=None, ymin=None, ymax=None,
     plt.plot( x, y, marker=marker)
     if (y2 is not None):
         plt.plot(x, y2, marker=marker)
-
+    if (y3 is not None):
+        plt.plot(x, y3, marker=marker)
+    if (y4 is not None):
+        plt.plot(x, y4, marker=marker)
+    if (y5 is not None):
+        plt.plot(x, y5, marker=marker)
+    if (y6 is not None):
+        plt.plot(x, y6, marker=marker)
+    if (y7 is not None):
+        plt.plot(x, y7, marker=marker)
+    if (y8 is not None):
+        plt.plot(x, y8, marker=marker)
+                        
     plt.xlabel( x_name + ' [' + x_units + ']' )
     plt.ylabel( y_name + ' [' + y_units + ']' )
     if (title is not None):
