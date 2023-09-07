@@ -301,9 +301,6 @@ class snow_component( snow_base.snow_component ):
         #        this method gives comparable results to the energy
         #        balance method.
 
-        #        86400000d = 1000 [mm/m] * 60 [sec/min] *
-        #                    60 [min/hr] * 24 [hrs/day]
-
         #        rho_snow is not needed in formula here, but is
         #        needed to convert snowmelt to snow water
         #        equivalent (swe) in update_swe() in "snow_base.py".
@@ -312,7 +309,13 @@ class snow_component( snow_base.snow_component ):
         
         #------------------------------
         # Compute degree-day meltrate
-        #------------------------------
+        #-----------------------------------------------------------------
+        #  m         mm           1 day      1 hr         1 m
+        # --- =  ---------    x  ------- x --------  x --------- x deg_C
+        #  s     day * deg_C      24 hr     3600 s      1000 mm
+        #-----------------------------------------------------------------
+        # 86400000 = 8.64E7 = 24 * 3600 * 1000
+        #---------------------------------------
         M = (self.c0 / np.float64(8.64E7)) * (T_air - self.T0)   #[m/s]
 
         # This is really an "enforce_min_meltrate()"

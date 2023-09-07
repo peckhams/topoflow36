@@ -2317,33 +2317,6 @@ class BMI_component:
 
     #   update_var()
     #-------------------------------------------------------------------
-#     def update_var_LAST(self, var_name, value):
-# 
-#         #---------------------------------------------------------------
-#         # Note:  Vars must be initialized first, e.g. using either
-#         #        initialize_scalar() or initialize_grid() in BMI_base.
-#         #---------------------------------------------------------------
-#         if (value is None):
-#             return
-# 
-#         if (self.is_scalar( var_name )):
-#             #----------------------------------------------------
-#             # Update the value of a scalar without breaking the
-#             # reference so other components will see it change.
-#             #----------------------------------------------------
-#             # See Notes for initialize_scalar() above.
-#             # This is needed for type "Time Series".
-#             #----------------------------------------------------
-#             exec( 'self.' + var_name + '.fill( value )', {}, locals() )
-#         else:
-#             #----------------------------------------------
-#             # Update the value of a grid (2D, 3D) without
-#             # breaking the reference (or making a copy).
-#             #----------------------------------------------
-#             exec( 'self.' + var_name + '[:] = value', {}, locals() )
-# 
-#     #   update_var_LAST()
-    #-------------------------------------------------------------------
     # These are for convenience;  not part of BMI.
     #-------------------------------------------------------------------
     def is_scalar(self, var_name):
