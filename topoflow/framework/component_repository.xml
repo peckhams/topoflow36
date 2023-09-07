@@ -185,6 +185,26 @@
 </component>
 
 <component>
+    <comp_name>      tf_glacier_energy_balance </comp_name>
+    <module_path>    ./topoflow/components/ </module_path>
+    <module_name>    glacier_base </module_name>
+    <class_name>     glacier_component </class_name>
+    <model_name>     Glacier_Energy_Balance </model_name>
+    <model_family>   TopoFlow </model_family>
+    <version>        3.5 </version>
+    <language>       python </language>
+    <author>         Mark Kessler, Eric Hutton, Scott D. Peckham, Lauren A. Bolotin </author>
+    <help_url>       http://csdms.colorado.edu/wiki/Model_help:Gc2d </help_url>
+    <cfg_template>   Glacier_Energy_Balance.cfg.in </cfg_template>
+    <time_step_type> fixed </time_step_type>
+    <time_units>     minutes </time_units>
+    <grid_type>      uniform </grid_type>
+    <description>    None </description>
+    <comp_type>      snow </comp_type>
+    <uses_types>     meteorology </uses_types>
+</component>
+
+<component>
     <comp_name>      tf_infil_green_ampt </comp_name>
     <module_path>    ./topoflow/components/ </module_path>
     <module_name>    infil_green_ampt </module_name>
