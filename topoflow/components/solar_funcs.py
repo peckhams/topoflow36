@@ -268,7 +268,7 @@ def Zenith_Angle( lat_deg, declination, th ):
     
 #   Zenith_Angle()
 #------------------------------------------------------------------------
-def Solar_Elevation_Angle( lat_deg, declination, th ):
+def Solar_Elevation_Angle( lat_deg, declination, th, DEGREES=False ):
 
     #---------------------------------------------------------- 
     # Note: This is the complement of the solar zenith angle.
@@ -276,7 +276,10 @@ def Solar_Elevation_Angle( lat_deg, declination, th ):
     #       See notes for that function for more info.
     #----------------------------------------------------------
     theta = Zenith_Angle( lat_deg, declination, th )
-    return (np.pi/2 - theta)    # [radians]
+    angle = (np.pi/2 - theta)   # [radians]
+    if (DEGREES):
+        angle *= (180 / np.pi)  # [degrees]
+    return angle
     
 #   Solar_Elevation_Angle()
 #------------------------------------------------------------------------
