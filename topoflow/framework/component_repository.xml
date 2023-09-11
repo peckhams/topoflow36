@@ -200,7 +200,7 @@
     <time_units>     minutes </time_units>
     <grid_type>      uniform </grid_type>
     <description>    None </description>
-    <comp_type>      snow </comp_type>
+    <comp_type>      glacier </comp_type>
     <uses_types>     meteorology </uses_types>
 </component>
 
