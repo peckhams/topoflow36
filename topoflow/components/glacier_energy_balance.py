@@ -122,7 +122,8 @@ class glacier_component( glacier_base.glacier_component ):
     _output_var_names = [
         'model__time_step',                            # dt   
         'snowpack__domain_time_integral_of_melt_volume_flux',   # vol_SM
-        'snowpack__domain_time_integral_of_liquid-equivalent_depth', # vol_swe
+        'snowpack__initial_domain_integral_of_liquid-equivalent_depth', # vol_swe_start'
+        'snowpack__domain_integral_of_liquid-equivalent_depth',         # vol_swe
         'snowpack__energy-per-area_cold_content',      # Eccs
         'snowpack__depth',                             # h_snow
         'snowpack__initial_depth',                     # h0_snow
@@ -159,8 +160,9 @@ class glacier_component( glacier_base.glacier_component ):
         #'land_surface_net-shortwave-radiation__energy_flux': 'Qn_SW',        
         #----------------------------------------------------------
         'model__time_step': 'dt',     
-        'snowpack__domain_time_integral_of_melt_volume_flux': 'vol_SM',
-        'snowpack__domain_time_integral_of_liquid-equivalent_depth': 'vol_swe',        
+        'snowpack__domain_time_integral_of_melt_volume_flux':   'vol_SM',
+        'snowpack__initial_domain_integral_of_liquid-equivalent_depth': 'vol_swe_start',
+        'snowpack__domain_integral_of_liquid-equivalent_depth':         'vol_swe',           
         'snowpack__depth': 'h_snow',
         'snowpack__energy-per-area_cold_content': 'Eccs',
         'snowpack__initial_depth': 'h0_snow',
@@ -202,7 +204,8 @@ class glacier_component( glacier_base.glacier_component ):
         #--------------------------------------------------------------
         'model__time_step': 's',
         'snowpack__domain_time_integral_of_melt_volume_flux': 'm3',
-        'snowpack__domain_time_integral_of_liquid-equivalent_depth': 'm3',        
+        'snowpack__initial_domain_integral_of_liquid-equivalent_depth': 'm3',  
+        'snowpack__domain_integral_of_liquid-equivalent_depth': 'm3',          
         'snowpack__depth': 'm',
         'snowpack__energy-per-area_cold_content': 'J m-2',
         'snowpack__initial_depth': 'm',
@@ -400,7 +403,17 @@ class glacier_component( glacier_base.glacier_component ):
         #-------------------------------------------
         # 2023-08-28.  Added next line to fix bug.
         #-------------------------------------------
-        self.vol_swe = self.initialize_scalar( 0, dtype='float64') # (m3)             
+        self.vol_swe = self.initialize_scalar( 0, dtype='float64') # (m3)         
+        self.vol_swe_start = self.initialize_scalar( 0, dtype='float64') # (m3)  
+
+        #----------------------------------------------------
+        # Compute density ratio for water to snow.
+        # rho_H2O is for liquid water close to 0 degrees C.
+        # Water is denser than snow, so density_ratio > 1.
+        #----------------------------------------------------
+        self.ws_density_ratio = (self.rho_H2O / self.rho_snow)
+        self.wi_density_ratio = (self.rho_ice / self.rho_snow)
+
         #----------------------------------------------------
         # Initialize the cold content of snowpack (2/21/07)
         #-------------------------------------------------------------
