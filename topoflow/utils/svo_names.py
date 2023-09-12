@@ -60,10 +60,10 @@ def get_svo_name_map():
     #-------------------------------------
     # Abbreviations used in snow_base.py
     #-------------------------------------
-    svo_name_map['hs']  = svo_name_map['h_snow']
-    svo_name_map['sw']  = svo_name_map['h_swe']
-    svo_name_map['mr']  = svo_name_map['SM']    ## See 'imr' below.
-    svo_name_map['cc']  = svo_name_map['Ecc']
+    # svo_name_map['hs']  = svo_name_map['h_snow']
+    # svo_name_map['sw']  = svo_name_map['h_swe']
+    # svo_name_map['mr']  = svo_name_map['SM']    ## See 'imr' below.
+    # svo_name_map['cc']  = svo_name_map['Ecc']
     #------------------------------------
     # Abbreviations used in met_base.py
     #------------------------------------
@@ -75,11 +75,20 @@ def get_svo_name_map():
     #------------------------------------
     # Abbreviations used in ice_base.py
     #------------------------------------
-    svo_name_map['hi']  = svo_name_map['H']
-    svo_name_map['zi']  = svo_name_map['Zi']
-    svo_name_map['imr'] = svo_name_map['MR']
+    # svo_name_map['hi']  = svo_name_map['H']
+    # svo_name_map['zi']  = svo_name_map['Zi']
+    # svo_name_map['imr'] = svo_name_map['MR']
     ## svo_name_map['zb']  = svo_name_map['Zb']  # not used yet
-    
+    #------------------------------------
+    # Abbreviations used in glacier_base.py
+    #------------------------------------
+    svo_name_map['smr']  = svo_name_map['SM']
+    svo_name_map['imr'] = svo_name_map['IM']
+    svo_name_map['hs']  = svo_name_map['h_snow']
+    svo_name_map['hi']  = svo_name_map['h_ice']
+    svo_name_map['sw']  = svo_name_map['h_swe']
+    svo_name_map['cc']  = svo_name_map['Ecc']
+
     return svo_name_map
     
 #   get_svo_name_map()
@@ -187,9 +196,9 @@ def get_short_name_map():
     'channel_x-section_trapezoid_bottom__width' : 'width',
     'channel_x-section_trapezoid_side__flare_angle' : 'angle',
     'earth__standard_gravity_constant' : 'g',
-    'glacier_ice__domain_time_integral_of_melt_volume_flux' : 'vol_MR',
-    'glacier_ice__melt_volume_flux' : 'MR',
-    'glacier_ice__thickness' : 'H',
+    'glacier_ice__domain_time_integral_of_melt_volume_flux' : 'vol_IM',
+    'glacier_ice__melt_volume_flux' : 'IM',
+    'glacier_ice__thickness' : 'h_ice',
     'glacier_top_surface__elevation' : 'Zi',
     'land_surface__albedo' : 'albedo',
     'land_surface__aspect_angle' : 'alpha',
