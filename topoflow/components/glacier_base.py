@@ -95,7 +95,7 @@ class glacier_component( BMI_base.BMI_component ):
         #---------------------------------------------------------        
         self.Cp_snow  = np.float64( 2090.0 )  # [J kg-1 K-1]
         self.Cp_ice       = np.float64(2060.0)     # [J/(kg * K)]
-        # self.Lf       = np.float64( 334000 )  # [J kg-1] # This is gets overridden below
+        self.Lf       = np.float64( 334000 )  # [J kg-1] # This is gets overridden below
     
         #--------------------------------------
         # Not a constant; read from CFG file.
@@ -171,6 +171,7 @@ class glacier_component( BMI_base.BMI_component ):
             self.vol_SM  = self.initialize_scalar(0, dtype='float64') # [m3]
             self.vol_IM = self.initialize_scalar(0, dtype='float64') 
             self.vol_swe = self.initialize_scalar(0, dtype='float64') # [m3]
+            self.vol_swe_start = self.initialize_scalar(0, dtype='float64')
             self.DONE    = True
             self.status  = 'initialized'
             return
@@ -244,6 +245,7 @@ class glacier_component( BMI_base.BMI_component ):
         #------------------------------------------
         # Call update_swe() before update_snow_depth()
         #------------------------------------------
+        # self.extract_previous_swe()
         self.update_swe()
         self.update_swe_integral()  # (2020-05-05)
 
@@ -383,6 +385,7 @@ class glacier_component( BMI_base.BMI_component ):
         # vol_swe is to track volume of water in the snowpack.
         self.vol_SM  = self.initialize_scalar( 0, dtype='float64') # (m3)
         self.vol_swe = self.initialize_scalar( 0, dtype='float64') # (m3)
+        self.vol_swe_start = self.initialize_scalar( 0, dtype='float64')
         self.vol_IM  = self.initialize_scalar( 0, dtype='float64')
 
         #----------------------------------------------------
@@ -457,7 +460,7 @@ class glacier_component( BMI_base.BMI_component ):
         # by ice depth, h_ice, were to melt in the one time
         # step, dt.  Meltrate should never exceed this value.
         #------------------------------------------------------- 
-        wi_density_ratio = (self.rho_H20 / self.rho_ice)
+        wi_density_ratio = (self.rho_H2O / self.rho_ice)
         IM_max = (wi_density_ratio / self.dt) * self.h_ice
         self.IM = np.minimum(self.IM, IM_max)
 
@@ -488,6 +491,16 @@ class glacier_component( BMI_base.BMI_component ):
             self.vol_IM += np.sum(volume)
             
     #   update_IM_integral()
+    #-------------------------------------------------------------------
+    def extract_previous_swe(self):
+        #------------------------------------------------
+        # Extract swe from previous timestep for use in 
+        # toggling between ice/snow routines
+        #------------------------------------------------
+        self.previous_swe = self.h_swe.copy()
+        print('Previous SWE: ')
+        print(self.previous_swe > 0)
+    #   extract_previous_swe()
     #-------------------------------------------------------------------
     def update_swe(self):
 
@@ -521,7 +534,8 @@ class glacier_component( BMI_base.BMI_component ):
         dh2_swe    = self.SM * self.dt
         self.h_swe -= dh2_swe
         np.maximum(self.h_swe, np.float64(0), self.h_swe)  # (in place)
-        
+        # print('Current SWE: ')
+        # print(self.h_swe)
     #   update_swe()
     #-------------------------------------------------------------------
     def update_swe_integral(self):
@@ -642,7 +656,7 @@ class glacier_component( BMI_base.BMI_component ):
         self.sw_gs_file = (self.out_directory + self.sw_gs_file)
         self.cc_gs_file = (self.out_directory + self.cc_gs_file)
         self.imr_gs_file = (self.out_directory + self.imr_gs_file)
-        self.hi_gs_file = (self.out_directory + self.is_gs_file)
+        self.hi_gs_file = (self.out_directory + self.hi_gs_file)
         #---------------------------------------------------------
         self.smr_ts_file = (self.out_directory + self.smr_ts_file)
         self.hs_ts_file = (self.out_directory + self.hs_ts_file)
