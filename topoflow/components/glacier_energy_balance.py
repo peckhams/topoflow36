@@ -407,12 +407,12 @@ class glacier_component( glacier_base.glacier_component ):
         self.vol_swe_start = self.initialize_scalar( 0, dtype='float64') # (m3)  
 
         #----------------------------------------------------
-        # Compute density ratio for water to snow.
+        # Compute density ratio for water to snow and ice.
         # rho_H2O is for liquid water close to 0 degrees C.
-        # Water is denser than snow, so density_ratio > 1.
+        # Water is denser than snow and ice, so density_ratio > 1.
         #----------------------------------------------------
         self.ws_density_ratio = (self.rho_H2O / self.rho_snow)
-        self.wi_density_ratio = (self.rho_ice / self.rho_snow)
+        self.wi_density_ratio = (self.rho_H2O / self.rho_ice)
 
         #----------------------------------------------------
         # Initialize the cold content of snowpack (2/21/07)
