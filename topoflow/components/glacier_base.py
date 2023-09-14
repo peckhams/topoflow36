@@ -304,9 +304,10 @@ class glacier_component( BMI_base.BMI_component ):
                           self.is_scalar('h0_swe'),
                           #----------------------------------
                           self.is_scalar('Cp_ice'),
-                          self.is_scalara('rho_ice'),
+                          self.is_scalar('rho_ice'),
                           self.is_scalar('h0_ice'),
-                          self.is_scalar('h0_iwe') ])
+                          self.is_scalar('h0_iwe'),
+                          self.is_scalar('h_active_layer') ])
 
 
         self.ALL_SCALARS = np.all(are_scalars)
