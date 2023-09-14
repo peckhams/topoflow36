@@ -314,7 +314,8 @@ class glacier_component( glacier_base.glacier_component ):
                           self.is_scalar('h0_swe'),
                           self.is_scalar('rho_ice'),
                           self.is_scalar('Cp_ice'),
-                          self.is_scalar('h0_ice')  ])
+                          self.is_scalar('h0_ice'),
+                          self.is_scalar('h0_iwe')  ])
 
 
         self.ALL_SCALARS = np.all(are_scalars)
@@ -348,6 +349,8 @@ class glacier_component( glacier_base.glacier_component ):
             self.rho_ice = self.initialize_var(self.rho_ice_type, dtype=dtype)
         if (self.h0_ice_type.lower() != 'scalar'):
             self.h0_ice = self.initialize_var(self.h0_ice_type, dtype=dtype)
+        if (self.h0_iwe_type.lower() != 'scalar'):
+            self.h0_iwe = self.initialize_var(self.h0_iwe_type, dtype=dtype) 
     
     #   initialize_input_file_vars()
     #-------------------------------------------------------------------
@@ -367,6 +370,7 @@ class glacier_component( glacier_base.glacier_component ):
         H0_SNOW_IS_SCALAR = self.is_scalar('h0_snow')
         H0_SWE_IS_SCALAR  = self.is_scalar('h0_swe') 
         H0_ICE_IS_SCALAR  = self.is_scalar('h0_ice')
+        H0_IWE_IS_SCALAR  = self.is_scalar('h0_iwe') 
 
         #------------------------------------------------------
         # If h0_snow or h0_swe are scalars, the use of copy()
@@ -376,6 +380,7 @@ class glacier_component( glacier_base.glacier_component ):
         h_snow = self.h0_snow.copy()    # [meters]
         h_swe  = self.h0_swe.copy()     # [meters]
         h_ice  = self.h0_ice.copy()     # [meters]
+        h_iwe  = self.h0_iwe.copy()     # [meters]
 
         #------------------------------------------------------       
         # For the Energy Balance method, SM, IM, h_snow, h_swe, and h_ice
@@ -395,6 +400,10 @@ class glacier_component( glacier_base.glacier_component ):
             self.h_ice = h_ice + np.zeros([self.ny, self.nx], dtype='float64')
         else:
             self.h_ice = h_ice # (is already a grid)         
+        if (H0_IWE_IS_SCALAR):
+            self.h_iwe = h_iwe + np.zeros([self.ny, self.nx], dtype='float64')
+        else:
+            self.h_iwe = h_iwe    # (is already a grid)
 
         self.SM      = np.zeros([self.ny, self.nx], dtype='float64')
         self.IM      = np.zeros([self.ny, self.nx], dtype='float64')
@@ -405,11 +414,12 @@ class glacier_component( glacier_base.glacier_component ):
         #-------------------------------------------
         self.vol_swe = self.initialize_scalar( 0, dtype='float64') # (m3)         
         self.vol_swe_start = self.initialize_scalar( 0, dtype='float64') # (m3)  
-
+        self.vol_iwe = self.initialize_scalar( 0, dtype='float64') # (m3)         
+        self.vol_iwe_start = self.initialize_scalar( 0, dtype='float64') # (m3)  
         #----------------------------------------------------
-        # Compute density ratio for water to snow and ice.
+        # Compute density ratio for water to snow.
         # rho_H2O is for liquid water close to 0 degrees C.
-        # Water is denser than snow and ice, so density_ratio > 1.
+        # Water is denser than snow, so density_ratio > 1.
         #----------------------------------------------------
         self.ws_density_ratio = (self.rho_H2O / self.rho_snow)
         self.wi_density_ratio = (self.rho_H2O / self.rho_ice)
@@ -734,6 +744,7 @@ class glacier_component( glacier_base.glacier_component ):
         self.Cp_ice_file   = self.in_directory + self.Cp_ice_file
         self.rho_ice_file  = self.in_directory + self.rho_ice_file
         self.h0_ice_file   = self.in_directory + self.h0_ice_file
+        self.h0_iwe_file   = self.in_directory + self.h0_iwe_file
 
         self.Cp_snow_unit  = model_input.open_file(self.Cp_snow_type,  self.Cp_snow_file)
         self.rho_snow_unit = model_input.open_file(self.rho_snow_type, self.rho_snow_file)
@@ -743,6 +754,7 @@ class glacier_component( glacier_base.glacier_component ):
         self.Cp_ice_unit   = model_input.open_file(self.Cp_ice_type,   self.Cp_ice_file)
         self.rho_ice_unit  = model_input.open_file(self.rho_ice_type,  self.rho_ice_file)
         self.h0_ice_unit   = model_input.open_file(self.h0_ice_type,   self.h0_ice_file)
+        self.h0_iwe_unit   = model_input.open_file(self.h0_iwe_type,   self.h0_iwe_file)
 
     #   open_input_files()
     #-------------------------------------------------------------------  
@@ -784,6 +796,10 @@ class glacier_component( glacier_base.glacier_component ):
         h0_ice = model_input.read_next(self.h0_ice, self.h0_ice_type, rti)
         if (h0_ice is not None):
             self.update_var( 'h0_ice', h0_ice)
+
+        h0_iwe = model_input.read_next(self.h0_iwe_unit, self.h0_iwe_type, rti)
+        if (h0_iwe is not None):
+            self.update_var( 'h0_iwe', h0_iwe )
         
     #   read_input_files()       
     #-------------------------------------------------------------------  
@@ -797,6 +813,7 @@ class glacier_component( glacier_base.glacier_component ):
         if (self.Cp_ice_type   != 'Scalar'): self.Cp_ice_unit.close()
         if (self.rho_ice_type  != 'Scalar'): self.rho_ice_unit.close()
         if (self.h0_ice_type   != 'Scalar'): self.h0_ice_unit.close()
+        if (self.h0_iwe_type   != 'Scalar'): self.h0_iwe_unit.close()
             
 ##        if (self.T0_file       != ''): self.T0_unit.close()
 ##        if (self.rho_snow_file != ''): self.rho_snow_unit.close()

@@ -52,6 +52,8 @@ See glacier_degree_day.py and glacier_energy_balance.py.
 #      update_IM_integral()
 #      update_swe()
 #      update_swe_integral()     # (2020-05-05)
+#      update_iwe()
+#      update_iwe_integral() 
 #      update_snow_depth()
 #      update_ice_depth()
 #      -----------------------
@@ -166,12 +168,15 @@ class glacier_component( BMI_base.BMI_component ):
             self.h_snow  = self.initialize_scalar(0, dtype='float64')
             self.h_ice = self.initialize_scalar(0, dtype='float64')
             self.h_swe   = self.initialize_scalar(0, dtype='float64')
+            self.h_iwe   = self.initialize_scalar(0, dtype='float64')
             self.SM      = self.initialize_scalar(0, dtype='float64')
             self.IM      = self.initialize_scalar(0, dtype='float64')
             self.vol_SM  = self.initialize_scalar(0, dtype='float64') # [m3]
             self.vol_IM = self.initialize_scalar(0, dtype='float64') 
             self.vol_swe = self.initialize_scalar(0, dtype='float64') # [m3]
             self.vol_swe_start = self.initialize_scalar(0, dtype='float64')
+            self.vol_iwe = self.initialize_scalar(0, dtype='float64')
+            self.vol_iwe_start = self.initialize_scalar(0, dtype='float64')
             self.DONE    = True
             self.status  = 'initialized'
             return
@@ -245,9 +250,12 @@ class glacier_component( BMI_base.BMI_component ):
         #------------------------------------------
         # Call update_swe() before update_snow_depth()
         #------------------------------------------
-        # self.extract_previous_swe()
+        self.extract_previous_swe()
         self.update_swe()
         self.update_swe_integral()  # (2020-05-05)
+
+        self.update_iwe()
+        self.update_iwe_integral()
 
         self.update_snow_depth()
         self.update_ice_depth()
@@ -321,7 +329,8 @@ class glacier_component( BMI_base.BMI_component ):
                           #----------------------------------
                           self.is_scalar('Cp_ice'),
                           self.is_scalara('rho_ice'),
-                          self.is_scalar('h0_ice') ])
+                          self.is_scalar('h0_ice'),
+                          self.is_scalar('h0_iwe') ])
 
 
         self.ALL_SCALARS = np.all(are_scalars)
@@ -339,6 +348,7 @@ class glacier_component( BMI_base.BMI_component ):
         H0_SNOW_IS_SCALAR = self.is_scalar('h0_snow')
         H0_SWE_IS_SCALAR  = self.is_scalar('h0_swe') 
         H0_ICE_IS_SCALAR = self.is_scalar('h0_ice')
+        H0_IWE_IS_SCALAR = self.is_scalar('h0_iwe')
 
         #------------------------------------------------------
         # If h0_snow or h0_swe are scalars, the use of copy()
@@ -348,6 +358,7 @@ class glacier_component( BMI_base.BMI_component ):
         h_snow = self.h0_snow.copy()    # [meters]
         h_swe  = self.h0_swe.copy()     # [meters]
         h_ice = self.h0_ice.copy()
+        h_iwe = self.h0_iwe.copy()
         
         if (T_IS_GRID or P_IS_GRID):
             self.SM = np.zeros([self.ny, self.nx], dtype='float64')
@@ -370,6 +381,10 @@ class glacier_component( BMI_base.BMI_component ):
                 self.h_ice = h_ice + np.zeros([self.ny, self.nx], dtype='float64')
             else: 
                 self.h_ice = h_ice 
+            if (H0_IWE_IS_SCALAR):
+                self.h_iwe = h_iwe + np.zeros([self.ny, self.nx], dtype='float64')
+            else: 
+                self.h_iwe = h_iwe
 
              
         else:
@@ -381,12 +396,15 @@ class glacier_component( BMI_base.BMI_component ):
             self.h_snow = self.initialize_scalar( h_snow, dtype='float64')
             self.h_swe  = self.initialize_scalar( h_swe,  dtype='float64')
             self.h_ice  = self.initialize_scalar( h_ice,  dtype='float64')
+            self.h_iwe  = self.initialize_scalar( h_iwe,  dtype='float64')
 
         # vol_swe is to track volume of water in the snowpack.
         self.vol_SM  = self.initialize_scalar( 0, dtype='float64') # (m3)
         self.vol_swe = self.initialize_scalar( 0, dtype='float64') # (m3)
         self.vol_swe_start = self.initialize_scalar( 0, dtype='float64')
         self.vol_IM  = self.initialize_scalar( 0, dtype='float64')
+        self.vol_iwe = self.initialize_scalar( 0, dtype='float64') # (m3)
+        self.vol_iwe_start = self.initialize_scalar( 0, dtype='float64') # (m3)
 
         #----------------------------------------------------
         # Compute density ratio for water to snow.
@@ -538,6 +556,18 @@ class glacier_component( BMI_base.BMI_component ):
         # print(self.h_swe)
     #   update_swe()
     #-------------------------------------------------------------------
+    def update_iwe(self):
+                
+        #------------------------------------------------
+        # Decrease ice water equivalent due to melting 
+        #------------------------------------------------
+        dh2_iwe    = self.IM * self.dt
+        self.h_iwe -= dh2_iwe
+        np.maximum(self.h_iwe, np.float64(0), self.h_iwe)  # (in place)
+        # print('Current IWE: ')
+        # print(self.h_iwe)
+    #   update_iwe()
+    #-------------------------------------------------------------------
     def update_swe_integral(self):
 
         #------------------------------------------------
@@ -551,6 +581,20 @@ class glacier_component( BMI_base.BMI_component ):
             self.vol_swe += np.sum(volume)
             
     #   update_swe_integral()   
+    #-------------------------------------------------------------------
+    def update_iwe_integral(self):
+
+        #------------------------------------------------
+        # Update mass total for water in the ice column,
+        # sum over all pixels.
+        #------------------------------------------------   
+        volume = np.float64(self.h_iwe * self.da)  # [m^3]
+        if (np.size(volume) == 1):
+            self.vol_iwe += (volume * self.rti.n_pixels)
+        else:
+            self.vol_iwe += np.sum(volume)
+            
+    #   update_iwe_integral()   
     #-------------------------------------------------------------------
     def update_snow_depth(self):
 
@@ -613,11 +657,13 @@ class glacier_component( BMI_base.BMI_component ):
             self.h_snow[:] = h_snow
 
     def update_ice_depth(self):
-        h_ice = self.h_ice * self.wi_density_ratio
+        h_ice = self.h_iwe * self.wi_density_ratio
 
         if (np.ndim( self.h_ice ) == 0):
             h_ice = np.float64( h_ice )
             self.h_ice.fill( h_ice )
+        else:
+            self.h_ice[:] = h_ice
         
     #   update_ice_depth() 
     #-------------------------------------------------------------------  
@@ -742,6 +788,12 @@ class glacier_component( BMI_base.BMI_component ):
                                           var_name='hi',
                                           long_name='ice_depth',
                                           units_name='m')
+            
+        if (self.SAVE_IW_GRIDS):
+            model_output.open_new_gs_file( self, self.iw_gs_file, self.rti,
+                                           var_name='iw',
+                                           long_name='ice_water_equivalent',
+                                           units_name='m')
 
         #---------------------------------------
         # Open text files to write time series
@@ -786,6 +838,12 @@ class glacier_component( BMI_base.BMI_component ):
                                           var_name='hi',
                                           long_name='ice_depth',
                                           units_name='m')
+
+        if (self.SAVE_IW_PIXELS):
+            model_output.open_new_ts_file( self, self.iw_ts_file, IDs,
+                                           var_name='iw',
+                                           long_name='ice_water_equivalent',
+                                           units_name='m')
             
     #   open_output_files()
     #-------------------------------------------------------------------
@@ -853,6 +911,9 @@ class glacier_component( BMI_base.BMI_component ):
         if (self.SAVE_HI_GRIDS):
             model_output.add_grid(self, self.h_ice, 'hi', self.time_min )
 
+        if (self.SAVE_IW_GRIDS):
+            model_output.add_grid( self, self.h_iwe, 'iw', self.time_min )
+
     #   save_grids()     
     #-------------------------------------------------------------------  
     def save_pixel_values(self):
@@ -877,6 +938,9 @@ class glacier_component( BMI_base.BMI_component ):
         
         if (self.SAVE_HI_PIXELS):
             model_output.add_values_at_IDs( self, time, self.h_ice, 'hi', IDs )
+
+        if (self.SAVE_IW_PIXELS):
+            model_output.add_values_at_IDs( self, time, self.h_iwe, 'iw', IDs )
 
     #   save_pixel_values()
     #------------------------------------------------------------------- 
