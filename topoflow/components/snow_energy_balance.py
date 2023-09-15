@@ -7,6 +7,7 @@ functions.  It inherits from the snowmelt "base class" in
 #
 #  Copyright (c) 2001-2023, Scott D. Peckham
 #
+#  Sep 2023.  Checked sign in initialize_cold_content().
 #  Aug 2023.  Removed trailing space in 'J kg-1 K-1 '.
 #             Added "vol_swe_start".
 #             Added missing "vol_swe" in initialize_computed_vars.
@@ -408,6 +409,7 @@ class snow_component( snow_base.snow_component ):
 
         #--------------------------------------------
         # Compute initial cold content of snowpack
+        # See equation (10) in Zhang et al. (2000).
         #--------------------------------------------
         T_snow    = self.T_surf
         del_T     = (self.T0 - T_snow)
@@ -418,8 +420,7 @@ class snow_component( snow_base.snow_component ):
         #----------------------------------------------
         # Ecc > 0 if (T_snow < T0).  i.e. T_snow < 0.
         #----------------------------------------------
-        self.Ecc = np.maximum( self.Ecc, np.float64(0))
-        ### np.maximum( self.Ecc, np.float64(0), self.Ecc)  # (in place)
+        np.maximum( self.Ecc, np.float64(0), out=self.Ecc)  # (in place)
         
     #   initialize_cold_content()
     #-------------------------------------------------------------------
@@ -523,23 +524,46 @@ class snow_component( snow_base.snow_component ):
         # Lf    = 334000d     ;[J/kg = W*s/kg]
         # So (rho_w * Lf) = 3.34e+8  [J/m^3]
         #------------------------------------------
-        M       = (Qm / np.float64(3.34E+8))   #[m/s]
-        self.SM = np.maximum(M, np.float64(0))
+        M = (Qm / np.float64(3.34E+8))   #[m/s]
 
+        #------------------------------------------------        
+        # enforce_max_meltrate() is always called after
+        # update_meltrate() and also enforces min=0
+        #------------------------------------------------
+        ### np.maximum(M, np.float64(0), M)
+
+        #------------------------------------------
+        # Here, the "fill" method works whether M
+        # is a 0D array or a scalar.
+        #------------------------------------------
+        # Could use update_var() in BMI_base also
+        #------------------------------------------
+        if (np.size(self.SM) == 1):
+            M = np.float64(M)  # avoid type change
+            self.SM.fill( M )
+        else:
+            self.SM[:] = M
+            
         #--------------------------------------------------
         # Update the cold content of the snowpack [J m-2]
         # If this is positive, there was no melt so far.
         #--------------------------------------------------
         # (9/13/14) Bug fix: Ecc wasn't stored into self.
         #--------------------------------------------------        
-        self.Ecc = np.maximum((self.Ecc - E_in), np.float64(0))
-
-        #-------------------------------------------------------
+        ## self.Ecc = np.maximum((self.Ecc - E_in), np.float64(0))
+        Ecc = np.maximum((self.Ecc - E_in), np.float64(0))
+        if (np.size(self.Ecc) == 1):
+            Ecc = np.float64(Ecc)  # avoid type change
+            self.Ecc.fill( Ecc )
+        else:
+            self.Ecc[:] = Ecc
+            
+        #--------------------------------------------------------
         # Note: enforce_max_meltrate() method is always called
-        #       by the base class to make sure that meltrate
-        #       does not exceed the max possible.
-        #-------------------------------------------------------
-        #  self.enforce_max_meltrate()
+        #       by update() in the base class to make sure that
+        #       meltrate does not exceed the max possible.
+        #--------------------------------------------------------
+        # self.enforce_max_meltrate()
             
     #   update_meltrate()
     #---------------------------------------------------------------------
@@ -569,15 +593,15 @@ class snow_component( snow_base.snow_component ):
         Cp_snow = model_input.read_next(self.Cp_snow_unit, self.Cp_snow_type, rti)
         if (Cp_snow is not None):
             self.update_var( 'Cp_snow', Cp_snow )
-        
-        rho_snow = model_input.read_next(self.rho_snow_unit, self.rho_snow_type, rti)
-        if (rho_snow is not None):
-            self.update_var( 'rho_snow', rho_snow )
 
         T0 = model_input.read_next(self.T0_unit, self.T0_type, rti)
         if (T0 is not None):
             self.update_var( 'T0', T0 )
-        
+                    
+        rho_snow = model_input.read_next(self.rho_snow_unit, self.rho_snow_type, rti)
+        if (rho_snow is not None):
+            self.update_var( 'rho_snow', rho_snow )
+  
         h0_snow = model_input.read_next(self.h0_snow_unit, self.h0_snow_type, rti)
         if (h0_snow is not None):
             self.update_var( 'h0_snow', h0_snow )

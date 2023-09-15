@@ -17,6 +17,7 @@ flag in their CFG file.
 #------------------------------------------------------------------------
 #  Copyright (c) 2001-2023, Scott D. Peckham
 #
+#  Sep 2023.  Need to check "actual ET" calculation. #######
 #  Aug 2023.  Changed how vol_chan_sum0 is computed for clarity.
 #  Jul 2021.  Added ATTENUATE option for flashy hydrographs.
 #             Added min_baseflow_flux cfg parameter.
@@ -564,9 +565,9 @@ class channels_component( BMI_base.BMI_component ):
         if not(hasattr(self, 'ATTENUATE')):
             self.ATTENUATE = False
 
-        #-----------------------------------------------       
-        # (2021-07-24) Added baseflow_min to CFG file.
-        #----------------------------------------------- 
+        #----------------------------------------------------       
+        # (2021-07-24) Added min_baseflow_flux to CFG file.
+        #---------------------------------------------------- 
         if not(hasattr(self, 'min_baseflow_flux')):
             self.min_baseflow_flux = 0.0  # [mmph]
         self.min_baseflow_flux_mps = self.min_baseflow_flux * self.mmph_to_mps
@@ -1025,8 +1026,8 @@ class channels_component( BMI_base.BMI_component ):
             print('       Will write values at interval dt instead.')
             print('--------------------------------------------------')
             print()            
-        self.save_grid_dt   = np.maximum(self.save_grid_dt,   self.dt)
-        self.save_pixels_dt = np.maximum(self.save_pixels_dt, self.dt)
+        np.maximum(self.save_grid_dt,   self.dt, out=self.save_grid_dt)
+        np.maximum(self.save_pixels_dt, self.dt, out=self.save_pixels_dt)
         
     #   set_computed_input_vars()
     #-------------------------------------------------------------------
@@ -1272,7 +1273,7 @@ class channels_component( BMI_base.BMI_component ):
         # But in "update_R()", be careful not to break the ref.
         # "Q" may be subject to the same issue.
         #########################################################
-        self.R  = self.initialize_grid( 0, dtype=dtype )
+        self.R = self.initialize_grid( 0, dtype=dtype )
       
         ##############################################################################
         # seconds_per_year = 3600 * 24 * 365 = 31,536,000
@@ -1562,6 +1563,8 @@ class channels_component( BMI_base.BMI_component ):
         # NB!  Don't do this here, because vol_GW won't get to the
         #      TopoFlow driver component for mass balance check.
         #      Try to achieve this with a new satzone component.
+        #      Perhaps very simple: satzone_uniform_baseflow.py.
+        #      See satzone_attenuate.py (maybe not finished).
         #-------------------------------------------------------------
         # Enforce min_baseflow_flux for GW ? (2021-07-24) (in-place)
         # Note: min_baseflow_flux is a uniform volume_flux.
@@ -1573,7 +1576,7 @@ class channels_component( BMI_base.BMI_component ):
 #             #------------------------------------------------
 #             # Update mass total for GW, sum over all pixels
 #             #------------------------------------------------   
-#             volume = np.double(self.GW * self.da * self.dt)  # [m^3]
+#             volume = np.float64(self.GW * self.da * self.dt)  # [m^3]
 #             if (np.size( volume ) == 1):
 #                 self.vol_GW += (volume * self.rti.n_pixels)
 #             else:
@@ -1611,11 +1614,15 @@ class channels_component( BMI_base.BMI_component ):
         #      of water volume in update_volume().
         #      But can't evaporate water if not present.
         #---------------------------------------------------
-        w = (self.vol < (ET * self.dt))
+        # self.vol is always a 2D array (DEM dimensions),
+        # while ET may be a scalar or 2D array.
+        #---------------------------------------------------        
+        ## w = (self.vol < (ET * self.dt))  # wrong units
+        w = (self.vol < (ET * self.da * self.dt))  # [m3] (2023-09-12)       
         if (ET.ndim == self.vol.ndim):
             ET[w] = 0.0
         else:
-            ET = 0.0
+            ET = 0.0  # This seems wrong.  ##########
 
         #--------------
         # For testing
@@ -1652,7 +1659,7 @@ class channels_component( BMI_base.BMI_component ):
         # more frequently than vol_P.  Since EMELI performs linear
         # interpolation in time, integrals may be slightly different.
         #---------------------------------------------------------------  
-        volume = np.double(self.R * self.da * self.dt)  # [m^3]
+        volume = np.float64(self.R * self.da * self.dt)  # [m^3]
         if (np.size(volume) == 1):
             self.vol_R += (volume * self.rti.n_pixels)
         else:
@@ -2133,8 +2140,6 @@ class channels_component( BMI_base.BMI_component ):
         # volume must always be nonnegative. This also ensures
         # that the flow depth is nonnegative.  (7/13/06)
         #--------------------------------------------------------
-        ## self.vol = np.maximum(self.vol, 0.0)
-        ## self.vol[:] = np.maximum(self.vol, 0.0)  # (2/19/13)
         np.maximum( self.vol, 0.0, self.vol )  # (in place)
         
     #   update_flow_volume()
@@ -2606,7 +2611,7 @@ class channels_component( BMI_base.BMI_component ):
         #--------------------------------------------
         # Set negative slopes to zero
         #------------------------------
-        ###  self.S_free = np.maximum(self.S_free, 0)
+        ###  np.maximum(self.S_free, 0, out=self.S_free)
 
     #   update_free_surface_slope()
     #-------------------------------------------------------------------
@@ -2776,7 +2781,7 @@ class channels_component( BMI_base.BMI_component ):
             # Should issue a warning if this is used.
             #------------------------------------------------
             smoothness = (self.aval / self.z0val) * self.d
-            np.maximum(smoothness, np.float64(1.1), smoothness)  # (in place)
+            np.maximum(smoothness, np.float64(1.1), out=smoothness)  # (in place)
             self.f[wg] = (self.kappa / np.log(smoothness[wg])) ** np.float64(2)
             self.f[wb] = np.float64(0)
 
@@ -2812,8 +2817,7 @@ class channels_component( BMI_base.BMI_component ):
 #             # Should issue a warning if this is used.
 #             #------------------------------------------------
 #             smoothness = (self.aval / self.z0val) * self.d
-#             np.maximum(smoothness, np.float64(1.1), smoothness)  # (in place)
-#             ## smoothness = np.maximum(smoothness, np.float64(1.1))
+#             np.maximum(smoothness, np.float64(1.1), out=smoothness)  # (in place)
 #             if (ng != 0):
 #                 self.f[wg] = (self.kappa / np.log(smoothness[wg])) ** np.float64(2)
 #             if (nb != 0):
@@ -3082,7 +3086,8 @@ class channels_component( BMI_base.BMI_component ):
         #        in the final mass balance reporting.
         #        (2019-09-17)
         #----------------------------------------------------
-        # Note:  This should be called from finalize().
+        # Note:  This is called from both initialize() and
+        #        finalize().
         #----------------------------------------------------
         # Note:  If d0>0, then we have vol_chan_sum0 > 0.
         #----------------------------------------------------
@@ -4034,7 +4039,7 @@ class channels_component( BMI_base.BMI_component ):
         # Make sure (smoothness > 1) before taking log.
         # Should issue a warning if this is used.
         #------------------------------------------------
-        smoothness = np.maximum(smoothness, np.float64(1.1))
+        np.maximum(smoothness, np.float64(1.1), out=smoothness)
 
         S2 = np.abs(S)    
         u = self.law_const * np.sqrt(self.Rh * S2) * np.log(smoothness)
@@ -4358,7 +4363,7 @@ def Law_of_the_Wall(d, Rh, S, z0val):
     #-----------------------------
     # Make sure (smoothness > 1)
     #-----------------------------
-    smoothness = np.maximum(smoothness, np.float64(1.1))
+    np.maximum(smoothness, np.float64(1.1), out=smoothness)
 
     u = law_const * np.sqrt(Rh * S) * np.log(smoothness)
     

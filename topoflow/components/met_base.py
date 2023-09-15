@@ -17,6 +17,8 @@ in BMI_base.py.
 #               because it wasn't yet mapped to True or False.
 #               Modified read_config_file() in BMI_base.py as a
 #               general solution.  Using 0 or 1 should also work.
+#             Added update_P_snow_integral() which must be
+#               called after update_P_snow() in update().
 #             Added update_P_rain_integral() which must be
 #               called after update_P_rain() in update().
 #               No longer calling update_P_integral().
@@ -58,8 +60,6 @@ in BMI_base.py.
 #        to compute Qc.
 #
 #        Cp_snow is from NCAR CSM Flux Coupler web page
-#
-#        rho_H2O is currently not adjustable with GUI. (still true?)
 
 #        Does "land_surface_air__latent_heat_flux" make sense? (2/5/13)   
 #-----------------------------------------------------------------------    
@@ -85,11 +85,12 @@ in BMI_base.py.
 #      initialize_input_file_vars()   # (7/3/20)
 #      initialize_computed_vars()
 #      ----------------------------
-#      update_P_integral()    # no longer used.
+#      update_P_integral()
 #      update_P_max()
 #      update_P_rain()    # (9/14/14, new method)
 #      update_P_snow()    # (9/14/14, new method)
-#      update_P_rain_integral()
+#      update_P_rain_integral()  # 9/23
+#      update_P_snow_integral()  # 9/23
 #      ------------------------------------
 #      update_bulk_richardson_number()
 #      update_bulk_aero_conductance()
@@ -229,6 +230,8 @@ class met_component( BMI_base.BMI_component ):
         'atmosphere_bottom_air_water-vapor__relative_saturation',            # RH
         'atmosphere_bottom_air_water-vapor__saturated_partial_pressure',     # e_sat_air         
         'atmosphere_water__domain_time_integral_of_precipitation_leq-volume_flux',  # vol_P
+        'atmosphere_water__domain_time_integral_of_rainfall_volume_flux',           # vol_PR
+        'atmosphere_water__domain_time_integral_of_snowfall_leq-volume_flux',       # vol_PS
         'atmosphere_water__domain_time_max_of_precipitation_leq-volume_flux',     # P_max
         'atmosphere_water__precipitation_leq-volume_flux',                        # P [m s-1]
         'atmosphere_water__rainfall_volume_flux',            # P_rain [m s-1] (liquid)      
@@ -392,7 +395,9 @@ class met_component( BMI_base.BMI_component ):
         'atmosphere_bottom_air_water-vapor__partial_pressure':       'e_air',
         'atmosphere_bottom_air_water-vapor__relative_saturation':    'RH',
         'atmosphere_bottom_air_water-vapor__saturated_partial_pressure': 'e_sat_air',
-        'atmosphere_water__domain_time_integral_of_precipitation_leq-volume_flux': 'vol_P', 
+        'atmosphere_water__domain_time_integral_of_precipitation_leq-volume_flux': 'vol_P',
+        'atmosphere_water__domain_time_integral_of_rainfall_volume_flux':          'vol_PR',
+        'atmosphere_water__domain_time_integral_of_snowfall_leq-volume_flux':      'vol_PS', 
         'atmosphere_water__domain_time_max_of_precipitation_leq-volume_flux': 'P_max',       
         'atmosphere_water__precipitation_leq-volume_flux': 'P',
         'atmosphere_water__rainfall_volume_flux':          'P_rain',    
@@ -471,6 +476,8 @@ class met_component( BMI_base.BMI_component ):
         'atmosphere_bottom_air_water-vapor__relative_saturation':        '1',
         'atmosphere_bottom_air_water-vapor__saturated_partial_pressure': 'mbar',     # (see Notes above)
         'atmosphere_water__domain_time_integral_of_precipitation_leq-volume_flux': 'm3',
+        'atmosphere_water__domain_time_integral_of_rainfall_volume_flux':          'm3',
+        'atmosphere_water__domain_time_integral_of_snowfall_leq-volume_flux':      'm3',
         'atmosphere_water__domain_time_max_of_precipitation_leq-volume_flux': 'm s-1',        
         'atmosphere_water__precipitation_leq-volume_flux': 'm s-1',
         'atmosphere_water__rainfall_volume_flux': 'm s-1',      # (see Notes above)  
@@ -752,17 +759,26 @@ class met_component( BMI_base.BMI_component ):
         self.status = 'updating'
         if (self.time_index > 0):
             self.read_input_files()
-
+ 
+        #-------------------------------------------------           
+        # Set precip to zero on edges of DEM for the sake
+        # of mass balance checking (2023-09-11) ?
+        # This doesn't seem to be helpful or needed.
+        #-------------------------------------------------
+#         if (self.P_type.lower() in ['grid', 'grid_sequence']):
+#             self.P[ self.edge_IDs ] = 0.0
+        
         #-------------------------------------------
         # Update computed values related to precip
         # P is initialized in initialize()
         #-------------------------------------------
-        # self.update_P_integral()  # no longer used
+        self.update_P_integral()       # update vol_P (leq)
         self.update_P_max()
         self.update_P_rain()
         self.update_P_snow()
-        self.update_P_rain_integral()
-        
+        self.update_P_rain_integral()  # update vol_PR
+        self.update_P_snow_integral()  # update vol_PS (leq)
+                
         #-------------------------
         # Update computed values
         #-------------------------
@@ -1129,9 +1145,11 @@ class met_component( BMI_base.BMI_component ):
         dtype = 'float64'
         P_max = self.P.max()       # (after read_input_files)
         ## self.P_max = self.P.max()
-        self.P_max = self.initialize_scalar( P_max, dtype=dtype)
-        self.vol_P = self.initialize_scalar( 0, dtype=dtype)
-
+        self.P_max  = self.initialize_scalar( P_max, dtype=dtype)
+        self.vol_P  = self.initialize_scalar( 0, dtype=dtype)
+        self.vol_PR = self.initialize_scalar( 0, dtype=dtype)
+        self.vol_PS = self.initialize_scalar( 0, dtype=dtype)
+        
         #----------------------------------------------------
         # Initialize vars that are computed from input vars
         #----------------------------------------------------
@@ -1204,15 +1222,14 @@ class met_component( BMI_base.BMI_component ):
         if (self.DEBUG):
             print('Calling update_P_integral()...')
      
-        #------------------------------------------------
+        #-------------------------------------------------
         # Update mass total for P, sum over all pixels
-        #------------------------------------------------
-        # 2023-08-31. Changed to only use P_rain here,
-        # because P_snow is stored in the snowpack and
-        # is counted there for mass balance check as
-        # part of vol_swe in snow_base.py.
+        #-------------------------------------------------
+        # We need to include total precip here, that is,
+        # P = P_rain + P_snow (liquid equivalent), not
+        # just P_rain, for use in a mass balance check.
         # P_rain and da are both either scalar or grid.
-        #------------------------------------------------   
+        #-------------------------------------------------   
         volume = np.double(self.P * self.da * self.dt)  # [m^3]
         if (np.size(volume) == 1):
             self.vol_P += (volume * self.rti.n_pixels)
@@ -1273,6 +1290,7 @@ class met_component( BMI_base.BMI_component ):
         # P_rain is used by channel_base.update_R.
         #-------------------------------------------------
         P_rain = self.P * (self.T_air > self.T_rain_snow)
+        
         if (np.ndim( self.P_rain ) == 0):
             self.P_rain.fill( P_rain )   #### (mutable scalar)
         else:
@@ -1325,6 +1343,7 @@ class met_component( BMI_base.BMI_component ):
         # P_snow is used by snow_base.update_depth.
         #-------------------------------------------------
         P_snow = self.P * (self.T_air <= self.T_rain_snow)
+        
         if (np.ndim( self.P_snow ) == 0):
             self.P_snow.fill( P_snow )   #### (mutable scalar)
         else:
@@ -1350,23 +1369,49 @@ class met_component( BMI_base.BMI_component ):
         #------------------------------------------------
         # Update mass total for P, sum over all pixels
         #------------------------------------------------
-        # 2023-08-31. Changed to only use P_rain here,
-        # because P_snow is stored in the snowpack and
-        # is counted there for mass balance check as
-        # part of vol_swe in snow_base.py.
+        # 2023-08-31. This one only uses P_rain.
         # P_rain and da are both either scalar or grid.
         #------------------------------------------------   
         volume = np.double(self.P_rain * self.da * self.dt)  # [m^3]
         if (np.size(volume) == 1):
-            self.vol_P += (volume * self.rti.n_pixels)
+            self.vol_PR += (volume * self.rti.n_pixels)
         else:
-            self.vol_P += np.sum(volume)
+            self.vol_PR += np.sum(volume)
    
         if (self.DEBUG):
-            print('  time, vol_P =', self.time, ', ', self.vol_P)
+            print('  time, vol_PR =', self.time, ', ', self.vol_PR)
             print()
         
     #   update_P_rain_integral()
+    #-------------------------------------------------------------------
+    def update_P_snow_integral(self):
+
+        #---------------------------------------------------
+        # Notes: This can be used for mass balance checks,
+        #        such as now done by print_final_report()
+        #        in topoflow.py.
+        #        Must be called AFTER update_P_snow().
+        #---------------------------------------------------     
+        if (self.DEBUG):
+            print('Calling update_P_rain_integral()...')
+     
+        #----------------------------------------------------
+        # Update mass total for P_snow, sum over all pixels
+        #----------------------------------------------------
+        # 2023-09-11. This one only uses P_snow.
+        # P_snow and da are both either scalar or grid.
+        #------------------------------------------------   
+        volume = np.double(self.P_snow * self.da * self.dt)  # [m^3]
+        if (np.size(volume) == 1):
+            self.vol_PS += (volume * self.rti.n_pixels)
+        else:
+            self.vol_PS += np.sum(volume)
+   
+        if (self.DEBUG):
+            print('  time, vol_PS =', self.time, ', ', self.vol_PS)
+            print()
+        
+    #   update_P_snow_integral()
     #-------------------------------------------------------------------
     def update_bulk_richardson_number(self):
 
