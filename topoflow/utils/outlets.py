@@ -1,6 +1,7 @@
 
-# Copyright (c) 2014-2022, Scott D. Peckham
+# Copyright (c) 2014-2023, Scott D. Peckham
 #
+# Sep 2023.  Fixed bug in read_outlet_file(); basin_areas.
 # Oct 2022.  Updated write_outlet_file() for use in prepare_inputs.py.
 # Sep 2014.  Created
 
@@ -141,8 +142,8 @@ def read_outlet_file( self ):
     #-------------------------------------
     outlet_cols   = outlet_cols[0:n_outlets]
     outlet_rows   = outlet_rows[0:n_outlets]
-    basin_areas   = outlet_cols[0:n_outlets]
-    basin_reliefs = outlet_cols[0:n_outlets]
+    basin_areas   = basin_areas[0:n_outlets]    # (bug fix: 2023-09-12)
+    basin_reliefs = basin_reliefs[0:n_outlets]  # (bug fix: 2023-09-12)
         
     #------------------------------------------------    
     # Save area and relief of first basin into self
