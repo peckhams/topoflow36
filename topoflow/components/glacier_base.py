@@ -688,6 +688,7 @@ class glacier_component( BMI_base.BMI_component ):
         self.cc_gs_file = (self.out_directory + self.cc_gs_file)
         self.imr_gs_file = (self.out_directory + self.imr_gs_file)
         self.hi_gs_file = (self.out_directory + self.hi_gs_file)
+        self.cci_gs_file = (self.out_directory + self.cci_gs_file)
         #---------------------------------------------------------
         self.smr_ts_file = (self.out_directory + self.smr_ts_file)
         self.hs_ts_file = (self.out_directory + self.hs_ts_file)
@@ -695,6 +696,7 @@ class glacier_component( BMI_base.BMI_component ):
         self.cc_ts_file = (self.out_directory + self.cc_ts_file)
         self.imr_ts_file = (self.out_directory + self.imr_ts_file)
         self.hi_ts_file = (self.out_directory + self.hi_ts_file)
+        self.cci_ts_file =(self.out_directory + self.cci_ts_file)
 
     #   update_outfile_names()
     #-------------------------------------------------------------------  
@@ -706,6 +708,7 @@ class glacier_component( BMI_base.BMI_component ):
         self.SAVE_CC_GRIDS  = False
         self.SAVE_IMR_GRIDS = False
         self.SAVE_HI_GRIDS = False
+        self.SAVE_CCI_GRIDS = False
         #-------------------------------
         self.SAVE_SMR_PIXELS = False
         self.SAVE_HS_PIXELS  = False
@@ -713,6 +716,7 @@ class glacier_component( BMI_base.BMI_component ):
         self.SAVE_CC_PIXELS  = False
         self.SAVE_IMR_PIXELS = False
         self.SAVE_HI_PIXELS = False
+        self.SAVE_CCI_PIXELS = False
         
     #   disable_all_output()  
     #-------------------------------------------------------------------  
@@ -768,7 +772,11 @@ class glacier_component( BMI_base.BMI_component ):
                                            var_name='iw',
                                            long_name='ice_water_equivalent',
                                            units_name='m')
-
+        if (self.SAVE_CCI_GRIDS):
+            model_output.open_new_gs_file( self, self.cci_gs_file, self.rti,
+                                           var_name='cci',
+                                           long_name='ice_cold_content',
+                                           units_name='J/m^2')
         #---------------------------------------
         # Open text files to write time series
         #---------------------------------------
@@ -818,6 +826,11 @@ class glacier_component( BMI_base.BMI_component ):
                                            var_name='iw',
                                            long_name='ice_water_equivalent',
                                            units_name='m')
+        if (self.SAVE_CCI_PIXELS):
+            model_output.open_new_ts_file( self, self.cci_ts_file, IDs,
+                                           var_name='cci',
+                                           long_name='ice_cold_content',
+                                           units_name='J/m^2')
             
     #   open_output_files()
     #-------------------------------------------------------------------
@@ -856,6 +869,7 @@ class glacier_component( BMI_base.BMI_component ):
         if (self.SAVE_CC_GRIDS): model_output.close_gs_file( self, 'cc')
         if (self.SAVE_IMR_GRIDS):model_output.close_gs_file( self, 'imr')
         if (self.SAVE_HI_GRIDS): model_output.close_gs_file( self, 'hi')
+        if (self.SAVE_CCI_GRIDS): model_output.close_gs_file( self, 'cci')
         #-----------------------------------------------------------------        
         if (self.SAVE_SMR_PIXELS):model_output.close_ts_file( self, 'smr')  
         if (self.SAVE_HS_PIXELS): model_output.close_ts_file( self, 'hs')   
@@ -863,6 +877,7 @@ class glacier_component( BMI_base.BMI_component ):
         if (self.SAVE_CC_PIXELS): model_output.close_ts_file( self, 'cc')
         if (self.SAVE_IMR_PIXELS):model_output.close_ts_file( self, 'imr')
         if (self.SAVE_HI_PIXELS): model_output.close_ts_file( self, 'hi')
+        if (self.SAVE_CCI_PIXELS): model_output.close_ts_file( self, 'cci')
         
     #-------------------------------------------------------------------  
     def save_grids(self):
@@ -877,7 +892,7 @@ class glacier_component( BMI_base.BMI_component ):
             model_output.add_grid( self, self.h_swe, 'sw', self.time_min )
 
         if (self.SAVE_CC_GRIDS):
-            model_output.add_grid( self, self.Ecc, 'cc', self.time_min )
+            model_output.add_grid( self, self.Eccs, 'cc', self.time_min )
 
         if (self.SAVE_IMR_GRIDS):
             model_output.add_grid(self, self.IM, 'imr', self.time_min )
@@ -887,6 +902,9 @@ class glacier_component( BMI_base.BMI_component ):
 
         if (self.SAVE_IW_GRIDS):
             model_output.add_grid( self, self.h_iwe, 'iw', self.time_min )
+
+        if (self.SAVE_CCI_GRIDS):
+            model_output.add_grid( self, self.Ecci, 'cci', self.time_min )
 
     #   save_grids()     
     #-------------------------------------------------------------------  
@@ -905,7 +923,7 @@ class glacier_component( BMI_base.BMI_component ):
             model_output.add_values_at_IDs( self, time, self.h_swe, 'sw', IDs )
             
         if (self.SAVE_CC_PIXELS):
-            model_output.add_values_at_IDs( self, time, self.Ecc, 'cc', IDs )
+            model_output.add_values_at_IDs( self, time, self.Eccs, 'cc', IDs )
 
         if (self.SAVE_IMR_PIXELS):
             model_output.add_values_at_IDs( self, time, self.IM, 'imr', IDs )
@@ -916,5 +934,7 @@ class glacier_component( BMI_base.BMI_component ):
         if (self.SAVE_IW_PIXELS):
             model_output.add_values_at_IDs( self, time, self.h_iwe, 'iw', IDs )
 
+        if (self.SAVE_CCI_PIXELS):
+            model_output.add_values_at_IDs( self, time, self.Ecci, 'cci', IDs )
     #   save_pixel_values()
     #------------------------------------------------------------------- 
