@@ -4,6 +4,13 @@
 #--------------------------------------------------------------------
 # Copyright (c) 2001-2023, Scott D. Peckham
 #
+# Sep 2023. Improved print_final_report() further by breaking
+#           into new functions: add_basic_info_to_report(),
+#           add_peak_info_to_report()
+#           add_mins_and_maxes_to_report()
+#           add_flux_volumes_to_report()
+#           add_storage_volumes_to_report()
+#           add_mass_balance_to_report().
 # Aug 2023. Improved print_final_report() mass balance info.
 #           Careful to distinguish between volumes that are
 #           domain-time integrals of fluxes and volumes that
@@ -52,11 +59,17 @@
 #      update_hydrograph_plot()
 #      -----------------------------------
 #      vol_str()
+#      add_basic_info_to_report()
+#      add_peak_info_to_report()
+#      add_mins_and_maxes_to_report()
+#      add_flux_volumes_to_report()
+#      add_storage_volumes_to_report()
+#      add_mass_balance_to_report()
 #      print_final_report()
-#      print_mins_and_maxes()
-#      print_uniform_precip_data()
-#      print_dimless_number_data()
-#      print_mass_balance_report()
+#      -----------------------------------
+#      print_final_report_OLD()     # deprecated
+#      print_mins_and_maxes()       # deprecated
+#      print_dimless_number_data()  # unused / not ready
 #
 #-----------------------------------------------------------------------
 
@@ -101,7 +114,9 @@ class topoflow_driver( BMI_base.BMI_component ):
     # But source and sink files provide "dt" for Diversions, so check.
     #------------------------------------------------------------------------------
     _input_var_names = [
-        'atmosphere_water__domain_time_integral_of_precipitation_leq-volume_flux', # vol_P
+        'atmosphere_water__domain_time_integral_of_precipitation_leq-volume_flux',  # vol_P
+        'atmosphere_water__domain_time_integral_of_rainfall_volume_flux',           # vol_PR
+        'atmosphere_water__domain_time_integral_of_snowfall_leq-volume_flux',       # vol_PS
         'atmosphere_water__domain_time_max_of_precipitation_leq-volume_flux',    # P_max@meteorology
         'basin_outlet_water_flow__half_of_fanning_friction_factor',              # f_outlet@channels
         'basin_outlet_water_x-section__mean_depth',                              # d_outlet@channels
@@ -147,10 +162,10 @@ class topoflow_driver( BMI_base.BMI_component ):
         'soil_water_sat-zone_top__domain_time_integral_of_recharge_volume_flux', # vol_Rg
         #-----------------------------------------------------------
         'channel_water_x-section__boundary_time_integral_of_volume_flow_rate',   # vol_edge
-        'river-network_channel_water__initial_volume',                           # vol_chan_start
-        'river-network_channel_water__volume',                                   # vol_chan
-        #'land_surface_water__initial_area_integral_of_depth' ]                  # vol_flood_start
-        'land_surface_water__area_integral_of_depth' ]                           # vol_flood
+        'river-network_channel_water__initial_volume',                           # vol_chan_sum0
+        'river-network_channel_water__volume',                                   # vol_chan_sum
+        #'land_surface_water__initial_area_integral_of_depth' ]                  # vol_flood_sum0
+        'land_surface_water__area_integral_of_depth' ]                           # vol_flood_sum
         
         #----------------------------------------------------------------
         # The TopoFlow driver no longer needs to get the time_steps of
@@ -171,6 +186,8 @@ class topoflow_driver( BMI_base.BMI_component ):
 
     _var_name_map = {
         'atmosphere_water__domain_time_integral_of_precipitation_leq-volume_flux': 'vol_P',
+        'atmosphere_water__domain_time_integral_of_rainfall_volume_flux':          'vol_PR',
+        'atmosphere_water__domain_time_integral_of_snowfall_leq-volume_flux':      'vol_PS',
         'atmosphere_water__domain_time_max_of_precipitation_leq-volume_flux':      'P_max',
         'basin_outlet_water_flow__half_of_fanning_friction_factor':          'f_outlet', 
         'basin_outlet_water_x-section__mean_depth':                          'd_outlet',
@@ -232,6 +249,8 @@ class topoflow_driver( BMI_base.BMI_component ):
             
     _var_units_map = {
         'atmosphere_water__domain_time_integral_of_precipitation_leq-volume_flux': 'm3',
+        'atmosphere_water__domain_time_integral_of_rainfall_volume_flux':          'm3',
+        'atmosphere_water__domain_time_integral_of_snowfall_leq-volume_flux':      'm3',
         'atmosphere_water__domain_time_max_of_precipitation_leq-volume_flux':      'm s-1',
         'basin_outlet_water_flow__half_of_fanning_friction_factor':                '1',
         'basin_outlet_water_x-section__mean_depth':                                'm',
@@ -537,27 +556,29 @@ class topoflow_driver( BMI_base.BMI_component ):
         
         #----------------
         # Print reports
-        #----------------
-        if not(self.SILENT):
-            self.print_final_report()
-##        self.print_mins_and_maxes( FINAL=True )   # (Moved into final report.)
-##        self.print_uniform_precip_data()  # (not ready yet)
-##        self.print_mass_balance_report()  # (not ready yet)
-
+        #-----------------------------------------
+        # If self.SILENT, only write to log_file
+        # This now also closes the log_unit.
+        #-----------------------------------------
+        self.print_final_report()
+        self.status = 'finalized'
+        
         #--------------------
         # Close the logfile
         #--------------------
-        if (self.WRITE_LOG):
-            ## print '###  Closing log file.'
-            self.log_unit.close()
+#         if (self.WRITE_LOG):
+#             ## print '###  Closing log file.'
+#             self.log_unit.close()
 
         #----------------------
         # Print final message
-        #----------------------
-        if not(self.SILENT):
-            print('Finished.' + '  (' + self.case_prefix + ')')
-            print()
-        self.status = 'finalized'
+        #-----------------------------------
+        # Now done in print_final_report()
+        #-----------------------------------
+#         if not(self.SILENT):
+#             print('Finished.' + '  (' + self.case_prefix + ')')
+#             print()
+#         self.status = 'finalized'
 
         #--------------------------------------------------   
         # Option to create a set of indicator grid stacks
@@ -1006,50 +1027,190 @@ class topoflow_driver( BMI_base.BMI_component ):
 
     #   vol_str()
     #-------------------------------------------------------------
-    def print_final_report(self, comp_name='TopoFlow',
-                           mode='nondriver'):
+    def add_basic_info_to_report(self): 
 
-        #------------------------------------------------------
-        # NB! This overrides BMI_base.print_final_report(),
-        # so it must have the same arguments. (10/27/11)
-        #------------------------------------------------------
-        
-        #------------------------------------
-        # Gather information for the report
-        #------------------------------------
-        NAME      = self.site_prefix
         COMMENT   = self.comment
-        T_stop    = self.T_stop
-        Q_final   = self.Q_outlet
-        T_final   = self.time_min
-        outlet_ID = self.outlet_ID
         n_steps   = self.time_index
-        # outlet_col = (outlet_ID % self.nx)   ## (may need this)
-        # outlet_row = (outlet_ID / self.nx)
+        Q_final   = self.Q_outlet
+        outlet_ID = self.outlet_ID
+        P_max      = self.P_max
+        basin_area = self.basin_area
+        if (self.stop_method == 'Until_model_time'): 
+            T_final = self.T_stop
+        else:
+            T_final = self.time_min
+                    
+        #----------------------------
+        # Construct run time string
+        #----------------------------
+        run_time = (time.time() - self.start_time)
+        if (run_time > 60):
+            run_time = run_time / np.float64(60)
+            rt_units = ' [min]'
+        else:
+            rt_units = ' [sec]'
+        run_time_str = '{x:.4f}'.format(x=run_time) + rt_units
+        ## run_time_str = str(run_time) + rt_units
+
+        hline = ''.ljust(60, '-')
+        rep = self.report
+        rep.append( hline )
+        rep.append( TF_Version() )
+        rep.append( time.asctime() )  #####
+        rep.append(' ')
+        rep.append('Input directory:     ' + self.in_directory)
+        rep.append('Output directory:    ' + self.out_directory)
+        rep.append('Site prefix:         ' + self.site_prefix)
+        rep.append('Case prefix:         ' + self.case_prefix)
+        if (COMMENT is not None):
+            rep.append(' ')
+            rep.append( COMMENT )
+      
+        rep.append(' ')   
+        rep.append('Simulated time:      ' + str(T_final) + ' [min]')
+        rep.append('Program run time:    ' + run_time_str)
+        rep.append(' ')
+        rep.append('Number of timesteps: ' + str(n_steps) + ' (in driver comp.)')
+        rep.append('Number of columns:   ' + str(self.nx) )
+        rep.append('Number of rows:      ' + str(self.ny) )
+        rep.append(' ')
+        rep.append('Main outlet ID:      ' + str(outlet_ID) + ' (row, col)')
+        rep.append('Basin area:          ' + str(basin_area) + ' [km^2] ')
+        rep.append(' ')
+         
+        if (hasattr(self, 'nval_min')):
+            if (self.nval_min != -1):
+                nval_min_str = '{x:.7f}'.format( x=self.nval_min )
+                nval_max_str = '{x:.7f}'.format( x=self.nval_max )
+                rep.append("Min Manning's n:     " + nval_min_str )
+                rep.append("Max Manning's n:     " + nval_max_str )
+
+        if (hasattr(self, 'z0val_min')):
+            if (self.z0val_min != -1):
+                z0val_min_str = '{x:.7f}'.format( x=self.z0val_min )
+                z0val_max_str = '{x:.7f}'.format( x=self.z0val_max )                
+                rep.append("Min z0 value:        " + z0val_min_str + ' [m]')
+                rep.append("Max z0 value:        " + z0val_max_str + ' [m]')                
+        rep.append(' ')
+        self.report = rep   # Is this needed?
+
+    #   add_basic_info_to_report()
+    #-------------------------------------------------------------
+    def add_peak_info_to_report(self):  
 
         #---------------------------------------
         # New framework method with 0-d numpy
         # arrays for mutable scalars (2/7/13).
         #---------------------------------------
-        Q_peak     = self.Q_peak
-        T_peak     = self.T_peak
-        u_peak     = self.u_peak
-        Tu_peak    = self.Tu_peak
-        d_peak     = self.d_peak
-        Td_peak    = self.Td_peak
-        #--------------------------
-        P_max      = self.P_max
-        #--------------------------
-        vol_P  = self.vol_P   ##### maybe:  vol_sum_P
-        vol_Q  = self.vol_Q   ##### maybe:  vol_sum_Q
-        vol_SM = self.vol_SM
-        vol_MR = self.vol_MR
-        vol_ET = self.vol_ET
-        vol_IN = self.vol_IN
-        vol_Rg = self.vol_Rg
-        vol_GW = self.vol_GW
-        vol_R  = self.vol_R
-        vol_edge = self.vol_edge
+        Qout_str = '{x:.7f} [m^3/s]'.format(x=self.Q_outlet)
+        Qp_str   = '{x:.7f} [m^3/s]'.format(x=self.Q_peak)
+        Qp_t_str = '{x:.7f} [min]'.format(x=self.T_peak)
+        up_str   = '{x:.7f} [m^3/s]'.format(x=self.u_peak)
+        up_t_str = '{x:.7f} [min]'.format(x=self.Tu_peak)
+        dp_str   = '{x:.7f} [m^3/s]'.format(x=self.d_peak)
+        dp_t_str = '{x:.7f} [min]'.format(x=self.Td_peak)
+
+        rep = self.report
+        rep.append('Q_outlet (final):  ' + Qout_str )
+        rep.append('Q_peak:            ' + Qp_str )
+        rep.append('Q_peak_time:       ' + Qp_t_str )
+        rep.append('u_peak:            ' + up_str )
+        rep.append('u_peak_time:       ' + up_t_str )
+        rep.append('d_peak:            ' + dp_str )
+        rep.append('d_peak_time:       ' + dp_t_str )
+        rep.append(' ')
+        self.report = rep   # Is this needed?
+
+    #   add_peak_info_to_report()
+    #-------------------------------------------------------------
+    def add_mins_and_maxes_to_report(self):
+        
+        Qstr = '{x:.7f}, {y:.7f}'.format(x=self.Q_min, y=self.Q_max)
+        ustr = '{x:.7f}, {y:.7f}'.format(x=self.u_min, y=self.u_max)
+        dstr = '{x:.7f}, {y:.7f}'.format(x=self.d_min, y=self.d_max)
+
+        #-----------------------------------------------      
+        # Prepare to save report as a list of strings
+        #-----------------------------------------------
+        rep = self.report
+        rep.append('-----------------------------')   
+        rep.append('Final grid mins and maxes:')
+        rep.append('-----------------------------')
+        rep.append('Min(Q), Max(Q):   ' + Qstr + ' [m^3/s]')
+        rep.append('Min(u), Max(u):   ' + ustr + ' [m/s]')
+        rep.append('Min(d), Max(d):   ' + dstr + ' [m]')
+        rep.append(' ')
+        self.report = rep   # Is this needed?
+        
+    #   add_mins_and_maxes_to_report()
+    #-------------------------------------------------------------
+    def add_flux_volumes_to_report(self):     
+
+        vol_P_str  = self.vol_str( self.vol_P )
+        vol_PR_str = self.vol_str( self.vol_PR )
+        vol_PS_str = self.vol_str( self.vol_PS )
+        vol_SM_str = self.vol_str( self.vol_SM )
+        vol_MR_str = self.vol_str( self.vol_MR )
+        vol_ET_str = self.vol_str( self.vol_ET )
+        vol_IN_str = self.vol_str( self.vol_IN )
+        vol_Rg_str = self.vol_str( self.vol_Rg )
+        vol_GW_str = self.vol_str( self.vol_GW )
+        vol_R_str  = self.vol_str( self.vol_R )
+        vol_Q_str  = self.vol_str( self.vol_Q)
+        #------------------------------------------
+        vol_R_i    = (self.vol_PR + self.vol_SM + self.vol_MR + self.vol_GW)
+        vol_R_o    = (self.vol_IN + self.vol_ET)
+        #------------------------------------------
+        vol_R_i_str  = self.vol_str( vol_R_i )
+        vol_R_o_str  = self.vol_str( vol_R_o )
+        vol_edge_str = self.vol_str( self.vol_edge )
+                                   
+        #------------------------------------------------
+        # Print the area_time integrals over entire DEM
+        #------------------------------------------------
+        rep = self.report
+        rep.append('==========================================================')
+        rep.append('  Total flux volumes:  Area-time integrals over the DEM:')
+        rep.append('==========================================================')
+        rep.append('  Fluxes into the model domain:')
+        rep.append('----------------------------------')        
+        rep.append('  vol_P    (precip):       ' + vol_P_str    + '  (total liq. equiv.)')
+        rep.append('  vol_PR   (rainfall):     ' + vol_PR_str   + '  (total rainfall)')
+        rep.append(' ')
+        rep.append('  Fluxes out of the model domain:')
+        rep.append('------------------------------------') 
+        rep.append('  vol_edge (boundary):     ' + vol_edge_str + '  (DEM boundary loss)' )
+        rep.append('  vol_ET   (evaporation):  ' + vol_ET_str   + '  (top loss)')
+        rep.append('  vol_Rg   (recharge):     ' + vol_Rg_str   + '  (bottom loss)')        
+        rep.append(' ')
+        rep.append('  Fluxes from internal storage:')
+        rep.append('----------------------------------')  
+        rep.append('  vol_SM   (snowmelt):     ' + vol_SM_str )
+        rep.append('  vol_IM   (icemelt):      ' + vol_MR_str )  # Note: IM vs. MR
+        rep.append('  vol_GW   (baseflow):     ' + vol_GW_str )
+        rep.append(' ')
+        rep.append('  Fluxes into internal storage (channels, snowpack, soil):')
+        rep.append('-------------------------------------------------------------') 
+        rep.append('  vol_R    (surface flow): ' + vol_R_str    + '  (PR+SM+MR+GW) - (ET+IN)')
+        rep.append('  vol_PS   (snowfall):     ' + vol_PS_str   + '  (total liq.eq. snowfall)') 
+        rep.append('  vol_IN   (infiltration): ' + vol_IN_str )
+        ## rep.append('  vol_Rg   (recharge):     ' + vol_Rg_str   + '  (bottom loss)')
+        rep.append(' ')
+        rep.append('  Fluxes contributing to runoff:')
+        rep.append('----------------------------------') 
+        rep.append('  vol_R_i  (runoff gain):  ' + vol_R_i_str  + '  (PR + SM + MR + GW)')
+        rep.append('  vol_R_o  (runoff loss):  ' + vol_R_o_str  + '  (ET + IN)')
+        rep.append(' ')
+        rep.append('  Flux to main basin outlet:')
+        rep.append('-------------------------------') 
+        rep.append('  vol_Q    (discharge):    ' + vol_Q_str )
+        rep.append(' ')
+        self.report = rep   # Is this needed?
+
+    #   add_flux_volumes_to_report()  
+    #-------------------------------------------------------------
+    def add_storage_volumes_to_report(self): 
+
         #------------------------------------------------------------------
         # Note: vol_chan and vol_flood are DEM-sized grids for the volume
         # of water in each grid cell channel and each grid cell extent.
@@ -1069,191 +1230,140 @@ class topoflow_driver( BMI_base.BMI_component ):
         #--------------------------------------
         vol_swe_start   = self.vol_swe_start
         vol_swe_final   = self.vol_swe
-        #--------------------------------------        
-        basin_area = self.basin_area
-          
-        #----------------------------
-        # Construct run time string
-        #----------------------------
-        run_time = (time.time() - self.start_time)
-        if (run_time > 60):
-            run_time = run_time / np.float64(60)
-            rt_units = ' [min]'
-        else:
-            rt_units = ' [sec]'
-        run_time_str = str(run_time) + rt_units
 
-        #-----------------------------------------------      
-        # Prepare to save report as a list of strings
-        #-----------------------------------------------
-        report = list()  ############# (NEW: 11/15/16)
-
-        #-------------------
-        # Build the report
-        #-------------------
-        hline = ''.ljust(60, '-')
-        report.append( hline )
-        report.append( TF_Version() )
-        report.append( time.asctime() )  #####
-        report.append(' ')
-        # report.append('Simulated Hydrograph for ' + NAME)
-        report.append('Input directory:      ' + self.in_directory)
-        report.append('Output directory:     ' + self.out_directory)
-        report.append('Site prefix:          ' + self.site_prefix)
-        report.append('Case prefix:          ' + self.case_prefix)
-        if (COMMENT is not None):
-            report.append(' ')
-            report.append( COMMENT )
-        
-        report.append(' ')
-        report.append('Simulated time:      ' + str(T_final) + ' [min]')
-        report.append('Program run time:    ' + run_time_str)
-        report.append(' ')
-        report.append('Number of timesteps: ' + str(n_steps))
-        report.append('Number of columns:   ' + str(self.nx) )
-        report.append('Number of rows:      ' + str(self.ny) )
-        report.append(' ')
-
-        if (self.stop_method == 'Until_model_time'):    
-            report.append('T_stop:            ' + str(T_stop) + ' [min]')
-            report.append(' ')
-        report.append('Main outlet ID:    ' + str(outlet_ID) + ' (row, col)')
-        report.append('Basin_area:        ' + str(basin_area) + ' [km^2] ')
-        #*** report.append('Basin_length:      ' + TF_String(basin_length) + ' [m]')
-        report.append(' ')
-            
-        if (hasattr(self, 'nval_min')):
-            if (self.nval_min != -1):
-                report.append("Min Manning's n:   " + str(self.nval_min))
-                report.append("Max Manning's n:   " + str(self.nval_max))
-
-        if (hasattr(self, 'z0val_min')):
-            if (self.z0val_min != -1):
-                report.append("Min z0 value:      " + str(self.z0val_min) + ' [m]')
-                report.append("Max z0 value:      " + str(self.z0val_max) + ' [m]')
-            
-        report.append(' ')
-        report.append('Q_final:           ' + str(Q_final) + ' [m^3/s]')
-        report.append('Q_peak:            ' + str(Q_peak)  + ' [m^3/s]')
-        report.append('Q_peak_time:       ' + str(T_peak)  + ' [min]')
-        report.append('u_peak:            ' + str(u_peak)  + ' [m/s]')
-        report.append('u_peak_time:       ' + str(Tu_peak) + ' [min]')
-        report.append('d_peak:            ' + str(d_peak)  + ' [m]')
-        report.append('d_peak_time:       ' + str(Td_peak) + ' [min]')
-        report.append(' ')
-            
-        #--------------------------------
-        # Print the maximum precip rate
-        #--------------------------------
-        MPR = (P_max * self.mps_to_mmph)   # ([m/s] -> [mm/hr])
-        report.append('Max(precip rate):  ' + str(MPR) + ' [mm/hr]')
-        report.append(' ')
-    
-        #------------------------------------------------
-        # Print the area_time integrals over entire DEM
-        #------------------------------------------------
-        vol_in  = (vol_P + vol_SM + vol_MR + vol_GW)
-        vol_out = (vol_IN + vol_ET + vol_edge)
-        ## report.append('Total accumulated volumes over entire DEM: (fluxes)')
-        report.append('Total flux volumes:  Area-time integrals over the DEM:')
-        report.append('___Input fluxes___:')
-        report.append('  vol_P    (precip):       ' + self.vol_str(vol_P)    + '  (incl. leq snowfall)')
-        report.append('  vol_SM   (snowmelt):     ' + self.vol_str(vol_SM))
-        report.append('  vol_MR   (icemelt):      ' + self.vol_str(vol_MR))
-        report.append('  vol_GW   (baseflow):     ' + self.vol_str(vol_GW))
-        report.append('  vol_in   (total):        ' + self.vol_str(vol_in)   + '  (P + SM + MR + GW)')
-        report.append('___Output fluxes___:')
-        report.append('  vol_ET   (evaporation):  ' + self.vol_str(vol_ET))
-        report.append('  vol_IN   (infiltration): ' + self.vol_str(vol_IN))
-        report.append('  vol_Rg   (recharge):     ' + self.vol_str(vol_Rg)   + '  (bottom loss)')
-        report.append('  vol_Q    (discharge):    ' + self.vol_str(vol_Q)    + '  (main basin outlet)')
-        report.append('  vol_edge (boundary):     ' + self.vol_str(vol_edge) + '  (tot. boundary discharge)' )
-        report.append('  vol_out  (total):        ' + self.vol_str(vol_out)  + '  (IN + ET + edge_out)')
-        report.append('___Net flux___:')
-        report.append('  vol_R    (runoff):       ' + self.vol_str(vol_R)    + '  R = (P+SM+MR+GW) - (ET+IN)')
-        report.append(' ')
-
-        #-----------------------------------------------------
-        # Print area integrals over domain (forms of storage
-        #-----------------------------------------------------
-        vol_stored_start  = vol_chan_start
+        #------------------------------------------------------
+        # Print area integrals over domain (forms of storage)
+        #------------------------------------------------------
+        vol_stored_start  = vol_chan_start.copy()  # Need .copy() here
         vol_stored_start += vol_soil_start
         vol_stored_start += vol_swe_start
         vol_stored_start += vol_flood_start
-        #--------------------------------------
-        ## report.append('Total accumulated volumes over entire DEM: (storage)')
-        report.append('Total storage volumes:  Area-integrals over the DEM:')
-        report.append('___Initial storage volumes___:')
-        report.append('vol_soil_start (subsurface): ' + self.vol_str(vol_soil_start)) 
-        report.append('vol_chan_start (channels):   ' + self.vol_str(vol_chan_start))
-        report.append('vol_flood_start (surface):   ' + self.vol_str(vol_flood_start))
-        report.append('vol_swe_start  (snowpack):   ' + self.vol_str(vol_swe_start))
-        report.append('vol_start      (total):      ' + self.vol_str(vol_stored_start))
-        #------------------------------------------------------------------------------
-        vol_stored_final  = vol_chan_final
+        #-----------------------------------------
+        vol_stored_final  = vol_chan_final.copy()  # Need .copy() here.
         vol_stored_final += vol_soil_final
         vol_stored_final += vol_swe_final
         vol_stored_final += vol_flood_final
-        #--------------------------------------
-        report.append('___Final storage volumes___:')      
-        report.append('vol_soil_final (subsurface): ' + self.vol_str(vol_soil_final)) 
-        report.append('vol_chan_final (channels):   ' + self.vol_str(vol_chan_final))
-        report.append('vol_flood_final (surface):   ' + self.vol_str(vol_flood_final))
-        report.append('vol_swe_final  (snowpack):   ' + self.vol_str(vol_swe_final))
-        report.append('vol_final      (total):      ' + self.vol_str(vol_stored_final))
+        
+        rep = self.report
+        rep.append('=======================================================')
+        rep.append(' Total storage volumes:  Area-integrals over the DEM:')
+        rep.append('=======================================================')
+        rep.append('  Initial storage volumes:')
+        rep.append('-----------------------------') 
+        rep.append('vol_soil_start  (subsurface): ' + self.vol_str(vol_soil_start)) 
+        rep.append('vol_chan_start  (channels):   ' + self.vol_str(vol_chan_start))
+        rep.append('vol_flood_start (surface):    ' + self.vol_str(vol_flood_start))
+        rep.append('vol_swe_start   (snowpack):   ' + self.vol_str(vol_swe_start))
+        rep.append('vol_start       (total):      ' + self.vol_str(vol_stored_start)) 
+        rep.append('---------------------------')  
+        rep.append('  Final storage volumes:')
+        rep.append('---------------------------')      
+        rep.append('vol_soil_final  (subsurface): ' + self.vol_str(vol_soil_final)) 
+        rep.append('vol_chan_final  (channels):   ' + self.vol_str(vol_chan_final))
+        rep.append('vol_flood_final (surface):    ' + self.vol_str(vol_flood_final))
+        rep.append('vol_swe_final   (snowpack):   ' + self.vol_str(vol_swe_final))
+        rep.append('vol_final       (total):      ' + self.vol_str(vol_stored_final))
         #------------------------------------------------------------------------------
         vol_stored_change = (vol_stored_final - vol_stored_start)
-        report.append('vol_change      (total):     ' + self.vol_str(vol_stored_change))
-        report.append(' ')
+        rep.append('vol_change      (total):     ' + self.vol_str(vol_stored_change))
+        rep.append(' ')
+        #------------------------------------------------------------------------------
+        self.vol_stored_change = vol_stored_change  # for mass balance report
+        self.report = rep  # Is this needed?
+
+    #   add_storage_volumes_to_report()
+    #-------------------------------------------------------------
+    def add_mass_balance_to_report(self):
 
         #---------------------------------------------
         # Print mass balance check (over entire DEM)
         #---------------------------------------------
         # Storage equation (mass conservation):
-        # (vol_in - vol_out) = change in vol stored
-        #---------------------------------------------
-        vol_error = (vol_in - vol_out) - vol_stored_change
-        report.append('Mass balance check:')
-        report.append('volume in         = ' + self.vol_str(vol_in) )
-        report.append('volume out        = ' + self.vol_str(vol_out) )
-        report.append('change in storage = ' + self.vol_str(vol_stored_change) )
+        # (vol_in - vol_out)   = change in storage
+        # (vol_in - vol_out)   = (vol_final - vol_start)
+        # (vol_in + vol_start) = vol_final + vol_out
+        #-------------------------------------------------------------------
+        # NB!  When we consider the basin as a control volume:
+        #
+        # (1) The total volume of water ADDED is the total (liquid
+        #     equivalent) precip, i.e. integrated over DEM area and time.
+        #     Some of this may be added to snowpack storage. 
+        # (2) The total volume of water REMOVED is ET + the
+        #     outflow to all 4 edges of the DEM.
+        # (3) Precip falling as snow goes into snowpack storage.
+        #     If it melts, it either leaves the control volume with
+        #     outflow, or is stored in channels.
+        # (4) Water that infiltrates goes into subsurface storage. 
+        #     It may stay in storage or be released as seepage from
+        #     subsurface to surface, i.e. baseflow, GW.  If released
+        #     it may be stored in channels or leave as outflow.
+        # (5) Because of points (1) to (4), for the final mass balance
+        #     check, we should not include area-time integrals of
+        #     meltrates like SM and MR, or of baseflow, GW, because
+        #     the water volume from these "storage releases" will either
+        #     be counted as outflow or as the difference between initial
+        #     and final storage in channels, snowpack, or subsurface.   
+        #
+        #------------------------------------------------------------
+        vol_in  = self.vol_P.copy()
+        vol_out = (self.vol_ET + self.vol_edge)           
+        vol_error = (vol_in - vol_out) - self.vol_stored_change
+
+        rep = self.report
+        rep.append('=============================================')
+        rep.append(' Mass balance check (control volume = DEM):')
+        rep.append('=============================================') 
+        rep.append('volume in         = ' + self.vol_str(vol_in)  + ' (vol_P, liq. equiv.)')
+        rep.append('volume out        = ' + self.vol_str(vol_out) + ' (vol_ET + vol_edge)' )
+        rep.append('change in storage = ' + self.vol_str(self.vol_stored_change) )
         if (vol_error > 0):
             msg_prefix = 'volume gain error = '
         else:
             msg_prefix = 'volume loss error = '
-        report.append(msg_prefix + self.vol_str(vol_error) )
-        report.append('vol_error/ vol_in = ' + str(vol_error / vol_in) )
-        report.append(' ')
+        rep.append(msg_prefix + self.vol_str(vol_error) )
+        rep.append('vol_error/ vol_in = ' + str(vol_error / vol_in) )
+        rep.append(' ')
+        self.report = rep  # Is this needed?
 
+    #   add_mass_balance_to_report()
+    #-------------------------------------------------------------
+    def print_final_report(self):
+
+        #-----------------------------------------------      
+        # Prepare to save report as a list of strings
+        #-----------------------------------------------
+        self.report = list()  # Added: 11/15/16
+          
+        self.add_basic_info_to_report()
+        self.add_peak_info_to_report()
+        self.add_mins_and_maxes_to_report()
+        self.add_flux_volumes_to_report()
+        self.add_storage_volumes_to_report()
+        self.add_mass_balance_to_report()
+
+        last_msg = 'Finished. (' + self.case_prefix + ')\n\n'
+        self.report.append( last_msg )
+        
         #----------------------------------        
         # Print the report to the console
         #----------------------------------
-        for line in report:
-            print(line)
+        if not(self.SILENT):
+            for line in self.report:
+                print(line)
 
         #----------------------------------
         # Print the report to a logfile ?
         #----------------------------------
         if (self.WRITE_LOG):
-            for line in report:
+            for line in self.report:
                 self.log_unit.write( line + '\n' )
-
-        self.print_mins_and_maxes( FINAL=True )
-
-        if (self.WRITE_LOG):
-            #------------------------------------------------
-            # This line is printed to console in finalize()
-            #------------------------------------------------
-            self.log_unit.write( 'Finished. (' + self.case_prefix + ')\n' )
-            self.log_unit.write( '\n' )
-      
+            ## print '###  Closing log file.'
+            self.log_unit.close()
+                                            
     #   print_final_report()
     #-------------------------------------------------------------
     def print_mins_and_maxes(self, FINAL=False):
 
-        #-------------------------------
-        # New framework method, 2/6/13
-        #-------------------------------
         Q_min = self.Q_min
         Q_max = self.Q_max
         u_min = self.u_min
@@ -1300,61 +1410,6 @@ class topoflow_driver( BMI_base.BMI_component ):
                 self.log_unit.write( line + '\n' )
         
     #   print_mins_and_maxes()
-    #-------------------------------------------------------------
-#     def print_uniform_precip_data(self):
-# 
-#         ## precip_method = self.pp.method
-#         precip_method = 2
-#         
-#         #---------------------------------------------------
-#         # Precip method 1 is special and spatially uniform
-#         #---------------------------------------------------
-#         if (precip_method == 1):
-#             rates = (self.pp.method1_rates * self.mps_to_mmph)    #[m/s] -> [mm/hr]
-#             durs  = self.pp.method1_durations      
-#             nr    = np.size(rates)
-# 
-#             if (nr > 1): 
-#                 rstr = str(rates[0])
-#                 dstr = str(durs[0])
-#                 for m in range(1, nr):
-#                     rstr += ('  ' + str(rates[m]))
-#                     dstr += ('  ' + str(durs[m]))
-#             else:
-#                 rstr = TF_String(rates)
-#                 dstr = TF_String(durs)
-#         elif (precip_method == 2) and \
-#              (self.pp.rate_type == 0) and \
-#              (self.pp.duration_type == 0):
-#                 rstr = TF_String(self.pp.rate * self.mps_to_mmph)
-#                 dstr = TF_String(self.pp.duration)
-#         else:
-#             #------------------------------------------------
-#             # Could have uniform precip with method 2 where
-#             # values are stored in a text file and read in
-#             # one by one.  Could read that file here.
-#             #------------------------------------------------
-#             return
-#             
-#         #-------------------------------------
-#         # This is too verbose in most cases?
-#         #------------------------------------- 
-#         # print('Uniform precip. rate information: ')
-#         # print('Precip. rate:     ' + rstr + ' [mm/hr]' )
-#         # print('Duration:         ' + dstr + ' [min]' )
-#         # print()
-#         
-#         #----------------------
-#         # Write to log file ?
-#         #----------------------
-#         if (self.WRITE_LOG):
-#             log_unit = self.log_unit
-#             log_unit.write("Uniform precip. rate information: \n")
-#             log_unit.write('Precip. rate:     ' + rstr + " [mm/hr]\n")
-#             log_unit.write('Duration:         ' + dstr + " [min]\n")
-#             log_unit.write("\n")
-#         
-#     #   print_uniform_precip_data()
     #-------------------------------------------------------------
     def print_dimless_number_data(self, basin_length):
  
@@ -1420,10 +1475,7 @@ class topoflow_driver( BMI_base.BMI_component ):
                   
     #   print_dimless_number_data()
     #-------------------------------------------------------------
-#     def print_mass_balance_report(self):            
-#
-#     #   print_mass_balance_report()
-    #-------------------------------------------------------------
+
 
     
 

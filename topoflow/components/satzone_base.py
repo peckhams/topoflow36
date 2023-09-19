@@ -310,8 +310,8 @@ class satzone_component( infil_base.infil_component ):
         # results more often than they change.
         # Issue a message to this effect if any are smaller ??
         #---------------------------------------------------------
-        self.save_grid_dt   = np.maximum(self.save_grid_dt,   self.dt)
-        self.save_pixels_dt = np.maximum(self.save_pixels_dt, self.dt)
+        np.maximum(self.save_grid_dt,   self.dt, out=self.save_grid_dt)
+        np.maximum(self.save_pixels_dt, self.dt, out=self.save_pixels_dt)
         
     #   set_computed_input_vars()
     #-------------------------------------------------------------------
@@ -607,8 +607,9 @@ class satzone_component( infil_base.infil_component ):
         #----------------------------------------------------------
         # NB! initialize_water_table() ensures h_table is a grid.
         #----------------------------------------------------------
-        # self.Q_gw = np.zeros([self.ny, self.nx], dtype='float64')
-        self.Q_gw = np.minimum(self.Q_gw, 0)  # (zero out Q_gw ??)
+        # Zero out the horizontal groundwater discharge, Q_gw?
+        #----------------------------------------------------------
+        np.minimum(self.Q_gw, 0, out=self.Q_gw)
 
         #--------------------------------------------------------- 
         # Note:  It is now assumed that all soil layers have the
@@ -684,7 +685,7 @@ class satzone_component( infil_base.infil_component ):
         #------------------------------------------------
         # Update mass total for GW, sum over all pixels
         #------------------------------------------------   
-        volume = np.double(self.GW * self.da * self.dt)  # [m^3]
+        volume = np.float64(self.GW * self.da * self.dt)  # [m^3]
         if (np.size( volume ) == 1):
             self.vol_GW += (volume * self.rti.n_pixels)
         else:

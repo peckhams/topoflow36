@@ -318,15 +318,30 @@ class snow_component( snow_base.snow_component ):
         #---------------------------------------
         M = (self.c0 / np.float64(8.64E7)) * (T_air - self.T0)   #[m/s]
 
+        #-------------------------------------------------
         # This is really an "enforce_min_meltrate()"
-        self.SM = np.maximum(M, np.float64(0))
+        # This will be done in "enforce_max_meltrate()".
+        #-------------------------------------------------
+        ### np.maximum(M, np.float64(0), out=M)
+
+        #------------------------------------------
+        # Here, the "fill" method works whether M
+        # is a 0D array or a scalar.
+        #------------------------------------------
+        # Could use update_var() in BMI_base also
+        #------------------------------------------
+        if (np.size(self.SM) == 1):
+            M = np.float64(M)  # avoid type change
+            self.SM.fill( M )
+        else:
+            self.SM[:] = M
    
         #-------------------------------------------------------
         # Note: enforce_max_meltrate() method is always called
         #       by the base class to make sure that meltrate
-        #       does not exceed the max possible.
+        #       does not exceed the max (or min=0) possible.
         #-------------------------------------------------------
-        #  self.enforce_max_meltrate()
+        # self.enforce_max_meltrate()
         
     #   update_meltrate()
     #-------------------------------------------------------------------

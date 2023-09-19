@@ -13,9 +13,11 @@ See snow_degree_day.py and snow_energy_balance.py.
 #
 #  Copyright (c) 2001-2023, Scott D. Peckham
 #
-#  Aug 2023.  Removed update_swe_integral().
-#             Added update_total_snowpack_water_volume(),
-#               called from finalize().
+#  Sep 2023.  Added update_density_ratio().
+#             Fixed bug in enforce_max_meltrate().
+#  Aug 2023.  Added update_total_snowpack_water_volume(),
+#               called from initialize() and finalize() and
+#               removed update_swe_integral().
 #             More careful to distinguish volumes that are area-time
 #             integrals of fluxes and those that are area integrals.
 #  May 2020.  Added update_swe_integral() and vol_swe.
@@ -57,6 +59,7 @@ See snow_degree_day.py and snow_energy_balance.py.
 #      enforce_max_meltrate()
 #      update_SM_integral()
 #      update_swe()
+#      update_density_ratio()
 #      update_depth()
 #      update_total_snowpack_water_volume()
 #      -----------------------
@@ -245,6 +248,7 @@ class snow_component( BMI_base.BMI_component ):
         # Call update_swe() before update_depth()
         #------------------------------------------
         self.update_swe()
+        self.update_density_ratio()  # 2023-09-11
         self.update_depth()
 
         #----------------------------------------------
@@ -291,8 +295,8 @@ class snow_component( BMI_base.BMI_component ):
         # results more often than they change.
         # Issue a message to this effect if any are smaller ??
         #---------------------------------------------------------
-        self.save_grid_dt   = np.maximum(self.save_grid_dt,   self.dt)
-        self.save_pixels_dt = np.maximum(self.save_pixels_dt, self.dt)
+        np.maximum(self.save_grid_dt,   self.dt, out=self.save_grid_dt)
+        np.maximum(self.save_pixels_dt, self.dt, out=self.save_pixels_dt)
         
     #   set_computed_input_vars()        
     #-------------------------------------------------------------------
@@ -370,12 +374,18 @@ class snow_component( BMI_base.BMI_component ):
         #---------------------------------------------------------------------
         self.vol_SM  = self.initialize_scalar( 0, dtype='float64') # (m3)
         self.vol_swe = self.initialize_scalar( 0, dtype='float64') # (m3)
-        self.vol_swe_start = self.initialize_scalar( 0, dtype='float64') # (m3)
         
+        self.update_total_snowpack_water_volume()
+        self.vol_swe_start = self.vol_swe.copy()
+
         #----------------------------------------------------
         # Compute density ratio for water to snow.
         # rho_H2O is for liquid water close to 0 degrees C.
         # Water is denser than snow, so density_ratio > 1.
+        #----------------------------------------------------
+        # Since rho_snow varies in time when rho_type is
+        # Time Series or Grid Grid Sequence, we now have
+        # an update_density_ratio() function.
         #----------------------------------------------------
         self.density_ratio = (self.rho_H2O / self.rho_snow)
                 
@@ -409,23 +419,49 @@ class snow_component( BMI_base.BMI_component ):
     #   update_meltrate()
     #-------------------------------------------------------------------
     def enforce_max_meltrate(self):
-    
-        #-------------------------------------------------------
+
+        #--------------------------------------------------------
+        # New version to fix bug:  2023-09-12. 
         # The max possible meltrate would be if all snow (given
         # by snow depth, h_snow, were to melt in the one time
         # step, dt.  Meltrate should never exceed this value.
-        #------------------------------------------------------- 
-        density_ratio =  (self.rho_H2O / self.rho_snow)  
-        SM_max = (density_ratio / self.dt) * self.h_snow 
-        self.SM = np.minimum(self.SM, SM_max)  # [m s-1]
+        # Recall that: (h_snow / h_swe) = (rho_H2O / rho_snow)
+        #                               = density_ratio > 1
+        # So h_swe = h_snow / density_ratio.
+        # Previous version had a bug; see below. 
+        # Now also using "out" keyword for "in-place".  
+        #-------------------------------------------------------- 
+        SM_max = self.h_swe / self.dt
+        np.minimum(self.SM, SM_max, out=self.SM)  # [m s-1]
 
         #------------------------------------------------------
         # Make sure meltrate is positive, while we're at it ?
         # Is already done by "Energy-Balance" component.
         #------------------------------------------------------
-        self.SM = np.maximum(self.SM, np.float64(0))
-   
+        np.maximum(self.SM, np.float64(0), out=self.SM)
+                    
     #   enforce_max_meltrate()
+#     #-------------------------------------------------------------------
+#     def enforce_max_meltrate_BUG(self):
+#   
+#         #-------------------------------------------------------
+#         # This version has a bug.  Should have been:
+#         # SM_max = self.h_snow / (density_ratio * self.dt)
+#         # The max possible meltrate would be if all snow (given
+#         # by snow depth, h_snow, were to melt in the one time
+#         # step, dt.  Meltrate should never exceed this value.
+#         #------------------------------------------------------- 
+#         density_ratio = (self.rho_H2O / self.rho_snow)
+#         SM_max = (density_ratio / self.dt) * self.h_snow 
+#         self.SM = np.minimum(self.SM, SM_max)  # [m s-1]
+#         
+#         #------------------------------------------------------
+#         # Make sure meltrate is positive, while we're at it ?
+#         # Is already done by "Energy-Balance" component.
+#         #------------------------------------------------------
+#         self.SM = np.maximum(self.SM, np.float64(0))
+#    
+#     #   enforce_max_meltrate_BUG()
     #-------------------------------------------------------------------
     def update_SM_integral(self):
 
@@ -454,7 +490,9 @@ class snow_component( BMI_base.BMI_component ):
         # If P or T_air is a grid, then h_swe and h_snow are grids.
         # This is set up in initialize_computed_vars().
         #------------------------------------------------------------
-      
+        # All updates to h_swe are done using "in-place" methods.
+        #------------------------------------------------------------
+              
         #------------------------------------------------
         # Increase snow water equivalent due to snowfall
         #------------------------------------------------
@@ -477,9 +515,38 @@ class snow_component( BMI_base.BMI_component ):
         #------------------------------------------------
         dh2_swe    = self.SM * self.dt
         self.h_swe -= dh2_swe
+
+        #------------------------------------------        
+        # This shouldn't be necessary if SM >= 0.
+        #------------------------------------------
         np.maximum(self.h_swe, np.float64(0), self.h_swe)  # (in place)
-        
-    #   update_swe() 
+
+        #-----------------------------------------------      
+        # Set SWE to 0 on edges of grid ? (2023-09-11)
+        #-----------------------------------------------
+        # self.h_swe[ self.edge_IDs ] = 0.0
+          
+    #   update_swe()
+    #-------------------------------------------------------------------
+    def update_density_ratio(self):
+
+        #-----------------------------------------------    
+        # Return if density_ratio is constant in time.
+        #-----------------------------------------------
+        if (self.rho_snow_type.lower() in ['scalar', 'grid']):
+            return
+        density_ratio = self.rho_H2O / self.rho_snow
+
+        #-------------------------------------             
+        # Save updated density ratio in self
+        #-------------------------------------
+        if (np.ndim( self.density_ratio ) == 0):
+            density_ratio = np.float64( density_ratio )  ### (from 0D array to scalar)
+            self.density_ratio.fill( density_ratio )     ### (mutable scalar)
+        else:
+            self.density_ratio[:] = density_ratio
+
+    #   update_density_ratio()
     #-------------------------------------------------------------------
     def update_depth(self):
 
@@ -506,18 +573,19 @@ class snow_component( BMI_base.BMI_component ):
         #      density_ratio > 1 and
         #      h_snow > h_swe
         #------------------------------------------------------------
-
         # See TopoFlow_Rainfall_Inputs.ipynb, GLDAS section for
         #   how to convert mass_flux to volume_flux.
         # Suppose we are given total precip as [kg m-2 s-1] from GLDAS.
         # For precip that falls as rain (liquid):
         #   volume_flux = 3600 * mass_flux  [mm h-1]
-        # For precip that falls as snow (rho_snow = 300 kg m-3)
-        #   volume_flux = 3600 * (1000 / rho_snow) * mass_flux [mm h-1]
-        #   volume_flux = 12000 * mass_flux  [mm h-1]
-        
-        
-        #------------------------------------------        
+        # For precip that falls as snow:
+        #   rho_H2O     = 1000 kg m-3
+        #   rho_snow    = 200  kg m-3 (for example)
+        #   volume_flux = 3600 * (rho_H2O / rho_snow) * mass_flux [mm h-1]
+        #   volume_flux = 18000 * mass_flux  [mm h-1]
+        #------------------------------------------------------------
+
+        #------------------------------------------ 
         # Increase snow depth due to falling snow
         #-------------------------------------------
         # This assumes that update_swe() is called
@@ -532,7 +600,7 @@ class snow_component( BMI_base.BMI_component ):
         # was already removed in update_swe().
         #-------------------------------------------   
 #         dh     = self.SM * (self.density_ratio * self.dt)
-#         h_snow = np.maximum((h_snow - dh), np.float64(0))
+#         np.maximum((h_snow - dh), np.float64(0), out=h_snow)
 
         #--------------
         # For testing
@@ -564,29 +632,17 @@ class snow_component( BMI_base.BMI_component ):
         #--------------------------------------------------------        
         # Note:  This is called from initialize() & finalize().
         #--------------------------------------------------------
-
+  
         #----------------------------------------------------
         # Update total volume of liquid water stored in the
-        # INITIAL snowpack, sum over all grid cells but no
-        # integral over time.  (2023-08-31)
-        #----------------------------------------------------   
-        volume0 = np.float64(self.h0_swe * self.da)  # [m^3]
-        if (np.size(volume0) == 1):
-            vol_swe0 = (volume0 * self.rti.n_pixels)
-        else:
-            vol_swe0 = np.sum(volume0)
-
-        self.vol_swe_start.fill( vol_swe0 )
-        
-        #----------------------------------------------------
-        # Update total volume of liquid water stored in the
-        # CURRENT snowpack, sum over all grid cells but no
+        # current snowpack, sum over all grid cells but no
         # integral over time.  (2023-08-31)
         #----------------------------------------------------   
         volume = np.float64(self.h_swe * self.da)  # [m^3]
         if (np.size(volume) == 1):
             vol_swe = (volume * self.rti.n_pixels)
         else:
+            ## volume[ self.edge_IDs ] = 0.0  # (not needed)
             vol_swe = np.sum(volume)
 
         self.vol_swe.fill( vol_swe )

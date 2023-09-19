@@ -6,6 +6,8 @@
 #  Copyright (c) 2009-2023, Scott D. Peckham
 #
 #  Sep 2023. Improved how read_config_file() handles boolean vars.
+#            Added save_edge_ids(); from d8_base.py/get_edge_ids();
+#            called from read_grid_info().
 #  Nov 2022. Minor changes to support NOAA NextGen.
 #  Oct 2022. Full compliance with BMI v2.1.  Cleaned up.
 #  May 2020. Revamped version of set_directories()
@@ -122,6 +124,7 @@
 #      print_traceback()             # (10/10/10)
 #      -------------------------
 #      read_grid_info()              # read grid info from RTI file
+#      save_edge_ids()               # (9/11/23)
 #      read_path_info()              # (2/12/17)
 #      read_time_info()              # (1/14/20)
 #      read_config_file()            # (5/17/10, 5/9/11)
@@ -1421,7 +1424,46 @@ class BMI_component:
         #------------------------------------------------
         self.da = pixels.get_da( info )
 
+        #-----------------------------------------        
+        # Save the edge IDs to self (2023-09-11)
+        #-----------------------------------------
+        self.save_edge_ids()
+        
     #   read_grid_info()
+    #-------------------------------------------------------------------
+    def save_edge_ids(self):
+
+        #-----------------------------------------------
+        # Note:  Copied from d8_base.py to BMI_base.py
+        #        on 2023-09-11, for mass balance use,
+        #        available to every BMI component.
+        #-----------------------------------------------
+        
+        #------------------------------------------
+        # Get IDs of edge pixels, making sure not
+        # to double-count the corner pixels
+        #------------------------------------------
+        nx    = self.nx
+        ny    = self.ny
+        T_IDs = np.arange(nx, dtype='int32')
+        B_IDs = T_IDs + (ny - 1) * nx
+        L_IDs = (1 + np.arange(ny - 2, dtype='int32')) * nx
+        R_IDs = L_IDs + (nx - 1)
+        edge_IDs = np.concatenate([T_IDs, B_IDs, L_IDs, R_IDs])
+
+        #-------------------------------------------
+        # Save IDs as a tuple of row indices and
+        # calendar indices, "np.where" style
+        #-------------------------------------------        
+        self.edge_IDs = divmod(edge_IDs, nx)   ##  NB! (row, col)
+
+        #------------------------------------------
+        # Save IDs as a 1D array of long-integer,
+        # calendar-style indices
+        #------------------------------------------
+        # self.edge_IDs = edge_IDs
+        
+    #   save_edge_ids()
     #-------------------------------------------------------------------
     def read_path_info(self):
 
@@ -2387,8 +2429,7 @@ class BMI_component:
         return (n == 2)
         
     #   is_grid()
-    #-------------------------------------------------------------------
-
+    #---------------------------------------------------------------------
 
     
     
