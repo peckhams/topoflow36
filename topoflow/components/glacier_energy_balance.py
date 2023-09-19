@@ -78,7 +78,7 @@ class glacier_component( glacier_base.glacier_component ):
         'atmosphere_bottom_air__mass-specific_isobaric_heat_capacity',
         'atmosphere_bottom_air__temperature',
         'atmosphere_water__snowfall_leq-volume_flux',
-        'land_surface__temperature',    # (used to initialize Ecc)
+        'land_surface__temperature',    # (used to initialize Eccs, Ecci)
         'land_surface_net-total-energy__energy_flux',
         'water-liquid__mass-per-volume_density' ]
 
@@ -121,8 +121,12 @@ class glacier_component( glacier_base.glacier_component ):
         'snowpack__z_mean_of_mass-per-volume_density', # rho_snow 
         'snowpack__z_mean_of_mass-specific_isobaric_heat_capacity', # Cp_snow   
         'glacier_ice__domain_time_integral_of_melt_volume_flux', # vol_IM
+        'glacier__initial_domain_integral_of_liquid-equivalent_depth', # vol_iwe_start
+        'glacier__domain_integral_of_liquid-equivalent_depth',         # vol_iwe
+        'glacier__energy-per-area_cold_content',      # Ecci
         'glacier_ice__thickness', # h_ice
         'glacier_ice__initial_thickness', #h0_ice
+        'glacier__initial_liquid_equivalent_depth', # h0_iwe
         'glacier_ice__melt_volume_flux', # IM
         'glacier_ice__mass-per-volume_density', # rho_ice
         'glacier_ice__mass-specific_isobaric_heat_capacity' ] # Cp_ice 
@@ -160,8 +164,12 @@ class glacier_component( glacier_base.glacier_component ):
         'snowpack__z_mean_of_mass-per-volume_density': 'rho_snow',
         'snowpack__z_mean_of_mass-specific_isobaric_heat_capacity': 'Cp_snow',
         'glacier_ice__domain_time_integral_of_melt_volume_flux': 'vol_IM', 
+        'glacier__initial_domain_integral_of_liquid-equivalent_depth': 'vol_iwe_start',
+        'glacier__domain_integral_of_liquid-equivalent_depth': 'vol_iwe',
+        'glacier__energy-per-area_cold_content': 'Ecci',      
         'glacier_ice__thickness': 'h_ice',
         'glacier_ice__initial_thickness': 'h0_ice',
+        'glacier__initial_liquid_equivalent_depth': 'h0_iwe',
         'glacier_ice__melt_volume_flux': 'IM',
         'glacier_ice__mass-per-volume_density': 'rho_ice',
         'glacier_ice__mass-specific_isobaric_heat_capacity': 'Cp_ice' }
@@ -203,8 +211,12 @@ class glacier_component( glacier_base.glacier_component ):
         'snowpack__z_mean_of_mass-per-volume_density': 'kg m-3',
         'snowpack__z_mean_of_mass-specific_isobaric_heat_capacity': 'J kg-1 K-1',
         'glacier_ice__domain_time_integral_of_melt_volume_flux': 'm3', 
+        'glacier__initial_domain_integral_of_liquid-equivalent_depth': 'm3',
+        'glacier__domain_integral_of_liquid-equivalent_depth': 'm3',
+        'glacier__energy-per-area_cold_content': 'J m-2',
         'glacier_ice__thickness': 'm',
         'glacier_ice__initial_thickness': 'm',
+        'glacier__initial_liquid_equivalent_depth': 'm',
         'glacier_ice__melt_volume_flux': 'm s-1',
         'glacier_ice__mass-per-volume_density': 'kg m-3',
         'glacier_ice__mass-specific_isobaric_heat_capacity': 'J kg-1 K-1' 
@@ -431,6 +443,16 @@ class glacier_component( glacier_base.glacier_component ):
         T_snow    = self.T_surf
         del_T     = (self.T0 - T_snow)
         self.Eccs  = (self.rho_snow * self.Cp_snow) * self.h0_snow * del_T
+        # print('Snow Cold Content:')
+        # print(self.Eccs)
+        # print("T_Surf:")
+        # print(self.T_surf)
+        # print('Cp_snow')
+        # print(self.Cp_snow)
+        # print('rho_snow')
+        # print(self.rho_snow)
+        # print('h0_snow')
+        # print(self.h0_snow)
 
         #------------------------------------        
         # Cold content must be nonnegative.
@@ -439,7 +461,11 @@ class glacier_component( glacier_base.glacier_component ):
         #----------------------------------------------
         self.Eccs = np.maximum( self.Eccs, np.float64(0))
         ### np.maximum( self.Ecc, np.float64(0), self.Ecc)  # (in place)
-        
+        # print('Updated Snow Cold Content:')
+        # print(self.Eccs)
+        # print('Max initial Eccs:')
+        # print(np.max(self.Eccs))
+
     #   initialize_snow_cold_content()
     #-------------------------------------------------------------------
     def initialize_ice_cold_content( self ):
@@ -465,7 +491,15 @@ class glacier_component( glacier_base.glacier_component ):
         #--------------------------------------------
         T_ice    = self.T_surf
         del_T     = (self.T0 - T_ice)
-        self.Ecci  = (self.rho_ice * self.Cp_ice) * self.h_active_layer * del_T
+        self.Ecci  = (self.rho_ice * self.Cp_ice) * self.h_active_layer * del_T 
+        # print('Ice Cold Content:')
+        # print(self.Ecci)
+        # print('Cp_ice')
+        # print(self.Cp_ice)
+        # print('rho_ice')
+        # print(self.rho_ice)
+        # print('h0_ice')
+        # print(self.h0_ice)
 
         #------------------------------------        
         # Cold content must be nonnegative.
@@ -474,7 +508,11 @@ class glacier_component( glacier_base.glacier_component ):
         #----------------------------------------------
         self.Ecci = np.maximum( self.Ecci, np.float64(0))
         ### np.maximum( self.Ecci, np.float64(0), self.Ecci)  # (in place)
-        
+        # print('Updated Ice Cold Content:')
+        # print(self.Ecci)
+        # print('Max initial Ecci:')
+        # print(np.max(self.Ecci))
+
     #   initialize_ice_cold_content()
     #-------------------------------------------------------------------
     def update_snow_meltrate(self):
@@ -553,6 +591,7 @@ class glacier_component( glacier_base.glacier_component ):
         E_in  = (self.Q_sum * self.dt)
         E_rem = np.maximum( E_in - self.Eccs, np.float64(0) )
         Qm    = (E_rem / self.dt)  # [W m-2]
+        print(E_in)
         
         #-------------------------------------
         # Convert melt energy to a melt rate
@@ -572,6 +611,8 @@ class glacier_component( glacier_base.glacier_component ):
         # If this is positive, there was no melt so far.
         #--------------------------------------------------
         self.Eccs = np.maximum((self.Eccs - E_in), np.float64(0))
+        # print('Max Eccs:')
+        # print(np.max(self.Eccs))
 
         #-----------------------------------------------------------
         # Note: enforce_max_snow_meltrate() method is always called
@@ -678,6 +719,8 @@ class glacier_component( glacier_base.glacier_component ):
         #--------------------------------------------------
    
         self.Ecci = np.maximum((self.Ecci - E_in), np.float64(0))
+        # print('Max Ecci:')
+        # print(np.max(self.Ecci))
 
         #----------------------------------------------------------
         # Note: enforce_max_ice_meltrate() method is always called
