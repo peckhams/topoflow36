@@ -87,7 +87,9 @@ def get_svo_name_map():
     svo_name_map['hs']  = svo_name_map['h_snow']
     svo_name_map['hi']  = svo_name_map['h_ice']
     svo_name_map['sw']  = svo_name_map['h_swe']
-    svo_name_map['cc']  = svo_name_map['Ecc']
+    svo_name_map['cc']  = svo_name_map['Eccs']
+    svo_name_map['iw']  = svo_name_map['h_iwe']
+    svo_name_map['cci']  = svo_name_map['Ecci']
 
     return svo_name_map
     
@@ -200,6 +202,10 @@ def get_short_name_map():
     'glacier_ice__melt_volume_flux' : 'IM',
     'glacier_ice__thickness' : 'h_ice',
     'glacier_top_surface__elevation' : 'Zi',
+    'glacier__domain_time_integral_of_liquid-equivalent_depth' : 'vol_iwe',
+    'glacier__initial_liquid-equivalent_depth' : 'h0_iwe',
+    'glacier__liquid-equivalent_depth' : 'h_iwe',
+    'glacier__energy-per-area_cold_content': 'Ecci',      
     'land_surface__albedo' : 'albedo',
     'land_surface__aspect_angle' : 'alpha',
     'land_surface__domain_max_of_increment_of_elevation' : 'dz_max',
@@ -262,7 +268,7 @@ def get_short_name_map():
     'snowpack__depth' : 'h_snow',
     'snowpack__domain_time_integral_of_liquid-equivalent_depth' : 'vol_swe',
     'snowpack__domain_time_integral_of_melt_volume_flux' : 'vol_SM',
-    'snowpack__energy-per-area_cold_content' : 'Ecc',
+    'snowpack__energy-per-area_cold_content' : 'Eccs',
     'snowpack__initial_depth' : 'h0_snow',
     'snowpack__initial_liquid-equivalent_depth' : 'h0_swe',
     'snowpack__liquid-equivalent_depth' : 'h_swe',
