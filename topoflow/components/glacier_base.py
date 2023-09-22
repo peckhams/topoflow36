@@ -234,6 +234,9 @@ class glacier_component( BMI_base.BMI_component ):
         self.update_iwe()
         self.update_iwe_integral()
 
+        self.update_density_ratio()
+        # self.update_ice_density_ratio()
+
         self.update_snow_depth()
         self.update_ice_depth()
         #----------------------------------------------
@@ -278,8 +281,8 @@ class glacier_component( BMI_base.BMI_component ):
         # the specified process dt.  There is no point in saving
         # results more often than they change.
         #---------------------------------------------------------
-        self.save_grid_dt   = np.maximum(self.save_grid_dt,   self.dt)
-        self.save_pixels_dt = np.maximum(self.save_pixels_dt, self.dt)
+        np.maximum(self.save_grid_dt,   self.dt, out=self.save_grid_dt)
+        np.maximum(self.save_pixels_dt, self.dt, out=self.save_pixels_dt)
         
     #   set_computed_input_vars()        
     #-------------------------------------------------------------------
@@ -380,11 +383,15 @@ class glacier_component( BMI_base.BMI_component ):
         # vol_iwe is to track volume of water in the ice column.
         self.vol_SM  = self.initialize_scalar( 0, dtype='float64') # (m3)
         self.vol_swe = self.initialize_scalar( 0, dtype='float64') # (m3)
-        self.vol_swe_start = self.initialize_scalar( 0, dtype='float64')
-        self.vol_IM  = self.initialize_scalar( 0, dtype='float64')
-        self.vol_iwe = self.initialize_scalar( 0, dtype='float64') # (m3)
-        self.vol_iwe_start = self.initialize_scalar( 0, dtype='float64') # (m3)
 
+        self.update_total_snowpack_water_volume()
+        self.vol_swe_start = self.vol_swe.copy()
+        
+        self.vol_IM  = self.initialize_scalar( 0, dtype='float64') # (m3)
+        self.vol_iwe = self.initialize_scalar( 0, dtype='float64') # (m3)
+
+        self.update_total_ice_water_volume()
+        self.vol_iwe_start = self.vol_iwe.copy()
         #----------------------------------------------------
         # Compute density ratio for water to snow.
         # rho_H2O is for liquid water close to 0 degrees C.
@@ -432,16 +439,20 @@ class glacier_component( BMI_base.BMI_component ):
         # The max possible meltrate would be if all snow (given
         # by snow depth, h_snow, were to melt in the one time
         # step, dt.  Meltrate should never exceed this value.
+        # Recall that: (h_snow / h_swe) = (rho_H2O / rho_snow)
+        #                               = density_ratio > 1
+        # So h_swe = h_snow / density_ratio.
+        # Previous version had a bug; see below. 
+        # Now also using "out" keyword for "in-place".  
         #------------------------------------------------------- 
-        ws_density_ratio =  (self.rho_H2O / self.rho_snow)  
-        SM_max = (ws_density_ratio / self.dt) * self.h_snow 
-        self.SM = np.minimum(self.SM, SM_max)  # [m s-1]
+        SM_max = self.h_swe / self.dt
+        self.SM = np.minimum(self.SM, SM_max, out=self.SM)  # [m s-1]
 
         #------------------------------------------------------
         # Make sure meltrate is positive, while we're at it ?
         # Is already done by "Energy-Balance" component.
         #------------------------------------------------------
-        self.SM = np.maximum(self.SM, np.float64(0))
+        np.maximum(self.SM, np.float64(0), out=self.SM)
    
     #   enforce_max_snow_meltrate()
     #-------------------------------------------------------------------
@@ -452,15 +463,14 @@ class glacier_component( BMI_base.BMI_component ):
         # by ice depth, h_ice, were to melt in the one time
         # step, dt.  Meltrate should never exceed this value.
         #------------------------------------------------------- 
-        wi_density_ratio = (self.rho_H2O / self.rho_ice)
-        IM_max = (wi_density_ratio / self.dt) * self.h_ice
-        self.IM = np.minimum(self.IM, IM_max)
+        IM_max = self.h_iwe / self.dt
+        self.IM = np.minimum(self.IM, IM_max, out=self.IM)  # [m s-1]
 
         #------------------------------------------------------
         # Make sure meltrate is positive, while we're at it ?
         # Is already done by "Energy-Balance" component.
         #------------------------------------------------------
-        self.IM = np.maximum(self.IM, np.float64(0))
+        np.maximum(self.IM, np.float64(0), out=self.IM)
 
     #   enforce_max_ice_meltrate()
     #-------------------------------------------------------------------
@@ -558,6 +568,26 @@ class glacier_component( BMI_base.BMI_component ):
         # print(self.h_iwe)
     #   update_iwe()
     #-------------------------------------------------------------------
+    def update_density_ratio(self):
+
+        #-----------------------------------------------    
+        # Return if density_ratio is constant in time.
+        #-----------------------------------------------
+        if (self.rho_snow_type.lower() in ['scalar', 'grid']):
+            return
+        density_ratio = self.rho_H2O / self.rho_snow
+
+        #-------------------------------------             
+        # Save updated density ratio in self
+        #-------------------------------------
+        if (np.ndim( self.density_ratio ) == 0):
+            density_ratio = np.float64( density_ratio )  ### (from 0D array to scalar)
+            self.density_ratio.fill( density_ratio )     ### (mutable scalar)
+        else:
+            self.density_ratio[:] = density_ratio
+
+    #   update_density_ratio()
+    #-------------------------------------------------------------------
     def update_swe_integral(self):
 
         #------------------------------------------------
@@ -651,7 +681,61 @@ class glacier_component( BMI_base.BMI_component ):
             self.h_ice[:] = h_ice
         
     #   update_ice_depth() 
-    #-------------------------------------------------------------------  
+    #------------------------------------------------------------------- 
+    def update_total_snowpack_water_volume(self):
+
+        #--------------------------------------------------------   
+        # Note:  Compute the total volume of water stored
+        #        in the snowpack for all grid cells in the DEM.
+        #        Use this in the final mass balance reporting.
+        #        (2023-08-31)
+        #--------------------------------------------------------        
+        # Note:  This is called from initialize() & finalize().
+        #--------------------------------------------------------
+  
+        #----------------------------------------------------
+        # Update total volume of liquid water stored in the
+        # current snowpack, sum over all grid cells but no
+        # integral over time.  (2023-08-31)
+        #----------------------------------------------------   
+        volume = np.float64(self.h_swe * self.da)  # [m^3]
+        if (np.size(volume) == 1):
+            vol_swe = (volume * self.rti.n_pixels)
+        else:
+            ## volume[ self.edge_IDs ] = 0.0  # (not needed)
+            vol_swe = np.sum(volume)
+
+        self.vol_swe.fill( vol_swe )
+    
+    #   update_total_snowpack_water_volume() 
+    #-------------------------------------------------------------------   
+    def update_total_ice_water_volume(self):
+
+        #--------------------------------------------------------   
+        # Note:  Compute the total volume of water stored
+        #        in the ice for all grid cells in the DEM.
+        #        Use this in the final mass balance reporting.
+        #        (2023-08-31)
+        #--------------------------------------------------------        
+        # Note:  This is called from initialize() & finalize().
+        #--------------------------------------------------------
+  
+        #----------------------------------------------------
+        # Update total volume of liquid water stored in the
+        # current ice, sum over all grid cells but no
+        # integral over time.  (2023-08-31)
+        #----------------------------------------------------   
+        volume = np.float64(self.h_iwe * self.da)  # [m^3]
+        if (np.size(volume) == 1):
+            vol_iwe = (volume * self.rti.n_pixels)
+        else:
+            ## volume[ self.edge_IDs ] = 0.0  # (not needed)
+            vol_iwe = np.sum(volume)
+
+        self.vol_iwe.fill( vol_iwe )
+    
+    #   update_total_snowpack_water_volume() 
+    #-------------------------------------------------------------------   
     def open_input_files(self):
 
         #------------------------------------------------------

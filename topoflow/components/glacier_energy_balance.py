@@ -7,6 +7,7 @@ functions.  It inherits from the glacier "base class" in
 #
 #  Copyright (c) 2001-2023, Scott D. Peckham
 #
+#  Sep 2023. Checked sign in initialize_cold_content().
 #  Aug 2023.  Removed trailing space in 'J kg-1 K-1 '.
 #             Added missing "vol_swe" in initialize_computed_vars.
 #
@@ -439,6 +440,7 @@ class glacier_component( glacier_base.glacier_component ):
 
         #--------------------------------------------
         # Compute initial cold content of snowpack
+        # See equation (10) in Zhang et al. (2000).
         #--------------------------------------------
         T_snow    = self.T_surf
         del_T     = (self.T0 - T_snow)
@@ -459,8 +461,7 @@ class glacier_component( glacier_base.glacier_component ):
         #----------------------------------------------
         # Eccs > 0 if (T_snow < T0).  i.e. T_snow < 0.
         #----------------------------------------------
-        self.Eccs = np.maximum( self.Eccs, np.float64(0))
-        ### np.maximum( self.Ecc, np.float64(0), self.Ecc)  # (in place)
+        np.maximum( self.Eccs, np.float64(0), out=self.Eccs)  # (in place)
         # print('Updated Snow Cold Content:')
         # print(self.Eccs)
         # print('Max initial Eccs:')
@@ -506,8 +507,7 @@ class glacier_component( glacier_base.glacier_component ):
         #----------------------------------------------
         # Ecci > 0 if (T_ice < T0).  i.e. T_ice < 0.
         #----------------------------------------------
-        self.Ecci = np.maximum( self.Ecci, np.float64(0))
-        ### np.maximum( self.Ecci, np.float64(0), self.Ecci)  # (in place)
+        np.maximum( self.Ecci, np.float64(0), out=self.Ecci)  # (in place)
         # print('Updated Ice Cold Content:')
         # print(self.Ecci)
         # print('Max initial Ecci:')
@@ -591,7 +591,8 @@ class glacier_component( glacier_base.glacier_component ):
         E_in  = (self.Q_sum * self.dt)
         E_rem = np.maximum( E_in - self.Eccs, np.float64(0) )
         Qm    = (E_rem / self.dt)  # [W m-2]
-        print(E_in)
+        # print('E_in:')
+        # print(E_in[17,29])
         
         #-------------------------------------
         # Convert melt energy to a melt rate
@@ -604,22 +605,44 @@ class glacier_component( glacier_base.glacier_component ):
         # Lf    = 334000d     ;[J/kg = W*s/kg]
         #------------------------------------------
         M       = (Qm / (self.rho_H2O * self.Lf))   #[m/s]
-        self.SM = np.maximum(M, np.float64(0))
 
+        #------------------------------------------------        
+        # enforce_max_meltrate() is always called after
+        # update_meltrate() and also enforces min=0
+        #------------------------------------------------
+        ### np.maximum(M, np.float64(0), M)
+
+        #------------------------------------------
+        # Here, the "fill" method works whether M
+        # is a 0D array or a scalar.
+        #------------------------------------------
+        # Could use update_var() in BMI_base also
+        #------------------------------------------
+        if (np.size(self.SM) == 1):
+            M = np.float64(M)  # avoid type change
+            self.SM.fill( M )
+        else:
+            self.SM[:] = M
         #--------------------------------------------------
         # Update the cold content of the snowpack [J m-2]
         # If this is positive, there was no melt so far.
         #--------------------------------------------------
-        self.Eccs = np.maximum((self.Eccs - E_in), np.float64(0))
+        ## self.Eccs = np.maximum((self.Eccs - E_in), np.float64(0))
+        Eccs = np.maximum((self.Eccs - E_in), np.float64(0))
+        if (np.size(self.Eccs) == 1):
+            Eccs = np.float64(Eccs)  # avoid type change
+            self.Eccs.fill( Eccs )
+        else:
+            self.Eccs[:] = Eccs
         # print('Max Eccs:')
         # print(np.max(self.Eccs))
 
         #-----------------------------------------------------------
         # Note: enforce_max_snow_meltrate() method is always called
-        #       by the base class to make sure that meltrate
-        #       does not exceed the max possible.
+        #       by update() in the base class to make sure that
+        #       meltrate does not exceed the max possible.
         #-----------------------------------------------------------
-        #  self.enforce_max_meltrate()
+        #  self.enforce_max_snow_meltrate()
 
     #   update_snow_meltrate()
     #---------------------------------------------------------------------
@@ -711,22 +734,42 @@ class glacier_component( glacier_base.glacier_component ):
         # Lf    = 334000d     ;[J/kg = W*s/kg]
         #------------------------------------------
         M       = (Qm / (self.rho_H2O * self.Lf))   #[m/s]
-        self.IM = np.maximum(M, np.float64(0))
 
+        #------------------------------------------------        
+        # enforce_max_ice_meltrate() is always called after
+        # update_ice_meltrate() and also enforces min=0
+        #------------------------------------------------
+        ### np.maximum(M, np.float64(0), M)
+
+        #------------------------------------------
+        # Here, the "fill" method works whether M
+        # is a 0D array or a scalar.
+        #------------------------------------------
+        # Could use update_var() in BMI_base also
+        #------------------------------------------
+        if (np.size(self.IM) == 1):
+            M = np.float64(M)  # avoid type change
+            self.IM.fill( M )
+        else:
+            self.IM[:] = M
         #--------------------------------------------------
         # Update the cold content of the ice [J m-2]
         # If this is positive, there was no melt so far.
         #--------------------------------------------------
-   
-        self.Ecci = np.maximum((self.Ecci - E_in), np.float64(0))
-        # print('Max Ecci:')
-        # print(np.max(self.Ecci))
+        ## self.Ecci = np.maximum((self.Ecci - E_in), np.float64(0))
+        Ecci = np.maximum((self.Ecci - E_in), np.float64(0))
+        if (np.size(self.Ecci) == 1):
+            Ecci = np.float64(Ecci)  # avoid type change
+            self.Ecci.fill( Ecci )
+        else:
+            self.Ecci[:] = Ecci
 
-        #----------------------------------------------------------
+        # print(self.Ecci[17,29])
+        #-----------------------------------------------------------
         # Note: enforce_max_ice_meltrate() method is always called
-        #       by the base class to make sure that meltrate
-        #       does not exceed the max possible.
-        #----------------------------------------------------------
+        #       by update() in the base class to make sure that
+        #       meltrate does not exceed the max possible.
+        #-----------------------------------------------------------
         #  self.enforce_max_ice_meltrate()
             
     #   update_ice_meltrate()
@@ -767,10 +810,6 @@ class glacier_component( glacier_base.glacier_component ):
         Cp_snow = model_input.read_next(self.Cp_snow_unit, self.Cp_snow_type, rti)
         if (Cp_snow is not None):
             self.update_var( 'Cp_snow', Cp_snow )
-        
-        rho_snow = model_input.read_next(self.rho_snow_unit, self.rho_snow_type, rti)
-        if (rho_snow is not None):
-            self.update_var( 'rho_snow', rho_snow )
 
         T0 = model_input.read_next(self.T0_unit, self.T0_type, rti)
         if (T0 is not None):
@@ -779,6 +818,10 @@ class glacier_component( glacier_base.glacier_component ):
         h0_snow = model_input.read_next(self.h0_snow_unit, self.h0_snow_type, rti)
         if (h0_snow is not None):
             self.update_var( 'h0_snow', h0_snow )
+
+        rho_snow = model_input.read_next(self.rho_snow_unit, self.rho_snow_type, rti)
+        if (rho_snow is not None):
+            self.update_var( 'rho_snow', rho_snow )
         
         h0_swe = model_input.read_next(self.h0_swe_unit, self.h0_swe_type, rti)
         if (h0_swe is not None):
@@ -787,15 +830,15 @@ class glacier_component( glacier_base.glacier_component ):
         Cp_ice = model_input.read_next(self.Cp_ice_unit, self.Cp_ice_type, rti)
         if (Cp_ice is not None):
             self.update_var( 'Cp_ice', Cp_ice)
-
-        rho_ice = model_input.read_next(self.rho_ice_unit, self.rho_ice_type, rti)
-        if (rho_ice is not None):
-            self.update_var( 'rho_ice', rho_ice)
         
         h0_ice = model_input.read_next(self.h0_ice, self.h0_ice_type, rti)
         if (h0_ice is not None):
             self.update_var( 'h0_ice', h0_ice)
 
+        rho_ice = model_input.read_next(self.rho_ice_unit, self.rho_ice_type, rti)
+        if (rho_ice is not None):
+            self.update_var( 'rho_ice', rho_ice)
+            
         h0_iwe = model_input.read_next(self.h0_iwe_unit, self.h0_iwe_type, rti)
         if (h0_iwe is not None):
             self.update_var( 'h0_iwe', h0_iwe )
