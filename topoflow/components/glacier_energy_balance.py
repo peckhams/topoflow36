@@ -747,11 +747,12 @@ class glacier_component( glacier_base.glacier_component ):
         #------------------------------------------
         # Could use update_var() in BMI_base also
         #------------------------------------------
-        if (np.size(self.IM) == 1):
-            M = np.float64(M)  # avoid type change
-            self.IM.fill( M )
-        else:
-            self.IM[:] = M
+        IM = np.maximum(M, np.float64(0))
+        self.IM = np.where((self.h_swe == 0) & (self.previous_swe == 0), IM, np.float64(0))
+        # print('Current SWE:')
+        # print(self.h_swe)
+        # print('Previous SWE:')
+        # print(self.previous_swe)
         #--------------------------------------------------
         # Update the cold content of the ice [J m-2]
         # If this is positive, there was no melt so far.
