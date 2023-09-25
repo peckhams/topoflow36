@@ -3,10 +3,10 @@
 
 # Copyright (c) 2023, Scott D. Peckham
 #
-# May 2023. Wrote create_tsv, get_alternate_name,
-#           get_watershed_notes.
 # Jul 2023. Added: get_basin_repo_dir, get_ars_data_dir,
 #           get_ars_basin_states, get_ars_url.
+# May 2023. Wrote create_tsv, get_alternate_name,
+#           get_watershed_notes.
 #
 #---------------------------------------------------------------------
 #
