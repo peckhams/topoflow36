@@ -8,6 +8,10 @@ functions.  It inherits from the snowmelt "base class" in
 #  Copyright (c) 2001-2023, Scott D. Peckham
 #
 #  Sep 2023.  Checked sign in initialize_cold_content().
+#             Separate function: update_cold_content().
+#             Moved initialize_cold_content() back to base class.
+#             Renamed T0 to avoid conflict w/ degree-day method.
+#             Removed separate version of initialize_computed_vars().
 #  Aug 2023.  Removed trailing space in 'J kg-1 K-1 '.
 #             Added "vol_swe_start".
 #             Added missing "vol_swe" in initialize_computed_vars.
@@ -39,9 +43,8 @@ functions.  It inherits from the snowmelt "base class" in
 #      ----------------------
 #      check_input_types()
 #      initialize_input_file_vars()   # (7/3/20)
-#      initialize_cold_content()   # (9/13/14, from snow_base.py)
-#      initialize_computed_vars()  # (9/13/14, from snow_base.py)
 #      update_meltrate()
+#      update_cold_content()
 #      ----------------------
 #      open_input_files()
 #      read_input_files()
@@ -323,107 +326,6 @@ class snow_component( snow_base.snow_component ):
     
     #   initialize_input_file_vars()
     #-------------------------------------------------------------------
-    def initialize_computed_vars(self):
-
-        #----------------------------------------------
-        # NOTE:  This function overrides the version
-        #        that is inherited from snow_base.py.
-        #----------------------------------------------
-        
-        #------------------------------------------
-        # If T_air or precip are grids, then make
-        # sure that h_snow and h_swe are grids
-        #------------------------------------------
-        T_IS_GRID = self.is_grid('T_air')
-        P_IS_GRID = self.is_grid('P_snow')
-        H0_SNOW_IS_SCALAR = self.is_scalar('h0_snow')
-        H0_SWE_IS_SCALAR  = self.is_scalar('h0_swe') 
-
-        #------------------------------------------------------
-        # If h0_snow or h0_swe are scalars, the use of copy()
-        # here requires they were converted to numpy scalars.
-        # Using copy() may not be necessary for scalars.
-        #------------------------------------------------------
-        h_snow = self.h0_snow.copy()    # [meters]
-        h_swe  = self.h0_swe.copy()     # [meters]
-
-        #------------------------------------------------------       
-        # For the Energy Balance method, SM, h_snow and h_swe
-        # are always grids because Q_sum is always a grid.
-        #--------------------------------------------------------------
-        # Convert both h_snow and h_swe to grids if not already grids
-        #--------------------------------------------------------------
-        if (H0_SNOW_IS_SCALAR):
-            self.h_snow = h_snow + np.zeros([self.ny, self.nx], dtype='float64')
-        else:
-            self.h_snow = h_snow  # (is already a grid)
-        if (H0_SWE_IS_SCALAR):
-            self.h_swe = h_swe + np.zeros([self.ny, self.nx], dtype='float64')
-        else:
-            self.h_swe = h_swe    # (is already a grid)          
-
-        self.SM      = np.zeros([self.ny, self.nx], dtype='float64')
-        # This is a area-time integral over all cells in DEM.
-        self.vol_SM  = self.initialize_scalar( 0, dtype='float64') # (m3)
-        #--------------------------------------------------
-        # 2023-08-28.  Added next line to fix bug.
-        # This is an area integral over all cells in DEM.
-        #--------------------------------------------------
-        self.vol_swe = self.initialize_scalar( 0, dtype='float64') # (m3)
-        self.vol_swe_start = self.initialize_scalar( 0, dtype='float64') # (m3)
-        
-        #----------------------------------------------------
-        # Compute density ratio for water to snow.
-        # rho_H2O is for liquid water close to 0 degrees C.
-        # Water is denser than snow, so density_ratio > 1.
-        #----------------------------------------------------
-        self.density_ratio = (self.rho_H2O / self.rho_snow)
-                                                       
-        #----------------------------------------------------
-        # Initialize the cold content of snowpack (2/21/07)
-        #-------------------------------------------------------------
-        # This is the only difference from initialize_computed_vars()
-        # method in snow_base.py.
-        #-------------------------------------------------------------
-        self.initialize_cold_content()
-        
-    #   initialize_computed_vars()
-    #---------------------------------------------------------------------
-    def initialize_cold_content( self ):
-
-        #----------------------------------------------------------------
-        # NOTES: This function is used to initialize the cold content
-        #        of a snowpack.
-        #        The cold content has units of [J m-2] (_NOT_ [W m-2]).
-        #        It is an energy (per unit area) threshold (or deficit)
-        #        that must be overcome before melting of snow can occur.
-        #        Cold content changes over time as the snowpack warms or
-        #        cools, but must always be non-negative.
-        #
-        #        K_snow is between 0.063 and 0.71  [W m-1 K-1]
-        #        All of the Q's have units of W m-2 = J s-1 m-2).
-        #
-        #        T0 is read from the config file.  This is a different
-        #        T0 from the one used by the Degree-Day method.
-        #---------------------------------------------------------------
-
-        #--------------------------------------------
-        # Compute initial cold content of snowpack
-        # See equation (10) in Zhang et al. (2000).
-        #--------------------------------------------
-        T_snow    = self.T_surf
-        del_T     = (self.T0 - T_snow)
-        self.Ecc  = (self.rho_snow * self.Cp_snow) * self.h0_snow * del_T
-
-        #------------------------------------        
-        # Cold content must be nonnegative.
-        #----------------------------------------------
-        # Ecc > 0 if (T_snow < T0).  i.e. T_snow < 0.
-        #----------------------------------------------
-        np.maximum( self.Ecc, np.float64(0), out=self.Ecc)  # (in place)
-        
-    #   initialize_cold_content()
-    #-------------------------------------------------------------------
     def update_meltrate(self):
 
         #------------------------------------------------------------
@@ -503,7 +405,7 @@ class snow_component( snow_base.snow_component ):
         E_in  = (self.Q_sum * self.dt)  # [J m-2]
         E_rem = np.maximum( E_in - self.Ecc, np.float64(0) )
         Qm    = (E_rem / self.dt)  # [W m-2]
-        
+       
         ##################################
         # Used before 9/14/14/.
         ##################################        
@@ -543,21 +445,7 @@ class snow_component( snow_base.snow_component ):
             self.SM.fill( M )
         else:
             self.SM[:] = M
-            
-        #--------------------------------------------------
-        # Update the cold content of the snowpack [J m-2]
-        # If this is positive, there was no melt so far.
-        #--------------------------------------------------
-        # (9/13/14) Bug fix: Ecc wasn't stored into self.
-        #--------------------------------------------------        
-        ## self.Ecc = np.maximum((self.Ecc - E_in), np.float64(0))
-        Ecc = np.maximum((self.Ecc - E_in), np.float64(0))
-        if (np.size(self.Ecc) == 1):
-            Ecc = np.float64(Ecc)  # avoid type change
-            self.Ecc.fill( Ecc )
-        else:
-            self.Ecc[:] = Ecc
-            
+
         #--------------------------------------------------------
         # Note: enforce_max_meltrate() method is always called
         #       by update() in the base class to make sure that
@@ -566,6 +454,29 @@ class snow_component( snow_base.snow_component ):
         # self.enforce_max_meltrate()
             
     #   update_meltrate()
+    #-------------------------------------------------------------------
+    def update_cold_content(self):
+
+        #--------------------------------------------------
+        # Update the cold content of the snowpack [J m-2]
+        # If this is positive, there was no melt so far.
+        #--------------------------------------------------
+        # (9/13/14) Bug fix: Ecc wasn't stored into self.
+        #-----------------------------------------------------
+        # Recall that Ecc was initialized as:
+        #    Ecc  = (rho_snow * Cp_snow) * h0_snow * del_T
+        # Why doesn't Ecc still depend on h0_snow and del_T?
+        #-----------------------------------------------------        
+        ## self.Ecc = np.maximum((self.Ecc - E_in), np.float64(0))
+        E_in = (self.Q_sum * self.dt)  # [J m-2]
+        Ecc  = np.maximum((self.Ecc - E_in), np.float64(0))
+        if (np.size(self.Ecc) == 1):
+            Ecc = np.float64(Ecc)  # avoid type change
+            self.Ecc.fill( Ecc )
+        else:
+            self.Ecc[:] = Ecc
+
+    #   update_cold_content()
     #---------------------------------------------------------------------
     def open_input_files(self):
 
@@ -619,188 +530,7 @@ class snow_component( snow_base.snow_component ):
         if (self.T0_type       != 'Scalar'): self.T0_unit.close()
         if (self.h0_snow_type  != 'Scalar'): self.h0_snow_unit.close()
         if (self.h0_swe_type   != 'Scalar'): self.h0_swe_unit.close()
-            
-##        if (self.T0_file       != ''): self.T0_unit.close()
-##        if (self.rho_snow_file != ''): self.rho_snow_unit.close()
-##        if (self.h0_snow_file  != ''): self.h0_snow_unit.close()
-##        if (self.h0_swe_file   != ''): self.h0_swe_unit.close()
 
     #   close_input_files()    
-    #-------------------------------------------------------------------    
-#-------------------------------------------------------------------------  
-###-------------------------------------------------------------------------
-##def Energy_Balance_Meltrate(Qn_SW, Qn_LW, T_air, T_surf, RH, p0, \
-##                            uz, z, z0_air, rho_air, Cp_air, Ecc, \
-##                            h_snow, rho_snow, Cp_snow, dt, \
-##                            e_air, e_surf):  #(returned)
-##
-##    #-----------------------------------------------------------------
-##    # Notes: 3/13/07.  This function used to have vapor pressure
-##    #        arguments e_air and e_surf.  However, e_air is always
-##    #        computed as a function of T_air and RH and e_surf is
-##    #        computed as a function of T_surf (saturated vap. press.)
-##    #        So it makes sense to remove these two arguments and add
-##    #        RH (relative humidity).  This change only affects the
-##    #        Latent_Heat_Flux function call, which calls a new
-##    #        function called Vapor_Pressure.
-##    #-----------------------------------------------------------------
-##    #        Qm    = energy used to melt snowpack (if > 0)
-##    #        Qn_SW = net shortwave radiation flux (solar)
-##    #        Qn_LW = net longwave radiation flux (air, surface)
-##    #        Qh    = sensible heat flux from turbulent convection
-##    #                between snow surface and air
-##    #        Qe    = latent heat flux from evaporation, sublimation,
-##    #                and condensation
-##    #        Qa    = energy advected by moving water (i.e. rainfall)
-##    #                (ARHYTHM assumes this to be negligible; Qa=0.)
-##    #        Qc    = energy flux via conduction from snow to soil
-##    #                (ARHYTHM assumes this to be negligible; Qc=0.)
-##    #        Ecc   = cold content of snowpack = amount of energy
-##    #                needed before snow can begin to melt [J/m^2]
-##
-##    #        All Q's here have units of [W/m^2].
-##    #        Are they all treated as positive quantities ?
-##
-##    #        rho_air  = density of air [kg/m^3]
-##    #        rho_snow = density of snow [kg/m^3]
-##    #        Cp_air   = specific heat of air [Jkg-1 K-1]
-##    #        Cp_snow  = heat capacity of snow [Jkg-1 K-1]
-##    #                 = ???????? = specific heat of snow
-##    #        Kh       = eddy diffusivity for heat [m^2/s]
-##    #        Ke       = eddy diffusivity for water vapor [m^2/s]
-##    #        Lv       = latent heat of vaporization [J/kg]
-##    #        Lf       = latent heat of fusion [J/kg]
-##    #        ------------------------------------------------------
-##    #        Dn       = bulk exchange coeff for the conditions of
-##    #                   neutral atmospheric stability [m/s]
-##    #        Dh       = bulk exchange coeff for heat
-##    #        De       = bulk exchange coeff for vapor
-##    #        ------------------------------------------------------
-##    #        T_air    = air temperature [deg_C]
-##    #        T_surf   = surface temperature [deg_C]
-##    #        T_snow   = average snow temperature [deg_C]
-##    #        RH       = relative humidity [none] (in [0,1])
-##    #        e_air    = air vapor pressure at height z [mbar]
-##    #        e_surf   = surface vapor pressure [mbar]
-##    #        ------------------------------------------------------
-##    #        h_snow   = snow depth [m]
-##    #        z        = height where wind speed is uz [m]
-##    #        uz       = wind speed at height z [m/s]
-##    #        P0       = atmospheric pressure [mbar]
-##    #        T0       = snow temperature when isothermal [deg_C]
-##    #                   (This is usually 0.)
-##    #        z0_air   = surface roughness length scale [m]
-##    #                   (includes vegetation not covered by snow)
-##    #                   (Values from page 1033: 0.0013, 0.02 [m])
-##    #        kappa    = von Karman's constant [unitless] = 0.41
-##    #        dt       = snowmelt timestep [seconds]
-##    #----------------------------------------------------------------
-##   
-##    # FORWARD_FUNCTION Richardson_Number
-##    
-##    #---------------------------------
-##    #Some required physical constants
-##    #are defined in the functions:
-##    #e.g. Lv, Lf
-##    #---------------------------------
-##    
-##    #------------------------------
-##    #Compute the Richardson number
-##    #------------------------------
-##    Ri = Richardson_Number(z, uz, T_air, T_surf)
-##    
-##    #-------------------------------------------------
-##    #Compute bulk exchange coeffs (neutral stability)
-##    #-------------------------------------------------
-##    Dn = Bulk_Exchange_Coeff(uz, z, h_snow, z0_air, T_air, T_surf)
-##    Dh = Dn
-##    De = Dn
-##    
-##    #---------------------------
-##    #Compute sensible heat flux
-##    #---------------------------
-##    Qh = Sensible_Heat_Flux(rho_air, Cp_air, Dh, T_air, T_surf)
-##    #Formula:  Qh = rho_air * Cp_air * Dh * (T_air - T_surf)
-##    #print,'Dh = ', Dh
-##    #print,'Qh = ', Qh
-##    
-##    #-------------------------
-##    #Compute latent heat flux
-##    #-------------------------
-##    Qe = Latent_Heat_Flux(rho_air, De, T_air, T_surf, RH, p0,
-##                          e_air, e_surf)  #(these 2 returned)
-##    #Formula:  Qe = rho_air * Lv * De * (0.662/p0) * (e_air - e_surf)
-##    
-##    #print,'Qe = ', Qe
-##    
-##    #-----------------------------
-##    #Compute conduction heat flux
-##    #-----------------------------
-##    Qc = Conduction_Heat_Flux()
-##    #Formula:  Qc = 0d
-##    
-##    #-----------------------------
-##    #Compute advective heat flux
-##    #-----------------------------
-##    Qa = Advection_Heat_Flux()
-##    #Formula:  Qa = 0d
-##    
-##    #---------------------------------
-##    #Qn_SW, Qn_SW & Ecc are pointers,
-##    #others are local variables
-##    #----------------------------------------------------
-##    #Ecc is initialized with the Initial_Cold_Content
-##    #function by Initialize_Snow_Vars function (2/21/07)
-##    #----------------------------------------------------
-##    #The following pseudocode only works for scalars but
-##    #is otherwise equivalent to that given below and
-##    #clarifies the logic:
-##    #----------------------------------------------------
-##    #  if (Q_sum gt 0) then begin
-##    #      if ((Q_sum * dt) gt Ecc) then begin
-##    #          ;-----------------------------------------
-##    #          ;Snow is melting.  Use some of Q_sum to
-##    #          ;overcome Ecc, and remainder to melt snow
-##    #          ;-----------------------------------------
-##    #          Qm  = Q_sum - (Ecc/dt)
-##    #          Ecc = 0
-##    #          M   = (Qm / (rho_w * Lf))
-##    #      endif else begin
-##    #          ;----------------------------
-##    #          ;Snow is warming; reduce Ecc
-##    #          ;----------------------------
-##    #          Ecc = (Ecc - (Q_sum * dt))
-##    #          M   = 0d
-##    #      endelse
-##    #  endif else begin
-##    #      ;------------------------------
-##    #      ;Snow is cooling; increase Ecc
-##    #      ;------------------------------
-##    #      Ecc = Ecc - (Q_sum * dt)
-##    #      M   = 0d
-##    #  endelse
-##    #-------------------------------------------------------
-##    Q_sum = Qn_SW + Qn_LW + Qh + Qe + Qa + Qc    #[W/m^2]
-##    Qcc  = (Ecc / dt)                            #[W/m^2]
-##    Qm   = maximum((Q_sum - Qcc), float64(0))                      #[W/m^2]
-##    Ecc  = maximum((Ecc - (Q_sum * dt)), float64(0))              #[J/m^2]
-##    #print,'Qm = ', Qm
-##    #print,' '
-##    
-##    #-----------------------------------
-##    #Convert melt energy to a melt rate
-##    #----------------------------------------
-##    #Lf = latent heat of fusion [J/kg]
-##    #Lv = latent heat of vaporization [J/kg]
-##    #M  = (Qm/ (rho_w * Lf))
-##    #----------------------------------------
-##    #rho_w = 1000d       ;[kg/m^3]
-##    #Lf    = 334000d     ;[J/kg = W*s/kg]
-##    #So (rho_w * Lf) = 3.34e+8  [J/m^3]
-##    #-------------------------------------
-##    M = (Qm / float32(3.34E+8))   #[m/s]
-##    
-##    return maximum(M, float32(0.0))
-##
-###   Energy_Balance_Meltrate
-###-------------------------------------------------------------------------
+    #-------------------------------------------------------------------  
+
