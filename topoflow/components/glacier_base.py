@@ -217,22 +217,23 @@ class glacier_component( BMI_base.BMI_component ):
         #-------------------------
         # Update computed values 
         #-------------------------
+        self.extract_previous_swe()
         self.update_snow_meltrate()       # (meltrate = SM)
         self.enforce_max_snow_meltrate()  # (before SM integral!)
         self.update_SM_integral()
 
-        self.update_ice_meltrate()
-        self.enforce_max_ice_meltrate()
-        self.update_IM_integral()
         #----------------------------------------------------------
         # Call update_swe/iwe() and before update_snow/ice_depth()
-        #----------------------------------------------------------
-        self.extract_previous_swe()
+        #----------------------------------------------------------   
         self.update_swe()
         self.update_swe_integral() 
 
-        self.update_iwe()
-        self.update_iwe_integral()
+        self.update_ice_meltrate()
+        self.enforce_max_ice_meltrate()
+        self.update_IM_integral()
+
+        self.update_iwe() # relies on previous timestep's swe value
+        self.update_iwe_integral() # relies on previous timestep's iwe value   
 
         self.update_density_ratio()
         # self.update_ice_density_ratio()
