@@ -1,25 +1,29 @@
 #
 # Copyright (c) 2023, Scott D. Peckham
 #
+# Jul 2023. Modified to use newer shape_utils.py, which
+#           contains many of the original functions from here.
+#           Added get_hlr_data_dir, get_hlr_dem_dir.
+#           Added get_repeated_value_list, to exclude them.
+# Jun 2023. Wrote convert_vat_adf_to_csv, get_bounding_box.
+#           Moved many functions into shape_utils.py.
 # May 2023. Wrote: create_tsv,
 #           get_polygon_points (all versions),
 #           get_cols_and_rows, get_polygon_zvals,
 #           check_lon_lats, get_zmin_lon_and_lat,
 #           convert_coords)
-# Jun 2023. Wrote convert_vat_adf_to_csv, get_bounding_box.
-#           Moved many functions into shape_utils.py.
-# Jul 2023. Modified to use newer shape_utils.py, which
-#           contains many of the original functions from here.
-#           Added get_hlr_data_dir, get_hlr_dem_dir.
-#           Added get_repeated_value_list, to exclude them.
 #
 #---------------------------------------------------------------------
 #
 #  % conda activate tf36  (has gdal package)
 #  % python
-#  >>> from topoflow.utils import hlr_tools as hlr
+#  >>> from topoflow.utils.ngen import hlr_tools as hlr
 #  >>> hlr.create_tsv(nf_max=100, tsv_file='new_hlr_na_100.tsv')
-#  >>> hlr.create_tsv(nf_max=50000, tsv_file='new_hlr_na_all.tsv')
+#  >>> hlr.create_tsv(nf_max=50000, tsv_file='new_hlr_na_all.tsv',
+#          REPORT=False)
+#
+#  Last line results in 9539 basins that have a single, unique
+#  zmin (outlet elevation) value found from shapefile.
 #
 #---------------------------------------------------------------------
 # Notes:
@@ -143,7 +147,7 @@ from osgeo import ogr, osr
 import json, time
 
 from osgeo import gdal
-from topoflow.utils import shape_utils as su
+from topoflow.utils.ngen import shape_utils as su
 
 # For convert_vat_adf_to_csv()
 import csv, sys, gdal

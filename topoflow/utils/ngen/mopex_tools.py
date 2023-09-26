@@ -23,7 +23,7 @@ import numpy as np
 from osgeo import ogr, osr
 import json, sys, time
 
-from topoflow.utils import shape_utils as su
+from topoflow.utils.ngen import shape_utils as su
 
 #---------------------------------------------------------------------
 def get_basin_repo_dir():

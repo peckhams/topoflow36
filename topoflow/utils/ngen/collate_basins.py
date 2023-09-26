@@ -1,12 +1,12 @@
 
 # Copyright (c) 2023, Scott D. Peckham
 #
-# Jun 2023. Utils to collate several river basin datasets.
 # Jul 2023. Added haversine, distance_on_sphere,
 #           get_closest_station, add_ars_basins, add_czo_basins,
 #           add_hlr_basins, add_lter_basins, add_neon_basins,
 #           and their subfunctions.
 #           Moved all USGS-specific utils to usgs_utils.py.
+# Jun 2023. Utils to collate several river basin datasets.
 #
 #---------------------------------------------------------------------
 #
@@ -74,7 +74,7 @@
 #  export_csv_to_tsv()
 #
 #---------------------------------------------------------------------
-from topoflow.utils import usgs_utils as usgs
+from topoflow.utils.ngen import usgs_utils as usgs
 
 import numpy as np
 import time
@@ -990,6 +990,7 @@ def collate( out_tsv_file='all_basins.tsv',
 #     counter = 0
 #     bmap = {True:'Y', False:'N'}
 #     print('Working on USGS, GAGES2, CAMELS, FPS, & MOPEX basins...')
+#
 #     while (True):
 #         usgs_line = usgs_unit.readline()
 #         if (usgs_line == ''):
@@ -1123,9 +1124,11 @@ def collate( out_tsv_file='all_basins.tsv',
 #             if (counter == max_count):
 #                 break
 # 
-#         #----------------------------------------
-#         # Extract desired fields from usgs_line
-#         #----------------------------------------
+#         #-------------------------------------------------------
+#         # Extract the following fields from usgs_line:
+#         #   agency_code, ars_id, ars_name, site_type, lat_str, 
+#         #   lon_str, coord_acy_cd, coord_datum_cd, elev, area,
+#         #---------------------------------------------------------
 #         new_usgs_line = get_new_usgs_line( usgs_line, delim, base_key )
 #              
 #         #-----------------------------------------------------
@@ -1138,15 +1141,13 @@ def collate( out_tsv_file='all_basins.tsv',
 #         
 #         val_list = [
 #         new_usgs_line,
-#         # agency_cd, site_no, station_nm, site_tp_cd,
-#         # dec_lat_va, dec_lon_va, coord_acy_cd, coord_datum_cd,
-#         # alt_va, drain_area_va,
+#         ### hlr_code, ###############################
 #         #----------------------------------------------
 #         long_name, state_code, site_url,
 #         closest_station_id, closest_station_dist,
 #         start_date, end_date,
 #         bbox[0], bbox[1], bbox[2], bbox[3],
-#         # minlon, maxlon, minlat, maxlat
+#            # bbox = minlon, maxlon, minlat, maxlat
 #         #----------------------------------------------
 #         bmap[IS_USGS_GAUGE_ID],  bmap[IS_GAGES2_ref],
 #         bmap[IS_GAGES2_non_ref], bmap[IS_CAMELS_ID],
@@ -1270,7 +1271,7 @@ def add_ars_basins( ars_unit, out_tsv_unit,
 
     ars_id_col   = get_id_column( 'ARS' )
     ars_name_col = get_name_column( 'ARS' )
-    agency_code  = 'USDA/ARS'
+    agency_code  = 'USDA-ARS'
 
     print('Working on USDA/ARS basins...')
     while (True):
@@ -1302,10 +1303,12 @@ def add_ars_basins( ars_unit, out_tsv_unit,
                 lon_str, lat_str, REPORT=False)
         closest_station_id   = closest_id
         closest_station_dist = str(dmin)    # as a string
-        #--------------------------------------------
+
+        #-------------------
         # Don't know these
-        #--------------------
+        #-------------------
         bbox = ['-999', '-999', '-999', '-999']
+        hlr_code       = ''
         site_type      = '--'
         coord_acy_cd   = '--'
         coord_datum_cd = 'NAD93??'   ####### FIND OUT
@@ -1317,12 +1320,13 @@ def add_ars_basins( ars_unit, out_tsv_unit,
         val_list = [
         agency_code, ars_id, ars_name, site_type, lat_str, lon_str,
         coord_acy_cd, coord_datum_cd, elev, area,
+        ### hlr_code, ###############################
         #----------------------------------------------
         long_name, state_code, site_url,
         closest_station_id, closest_station_dist,
         start_date, end_date,
         bbox[0], bbox[1], bbox[2], bbox[3],
-            # minlon, maxlon, minlat, maxlat
+            # bbox = minlon, maxlon, minlat, maxlat
         #------------------------------------------------------
         # IS_USGS_GAUGE_ID, IS_GAGES2_ref, IS_GAGES2_non_ref,
         # IS_CAMELS_ID, IS_FPS_ID, IS_MOPEX_ID, IS_ARS_ID, ###########
@@ -1423,10 +1427,12 @@ def add_czo_basins( czo_unit, out_tsv_unit,
                 lon_str, lat_str, REPORT=False)
         closest_station_id   = closest_id
         closest_station_dist = str(dmin)    # as a string
-        #--------------------------------------------
+        
+        #-------------------
         # Don't know these
-        #--------------------
+        #-------------------
         bbox = ['-999', '-999', '-999', '-999']
+        hlr_code       = ''
         site_type      = '--'
         coord_acy_cd   = '--'
         coord_datum_cd = 'NAD93??'   ####### FIND OUT
@@ -1477,12 +1483,13 @@ def add_czo_basins( czo_unit, out_tsv_unit,
         val_list = [
         agency_code, site_id, wshed_name, site_type, lat_str, lon_str,
         coord_acy_cd, coord_datum_cd, elev, area,
+        ### hlr_code, ###############################
         #----------------------------------------------
         long_name, state_code, site_url,
         closest_station_id, closest_station_dist,
         start_date, end_date,
         bbox[0], bbox[1], bbox[2], bbox[3],
-            # minlon, maxlon, minlat, maxlat              
+            # bbox = minlon, maxlon, minlat, maxlat              
         #------------------------------------------------------
         # IS_USGS_GAUGE_ID, IS_GAGES2_ref, IS_GAGES2_non_ref,
         # IS_CAMELS_ID, IS_FPS_ID, IS_MOPEX_ID, IS_ARS_ID, ###########
@@ -1675,7 +1682,7 @@ def add_hlr_basins( hlr_unit, out_tsv_unit,
                     usgs_station_coords, delim ):
 
     hlr_id_col   = get_id_column( 'HLR' )
-    hlr_name_col = get_name_column( 'HLR' )
+    ## hlr_name_col = get_name_column( 'HLR' )
     agency_code  = 'USGS-HLR'
 
     print('Working on USGS HLR basins...')
@@ -1685,19 +1692,17 @@ def add_hlr_basins( hlr_unit, out_tsv_unit,
             break  # (reached end of file)
         values = hlr_line.split( delim )
         #-------------------------------------------------
-#         ars_id     = values[ ars_id_col ].strip()
-#         ## ars_name   = values[ ars_name_col ].strip()
-#         ars_name   = get_ars_name( values )
-#         state_code = values[2].strip()   # 2-letter state code
-#         long_name  = get_ars_long_name( values )
-#         lat_str    = values[7].strip()   # outlet latitude
-#         lon_str    = values[8].strip()   # outlet longitude
-#         area       = values[10].strip()  # basin area
-#         start_date = values[11].strip()  ###########################
-#         end_date   = values[12].strip()
-#         site_url   = get_ars_site_url( state_code )
-#         notes      = values[15].strip()
-        #--------------------------------------------
+        hlr_id     = 'HLR-' + values[ hlr_id_col ].strip()
+        lon_str    = values[1].strip()   # outlet longitude
+        lat_str    = values[2].strip()   # outlet latitude
+        minlon_str = values[5].strip()
+        maxlon_str = values[6].strip()
+        minlat_str = values[7].strip()
+        maxlat_str = values[8].strip()
+        area       = values[9].strip()   # COUNT  = basin area in km2
+        elev       = values[17].strip()  # MINELE = outlet elevation in m
+        hlr_code   = values[22].strip()  # HLR    = HLR code in {1,...,20}
+        #-------------------------------
         if (lat_str == ''):
             lat_str = '-999'
         if (lon_str == ''):
@@ -1708,33 +1713,55 @@ def add_hlr_basins( hlr_unit, out_tsv_unit,
                 lon_str, lat_str, REPORT=False)
         closest_station_id   = closest_id
         closest_station_dist = str(dmin)    # as a string
-        #--------------------------------------------
+
+        #--------------------------------------------------     
+        # Try to get these from closest USGS station info
+        #--------------------------------------------------
+        bmap = {True:'Y', False:'N'}
+        IS_USGS_GAUGE_ID = (dmin < 1.0)  # within 1 km
+        if (IS_USGS_GAUGE_ID):
+            usgs_id     = closest_id
+            # Use usgs_id to get the next 5 attributes.
+            hlr_name   = usgs_name
+            long_name  = usgs_long_name  
+            state_code = # 2-letter state code
+            huc_code   = usgs_huc       
+            site_url   = usgs_site_url
+        else: 
+            hlr_name   = ''
+            long_name  = ''
+            state_code = ''  # (maybe get from lon/lat ?)
+            huc_code   = ''
+            site_url   = ''
+           
+        #-------------------
         # Don't know these
-        #--------------------
-        # bbox = ['-999', '-999', '-999', '-999']
+        #-------------------
+        start_date     = ''
+        end_date       = ''
         site_type      = '--'
         coord_acy_cd   = '--'
-        coord_datum_cd = 'NAD93??'   ####### FIND OUT
-        elev           = '-9999'
+        coord_datum_cd = 'NAD93??'   #### FIND OUT
     
-        #------------------------------------------
-        # Write out values for USDA ARS watershed
-        #------------------------------------------
+        #-------------------------------------
+        # Write out values for HLR watershed
+        #-------------------------------------
         val_list = [
-        agency_code, ars_id, ars_name, site_type, lat_str, lon_str,
+        agency_code, hlr_id, hlr_name, site_type, lat_str, lon_str,
         coord_acy_cd, coord_datum_cd, elev, area,
+        ### hlr_code, ###############################
         #----------------------------------------------
         long_name, state_code, site_url,
         closest_station_id, closest_station_dist,
         start_date, end_date,
-        bbox[0], bbox[1], bbox[2], bbox[3],
-            # minlon, maxlon, minlat, maxlat
+        minlon_str, maxlon_str, minlat_str, maxlat_str,
         #------------------------------------------------------
         # IS_USGS_GAUGE_ID, IS_GAGES2_ref, IS_GAGES2_non_ref,
         # IS_CAMELS_ID, IS_FPS_ID, IS_MOPEX_ID, IS_ARS_ID, ###########
         # IS_CZO_ID, IS_HLR_ID, IS_LTER_ID, IS_NEON_ID
         #------------------------------------------------------
-        'N','N','N','N','N','N','N','N','Y','N','N' ]
+        bmap[IS_USGS_GAUGE_ID],'N','N','N','N','N',
+        'N','N','Y','N','N' ]
 
         new_line = ''
         for val in val_list:
@@ -1812,10 +1839,12 @@ def add_lter_basins( lter_unit, out_tsv_unit,
                 lon_str, lat_str, REPORT=False)
         closest_station_id   = closest_id
         closest_station_dist = str(dmin)    # as a string
-        #--------------------------------------------
+
+        #-------------------
         # Don't know these
-        #--------------------
+        #-------------------
         bbox = ['-999', '-999', '-999', '-999']
+        hlr_code       = ''
         site_type      = '--'
         coord_acy_cd   = '--'
         coord_datum_cd = 'NAD93??'   ####### FIND OUT
@@ -1834,12 +1863,13 @@ def add_lter_basins( lter_unit, out_tsv_unit,
         val_list = [
         agency_code, site_id, wshed_name, site_type, lat_str, lon_str,
         coord_acy_cd, coord_datum_cd, elev, area,
+        ### hlr_code, ###############################
         #----------------------------------------------
         long_name, state_code, site_url,
         closest_station_id, closest_station_dist,
         start_date, end_date,
         bbox[0], bbox[1], bbox[2], bbox[3],
-            # minlon, maxlon, minlat, maxlat              
+            # bbox = minlon, maxlon, minlat, maxlat              
         #------------------------------------------------------
         # IS_USGS_GAUGE_ID, IS_GAGES2_ref, IS_GAGES2_non_ref,
         # IS_CAMELS_ID, IS_FPS_ID, IS_MOPEX_ID, IS_ARS_ID, ###########
@@ -1858,9 +1888,10 @@ def add_lter_basins( lter_unit, out_tsv_unit,
 def add_neon_basins( neon_unit, out_tsv_unit,
                      usgs_station_coords, delim ):
 
-    #-------------------------------------------------------
+    #--------------------------------------------------------------
     # Notes:  Metadata is from:
-    #-------------------------------------------------------         
+    # https://www.neonscience.org/field-sites/explore-field-sites
+    #--------------------------------------------------------------         
     agency_code  = 'NSF-NEON'
 
     print('Working on NEON basins...')
@@ -1941,15 +1972,17 @@ def add_neon_basins( neon_unit, out_tsv_unit,
                 lon_str, lat_str, REPORT=False)
         closest_station_id   = closest_id
         closest_station_dist = str(dmin)    # as a string
-        #--------------------------------------------
+        
+        #-------------------
         # Don't know these
-        #--------------------
-        start_date = '--'
-        end_date   = '--'
+        #-------------------
         bbox = ['-999', '-999', '-999', '-999']
-        site_type      = '--'
-        coord_acy_cd   = '--'
-
+        hlr_code     = ''
+        start_date   = '--'
+        end_date     = '--'
+        site_type    = '--'
+        coord_acy_cd = '--'
+        
         #############################
         # Need to check these 
         #############################
@@ -1965,12 +1998,13 @@ def add_neon_basins( neon_unit, out_tsv_unit,
             val_list = [
             agency_code, site_id, wshed_name, site_type, lat_str, lon_str, 
             coord_acy_cd, coord_datum_cd, elev, area,
+            ### hlr_code, ###############################
             #----------------------------------------------
             long_name, state_code, site_url,
             closest_station_id, closest_station_dist,
             start_date, end_date,
             bbox[0], bbox[1], bbox[2], bbox[3],
-                # minlon, maxlon, minlat, maxlat              
+                # bbox = minlon, maxlon, minlat, maxlat              
             #------------------------------------------------------
             # IS_USGS_GAUGE_ID, IS_GAGES2_ref, IS_GAGES2_non_ref,
             # IS_CAMELS_ID, IS_FPS_ID, IS_MOPEX_ID, IS_ARS_ID, ###########

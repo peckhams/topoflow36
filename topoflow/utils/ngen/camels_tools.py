@@ -1,7 +1,7 @@
 
 # Copyright (c) 2023, Scott D. Peckham
 #
-# July 2023. 
+# Jul 2023.  Original version. 
 #
 #---------------------------------------------------------------------
 #
@@ -27,7 +27,7 @@ from osgeo import ogr, osr
 # import json, sys
 
 import time
-from topoflow.utils import shape_utils as su
+from topoflow.utils.ngen import shape_utils as su
 
 #---------------------------------------------------------------------
 def get_basin_repo_dir():

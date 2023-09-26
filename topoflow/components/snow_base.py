@@ -15,6 +15,10 @@ See snow_degree_day.py and snow_energy_balance.py.
 #
 #  Sep 2023.  Added update_density_ratio().
 #             Fixed bug in enforce_max_meltrate().
+#             Moved initialize_cold_content() from snow_energy_balance.py
+#               back to this base class.  Note that T0 plays 2 roles in
+#               the degree-day component, in meltrate and cold_content.
+#               Degree-day comp now has option to set T0_cc in its CFG.
 #  Aug 2023.  Added update_total_snowpack_water_volume(),
 #               called from initialize() and finalize() and
 #               removed update_swe_integral().
@@ -52,12 +56,15 @@ See snow_degree_day.py and snow_energy_balance.py.
 #      finalize()
 #      set_computed_input_vars()
 #      --------------------------
+#      set_missing_cfg_options()   # 2023-09-25 (placeholder)
 #      check_input_types()
 #      initialize_computed_vars()
+#      initialize_cold_content()   # NEED TO RENAME T0 for CC
 #      ----------------------------
 #      update_meltrate()
 #      enforce_max_meltrate()
 #      update_SM_integral()
+#      update_cold_content()
 #      update_swe()
 #      update_density_ratio()
 #      update_depth()
@@ -157,7 +164,8 @@ class snow_component( BMI_base.BMI_component ):
         # Load component parameters from a config file
         #-----------------------------------------------       
         self.set_constants()
-        self.initialize_config_vars() 
+        self.initialize_config_vars()
+        self.set_missing_cfg_options() 
         ## self.read_grid_info()    # NOW IN initialize_config_vars()
         self.initialize_basin_vars()  # (5/14/10)
         #-----------------------------------------
@@ -243,6 +251,7 @@ class snow_component( BMI_base.BMI_component ):
         self.update_meltrate()       # (meltrate = SM)
         self.enforce_max_meltrate()  # (before SM integral!)
         self.update_SM_integral()
+        self.update_cold_content()
 
         #------------------------------------------
         # Call update_swe() before update_depth()
@@ -298,7 +307,19 @@ class snow_component( BMI_base.BMI_component ):
         np.maximum(self.save_grid_dt,   self.dt, out=self.save_grid_dt)
         np.maximum(self.save_pixels_dt, self.dt, out=self.save_pixels_dt)
         
-    #   set_computed_input_vars()        
+    #   set_computed_input_vars()
+    #-------------------------------------------------------------------
+    def set_missing_cfg_options(self):
+
+        #-------------------------------------------------------  
+        # Note: This is called in initialize() AFTER calling
+        #       initialize_config_vars().  It is used to set
+        #       newer toggles, etc. that may not have been
+        #       set in the CFG file.
+        #-------------------------------------------------------    
+        pass
+        
+    #   set_missing_cfg_options()            
     #-------------------------------------------------------------------
     def check_input_types(self):
 
@@ -334,6 +355,14 @@ class snow_component( BMI_base.BMI_component ):
         P_IS_GRID = self.is_grid('P_snow')
         H0_SNOW_IS_SCALAR = self.is_scalar('h0_snow')
         H0_SWE_IS_SCALAR  = self.is_scalar('h0_swe') 
+        comp_name = self.get_component_name()
+        EN_BAL_COMP = (comp_name == 'TopoFlow_Snow_Energy_Balance')
+        
+        # Used to make sure this was working as expected.
+#         print('###############################################')
+#         print(' In snow_base.initialize_computed_vars():')
+#         print(' EN_BAL_COMP =', EN_BAL_COMP)
+#         print('###############################################')
 
         #------------------------------------------------------
         # If h0_snow or h0_swe are scalars, the use of copy()
@@ -342,13 +371,16 @@ class snow_component( BMI_base.BMI_component ):
         #------------------------------------------------------
         h_snow = self.h0_snow.copy()    # [meters]
         h_swe  = self.h0_swe.copy()     # [meters]
-        
-        if (T_IS_GRID or P_IS_GRID):
+          
+        if (T_IS_GRID or P_IS_GRID or EN_BAL_COMP):
             self.SM = np.zeros([self.ny, self.nx], dtype='float64')
-            #-----------------------------------------
-            # Convert both h_snow and h_swe to grids
-            # if not already grids.
-            #-----------------------------------------
+            #------------------------------------------------------       
+            # For the Energy Balance method, SM, h_snow and h_swe
+            # are always grids because Q_sum is always a grid.
+            #------------------------------------------------------
+            # Convert both h_snow and h_swe to grids, if not
+            # already grids.
+            #------------------------------------------------------
             if (H0_SNOW_IS_SCALAR):
                 self.h_snow = h_snow + np.zeros([self.ny, self.nx], dtype='float64')
             else:
@@ -359,9 +391,9 @@ class snow_component( BMI_base.BMI_component ):
             else:
                 self.h_swe = h_swe    # (is already a grid)              
         else:
-            #----------------------------------
-            # Both are scalars and that's OK.
-            #----------------------------------
+            #--------------------------------------------------------
+            # Both are scalars and that's OK for snow_degree_day.py
+            #--------------------------------------------------------
             self.SM     = self.initialize_scalar( 0, dtype='float64')
             self.h_snow = self.initialize_scalar( h_snow, dtype='float64')
             self.h_swe  = self.initialize_scalar( h_swe,  dtype='float64')
@@ -389,20 +421,57 @@ class snow_component( BMI_base.BMI_component ):
         #----------------------------------------------------
         self.density_ratio = (self.rho_H2O / self.rho_snow)
                 
-        #----------------------------------------------------
-        # Initialize the cold content of snowpack (2/21/07)
-        #------------------------------------------------------
-        # This is done in the snow_energy_balance.py version.
-        #------------------------------------------------------
-        ## T_surf   = self.T_surf  # (2/3/13, new framework)
-        ## self.Ecc = Initial_Cold_Content(self.h0_snow, T_surf, \
-        ##                                 self.rho_snow, self.Cp_snow)
+        #------------------------------------------
+        # Initialize the cold content of snowpack
+        #------------------------------------------
+        self.initialize_cold_content()
         
     #   initialize_computed_vars()
+    #---------------------------------------------------------------------
+    def initialize_cold_content( self ):
+
+        #----------------------------------------------------------------
+        # NOTES: This function is used to initialize the cold content
+        #        of a snowpack.
+        #        The cold content has units of [J m-2] (_NOT_ [W m-2]).
+        #        It is an energy (per unit area) threshold (or deficit)
+        #        that must be overcome before melting of snow can occur.
+        #        Cold content changes over time as the snowpack warms or
+        #        cools, but must always be non-negative.
+        #
+        #        K_snow is between 0.063 and 0.71  [W m-1 K-1]
+        #        All of the Q's have units of W m-2 = J s-1 m-2).
+        #
+        #        T0 is read from the config file.
+        #        The degree-day component has another T0 for meltrate,
+        #        but now T0_cc can also be specified in its CFG file.
+        #        See it's "set_missing_cfg_options()" method.
+        #        For the energy-balance comp, it's T0 is T0_cc.
+        #        This is the last var to be set in initialize().
+        #---------------------------------------------------------------
+        if not(hasattr(self, 'T0_cc')):
+           self.T0_cc = self.T0   # synonyms
+
+        #--------------------------------------------
+        # Compute initial cold content of snowpack
+        # See equation (10) in Zhang et al. (2000).
+        #--------------------------------------------
+        T_snow   = self.T_surf
+        del_T    = (self.T0_cc - T_snow)
+        self.Ecc = (self.rho_snow * self.Cp_snow) * self.h0_snow * del_T
+
+        #------------------------------------        
+        # Cold content must be nonnegative.
+        #----------------------------------------------
+        # Ecc > 0 if (T_snow < T0).  i.e. T_snow < 0.
+        #----------------------------------------------
+        np.maximum( self.Ecc, np.float64(0), out=self.Ecc)  # (in place)
+        
+    #   initialize_cold_content()
     #-------------------------------------------------------------------
     def update_meltrate(self):
  
-         #---------------------------------------------------------
+        #---------------------------------------------------------
         # Notes: This is for a "potential" meltrate, which can't
         #        be realized unless there is enough snow.
         #        See snow_base.enforce_max_meltrate().   
@@ -475,6 +544,17 @@ class snow_component( BMI_base.BMI_component ):
             self.vol_SM += np.sum(volume)
             
     #   update_SM_integral()
+    #-------------------------------------------------------------------
+    def update_cold_content(self):
+
+        #-----------------------------------------------------------    
+        # 2023-09-25. This is overridden in snow_energy_balance.py
+        # and could do the same in snow_degree_day.py using some
+        # other (temperature-based) method.
+        #-----------------------------------------------------------
+        pass
+
+    #   update_cold_content()
     #-------------------------------------------------------------------
     def update_swe(self):
 
@@ -688,17 +768,6 @@ class snow_component( BMI_base.BMI_component ):
         self.hs_ts_file = (self.out_directory + self.hs_ts_file)
         self.sw_ts_file = (self.out_directory + self.sw_ts_file)
         self.cc_ts_file = (self.out_directory + self.cc_ts_file)
-
-        
-##        self.mr_gs_file = (self.case_prefix + '_2D-SMrate.rts')
-##        self.hs_gs_file = (self.case_prefix + '_2D-hsnow.rts')
-##        self.sw_gs_file = (self.case_prefix + '_2D-hswe.rts')
-##        self.cc_gs_file = (self.case_prefix + '_2D-Ecc.rts')
-##        #-----------------------------------------------------------
-##        self.mr_ts_file = (self.case_prefix + '_0D-SMrate.txt')
-##        self.hs_ts_file = (self.case_prefix + '_0D-hsnow.txt')
-##        self.sw_ts_file = (self.case_prefix + '_0D-hswe.txt')
-##        self.cc_ts_file = (self.case_prefix + '_0D-Ecc.txt')
 
     #   update_outfile_names()
     #-------------------------------------------------------------------  

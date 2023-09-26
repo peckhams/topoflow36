@@ -30,6 +30,7 @@ functions.  It inherits from the snow "base class" in
 #      get_var_name()           # (5/16/12, Bolton)
 #      get_var_units()          # (5/16/12, Bolton)
 #      ----------------------
+#      set_missing_cfg_options()  # 2023-09-25
 #      check_input_types()
 #      update_meltrate()
 #      -----------------------------
@@ -251,6 +252,19 @@ class snow_component( snow_base.snow_component ):
 ##        return 'float64'
 ##    
 ##    #   get_var_type()
+    #-------------------------------------------------------------------
+    def set_missing_cfg_options(self):
+
+        #-------------------------------------------------------  
+        # Note: This is called in initialize() AFTER calling
+        #       initialize_config_vars().  It is used to set
+        #       newer toggles, etc. that may not have been
+        #       set in the CFG file.
+        #-------------------------------------------------------
+        if not(hasattr(self, 'T0_cc')):
+            self.T0_cc = 0.0
+                
+    #   set_missing_cfg_options()
     #-------------------------------------------------------------------
     def check_input_types(self):
 

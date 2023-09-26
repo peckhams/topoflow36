@@ -1,6 +1,8 @@
 
 # Copyright (c) 2023, Scott D. Peckham
 #
+# Sep 2023. Added get_usgs_station_info_by_id() and
+#           usgs_state_code_map() to map HLR basins to stations.
 # Jul 2023. Utils to work with USGS station info.
 #           Moved several functions here from collate_basins.py.
 #           These are now called from collate_basins.py.
@@ -26,6 +28,9 @@
 #
 #  get_usgs_station_coords()
 #  compare_usgs_station_coords()
+#
+#  usgs_state_code_map()
+#  get_usgs_station_info_dict()
 #
 #  replace_periods()
 #  replace_punctuation()
@@ -393,6 +398,209 @@ def compare_usgs_station_coords( tol=0.001 ):
     print()
 
 #   compare_usgs_station_coords()
+#---------------------------------------------------------------------
+def usgs_state_code_map():
+
+    #-------------------------------------------------------    
+    # Note: These are FIPS codes.
+    #       FIPS = Federal Information Processing Standard
+    # https://en.wikipedia.org/wiki/Federal_Information
+    #         Processing_Standard_state_code
+    #-------------------------------------------------------
+    map = {
+    0:  ['--', 'Not in the USA.'],
+    1:  ['AL', 'Alabama'],
+    2:  ['AK', 'Alaska'],
+    60: ['AS', 'American Samoa'],
+    3:  ['AS', 'American Samoa (FIPS 5-1)'],
+    4:  ['AZ', 'Arizona'],
+    5:  ['AR', 'Arkansas'],
+    81: ['BI', 'Baker Island'],
+    6:  ['CA', 'California'],
+    7:  ['CZ', 'Canal Zone (FIPS 5-1)'],
+    8:  ['CO', 'Colorado'],
+    9:  ['CT', 'Connecticut'],
+    10: ['DE', 'Delaware'],
+    11: ['DC', 'District of Columbia'],
+    12: ['FL', 'Florida'],
+    64: ['FM', 'Federal States of Micronesia'],
+    13: ['GA', 'Georgia'],
+    14: ['GU', 'Guam (FIPS 5-1)'],
+    66: ['GU', 'Guam'],
+    15: ['HI', 'Hawaii'],
+    84: ['HI', 'Howard Island'],
+    16: ['ID', 'Idaho'],
+    17: ['IL', 'Illinois'],
+    18: ['IN', 'Indiana'],
+    19: ['IA', 'Iowa'],
+    86: ['JI', 'Jarvis Island'],
+    67: ['JA', 'Johnston Atoll'],
+    20: ['KS', 'Kansas'],
+    21: ['KY', 'Kentucky'],
+    89: ['KR', 'Kingman Reef'],
+    22: ['LA', 'Louisiana'],
+    23: ['ME', 'Maine'],
+    68: ['MH', 'Marshall Islands'],
+    24: ['MD', 'Maryland'],
+    25: ['MA', 'Massachusetts'],
+    26: ['MI', 'Michigan'],
+    71: ['MI', 'Midway Islands'],
+    27: ['MN', 'Minnesota'],
+    28: ['MS', 'Mississippi'],
+    29: ['MO', 'Missouri'],
+    30: ['MT', 'Montana'],
+    76: ['NI', 'Navassa Island'],
+    31: ['NE', 'Nebraska'],
+    32: ['NV', 'Nevada'],
+    33: ['NH', 'New Hampshire'],
+    34: ['NJ', 'New Jersey'],
+    35: ['NM', 'New Mexico'],
+    36: ['NY', 'New York'],
+    37: ['NC', 'North Carolina'],
+    38: ['ND', 'North Dakota'],
+    69: ['MP', 'Northern Mariana Islands'],
+    39: ['OH', 'Ohio'],
+    40: ['OK', 'Oklahoma'],
+    41: ['OR', 'Oregon'],
+    70: ['PW', 'Palau'],
+    95: ['PA', 'Palmyra Atoll'],
+    42: ['PA', 'Pennsylvania'],
+    43: ['PR', 'Puerto Rico (FIPS 5-1)'],
+    72: ['PR', 'Puerto Rico'],
+    44: ['RI', 'Rhode Island'],
+    45: ['SC', 'South Carolina'],
+    46: ['SD', 'South Dakota'],
+    47: ['TN', 'Tennessee'],
+    48: ['TX', 'Texas'],
+    74: ['UM', 'U.S. Minor Outlying Islands'],
+    49: ['UT', 'Utah'],
+    50: ['VT', 'Vermont'],
+    51: ['VA', 'Virginia'],
+    52: ['VI', 'Virgin Islands (FIPS 5-1)'],
+    78: ['VI', 'Virgin Islands'],
+    79: ['WI', 'Wake Island'],
+    53: ['WA', 'Washington'],
+    54: ['WV', 'West Virginia'],
+    55: ['WI', 'Wisconsin'],
+    56: ['WY', 'Wyoming'],
+    83: ['MX', 'In Mexico'],
+    84: ['MX', 'In Mexico'],
+    86: ['MX', 'In Mexico'],
+    90: ['NB', 'New Brunswick, Canada'],
+    91: ['QC', 'Quebec, Canada'],
+    92: ['ON', 'Ontario, Canada'],
+    93: ['MB', 'Manitoba, Canada'],
+    94: ['SK', 'Saskatchewan, Canada'],
+    95: ['AB', 'Alberta, Canada'],
+    96: ['BC', 'British Columbia, Canada'],
+    97: ['YT', 'Yukon Territory, Canada'] }
+    
+    return map
+
+#   usgs_state_code_map()
+#---------------------------------------------------------------------
+def get_usgs_station_info_dict( delim='\t', 
+                             SAVE_TO_FILE=False):
+
+    usgs_dir  = get_usgs_dir( NWIS_ALL=True )
+    station_info_file = 'USGS_station_info_dict.npy'
+    file_path = usgs_dir + station_info_file
+    if (os.path.exists( file_path )):
+        print('Reading saved USGS station info dictionary...')
+        station_info = np.load( file_path ).flat[0]  #############
+        print('Finished.')
+        print()
+        return station_info
+      
+    #----------------------------------------------------
+    # Note: Use set of all USGS gauged basins for this.
+    #----------------------------------------------------
+    print('Getting USGS station info as dictionary...')
+    usgs_path = get_usgs_filepath( NWIS_ALL=True )
+    usgs_unit = open( usgs_path, 'r' )
+
+    #-----------------------
+    # Skip over the header
+    #-----------------------
+    nh_lines = get_usgs_header_lines( NWIS_ALL=True )
+    for j in range( nh_lines ):
+        line = usgs_unit.readline()
+
+    #-------------------------------------------------------------    
+    # Construct the station_info dictionary, where USGS gauge id
+    # is the key used to get a dictionary with info for a gauge
+    #-------------------------------------------------------------
+    # Using NWIS_ALL, so there will be 145,375 basins.
+    #-------------------------------------------------------------
+    sc_map = usgs_state_code_map()   
+    station_info = dict()
+    k = 0
+    n_bad_lats = 0
+    n_bad_lons = 0
+
+    while (True):
+        usgs_line = usgs_unit.readline()
+        if (usgs_line == ''):
+            break  # (reached end of file)
+        vals = usgs_line.split( delim )
+
+        sid  = vals[2].strip()
+        sid  = sid.replace('USGS-', '')
+        name = vals[3].strip()
+        huc  = vals[6].strip()
+        lat  = vals[11].strip()  # lat, then lon in file
+        lon  = vals[12].strip()
+        fips = vals[25].strip()  # state FIPS code        
+        sc   = sc_map[ int(fips) ][0]  # 2-letter code
+        url  = get_usgs_site_url( sid )
+
+        #------------------------------------------------
+        # This was triggered 236 times for NWIS_ALL and
+        # 58 times for the other "USGS_gauged" option.
+        #------------------------------------------------        
+        if (lat == '') or (lon == ''):
+            # This occurs for Okinawa, Guam, Palau, FSM, etc.
+            ########## datum is not used yet ##########
+            lon, lat, datum = get_usgs_missing_lat_lon( sid )
+            n_bad_lats += 1
+            n_bad_lons += 1
+
+        station_info[ sid ] = \
+            {'name':name, 'huc':huc, 'lat':lat, 'lon':lon,
+             'state':sc, 'url':url }
+        k += 1
+
+    if (n_bad_lats > 0) or (n_bad_lons > 0):
+        print('Number of missing latitudes  =', n_bad_lats)
+        print('Number of missing longitudes =', n_bad_lons)
+        print('These were fixed by scraping values from the')
+        print('USGS station URL.  This occurs for:')
+        print('  Federal States of Micronesia (FSM), Guam,')
+        print('  Okinawa, Palau, etc.')
+        print()
+   
+    if (SAVE_TO_FILE):
+        usgs_dir  = get_usgs_dir( NWIS_ALL=True )
+        file_path = usgs_dir + station_info_file
+        np.save( file_path, station_info)
+        print('Saved USGS station info dictionary to file:')
+        print('  ' + file_path)
+        print()
+
+#     TEST_IF_NUMERIC = False
+#     if (TEST_IF_NUMERIC):
+#         try:
+#             lons = np.float64( station_coords[:,1] )
+#         except:
+#             print('ERROR: Non-numeric longitudes found.')
+#         try:
+#             lats = np.float64( station_coords[:,2] )
+#         except:
+#             print('ERROR: Non-numeric latitudes found.')
+         
+    return station_info
+
+#   get_usgs_station_info_dict()
 #---------------------------------------------------------------------
 #---------------------------------------------------------------------
 def replace_periods( name, new_char='' ):
