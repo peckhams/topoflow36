@@ -148,13 +148,13 @@ class ts_file():
     #-------------------------------------------------------------------
     def add_values(self, time, values): 
 
-        col_width = 15        
-        tstr = ('%15.7f' % time)
+        col_width = 20        
+        tstr = ('%20.7f' % time)
         self.ts_unit.write( tstr.rjust(col_width)  )
 
         n_values = np.size(values)
         for k in range(n_values):
-            vstr = ('%15.7f' % values[k])
+            vstr = ('%20.7f' % values[k])
             self.ts_unit.write( vstr.rjust(col_width) ) 
         self.ts_unit.write("\n")
         
