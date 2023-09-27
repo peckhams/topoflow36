@@ -12,7 +12,13 @@ See glacier_degree_day.py and glacier_energy_balance.py.
 #-----------------------------------------------------------------------
 #
 #  Copyright (c) 2001-2023, Scott D. Peckham
-
+#
+#  Sep 2023.  Added update_density_ratio().
+#             Fixed bug in enforce_max_meltrate().
+#             Moved initialize_cold_content() from snow_energy_balance.py
+#               back to this base class.  Note that T0 plays 2 roles in
+#               the degree-day component, in meltrate and cold_content.
+#               Degree-day comp now has option to set T0_cc in its CFG.
 #  Aug 2023,  Renamed snow functions to have 'snow' in the name
 #             Duplicated existing snow functions for 'ice'
 #
@@ -29,8 +35,10 @@ See glacier_degree_day.py and glacier_energy_balance.py.
 #      finalize()
 #      set_computed_input_vars()
 #      --------------------------
+#      set_missing_cfg_options()   # 2023-09-25 (placeholder)
 #      check_input_types()
 #      initialize_computed_vars()
+#      initialize_cold_content()   # NEED TO RENAME T0 for CC
 #      ----------------------------
 #      update_snow_meltrate()
 #      update_ice_meltrate()
@@ -38,6 +46,7 @@ See glacier_degree_day.py and glacier_energy_balance.py.
 #      enfore_max_ice_meltrate()
 #      update_SM_integral()
 #      update_IM_integral()
+#      update_snow_cold_content()
 #      update_swe()
 #      update_swe_integral()   
 #      update_iwe()
@@ -132,6 +141,7 @@ class glacier_component( BMI_base.BMI_component ):
         #-----------------------------------------------       
         self.set_constants()
         self.initialize_config_vars() 
+        self.set_missing_cfg_options()
         self.initialize_basin_vars()  # (5/14/10)
         #-----------------------------------------
         # This must come before "Disabled" test.
@@ -221,19 +231,20 @@ class glacier_component( BMI_base.BMI_component ):
         self.update_snow_meltrate()       # (meltrate = SM)
         self.enforce_max_snow_meltrate()  # (before SM integral!)
         self.update_SM_integral()
+        self.update_snow_cold_content()
 
         #----------------------------------------------------------
         # Call update_swe/iwe() and before update_snow/ice_depth()
         #----------------------------------------------------------   
         self.update_swe()
-        self.update_swe_integral() 
+        # self.update_swe_integral() 
 
         self.update_ice_meltrate()
         self.enforce_max_ice_meltrate()
         self.update_IM_integral()
 
         self.update_iwe() # relies on previous timestep's swe value
-        self.update_iwe_integral() # relies on previous timestep's iwe value   
+        # self.update_iwe_integral() # relies on previous timestep's iwe value   
 
         self.update_density_ratio()
         # self.update_ice_density_ratio()
@@ -287,6 +298,18 @@ class glacier_component( BMI_base.BMI_component ):
         
     #   set_computed_input_vars()        
     #-------------------------------------------------------------------
+    def set_missing_cfg_options(self):
+
+        #-------------------------------------------------------  
+        # Note: This is called in initialize() AFTER calling
+        #       initialize_config_vars().  It is used to set
+        #       newer toggles, etc. that may not have been
+        #       set in the CFG file.
+        #-------------------------------------------------------    
+        pass
+        
+    #   set_missing_cfg_options()            
+    #-------------------------------------------------------------------    
     def check_input_types(self):
 
         #----------------------------------------------------
@@ -331,6 +354,8 @@ class glacier_component( BMI_base.BMI_component ):
         H0_SWE_IS_SCALAR  = self.is_scalar('h0_swe') 
         H0_ICE_IS_SCALAR = self.is_scalar('h0_ice')
         H0_IWE_IS_SCALAR = self.is_scalar('h0_iwe')
+        comp_name = self.get_component_name()
+        EN_BAL_COMP = (comp_name == 'TopoFlow_Glacier_Energy_Balance')
 
         #------------------------------------------------------
         # If h0_snow, h0_swe, h0_ice, or h0_iwe are scalars, 
@@ -343,12 +368,14 @@ class glacier_component( BMI_base.BMI_component ):
         h_ice = self.h0_ice.copy()
         h_iwe = self.h0_iwe.copy()
         
-        if (T_IS_GRID or P_IS_GRID):
+        if (T_IS_GRID or P_IS_GRID or EN_BAL_COMP):
             self.SM = np.zeros([self.ny, self.nx], dtype='float64')
             self.IM = np.zeros([self.ny, self.nx], dtype='float64')
             #-----------------------------------------
             # Convert h_snow, h_swe, h_ice, and h_iwe 
             # to grids if not already grids.
+            # For the Energy Balance method, SM, h_snow and h_swe
+            # are always grids because Q_sum is always a grid.
             #-----------------------------------------
             if (H0_SNOW_IS_SCALAR):
                 self.h_snow = h_snow + np.zeros([self.ny, self.nx], dtype='float64')
@@ -370,9 +397,9 @@ class glacier_component( BMI_base.BMI_component ):
                 self.h_iwe = h_iwe
 
         else:
-            #----------------------------------
-            # Both are scalars and that's OK.
-            #----------------------------------
+            #---------------------------------------------------
+            # Both are scalars and that's for snow_degree_day.py
+            #---------------------------------------------------
             self.SM     = self.initialize_scalar( 0, dtype='float64')
             self.IM     = self.initialize_scalar( 0, dtype='float64')
             self.h_snow = self.initialize_scalar( h_snow, dtype='float64')
@@ -406,8 +433,96 @@ class glacier_component( BMI_base.BMI_component ):
         # Water is denser than ice, so density_ratio > 1.
         #----------------------------------------------------
         self.wi_density_ratio = (self.rho_H2O / self.rho_ice)
+
+        #------------------------------------------
+        # Initialize the cold content of snowpack
+        #------------------------------------------
+        self.initialize_snow_cold_content()
+        self.initialize_ice_cold_content()
                 
     #   initialize_computed_vars()
+    #-------------------------------------------------------------------
+    def initialize_snow_cold_content( self ):
+
+        #----------------------------------------------------------------
+        # NOTES: This function is used to initialize the cold content
+        #        of a snowpack.
+        #        The cold content has units of [J m-2] (_NOT_ [W m-2]).
+        #        It is an energy (per unit area) threshold (or deficit)
+        #        that must be overcome before melting of snow can occur.
+        #        Cold content changes over time as the snowpack warms or
+        #        cools, but must always be non-negative.
+        #
+        #        K_snow is between 0.063 and 0.71  [W m-1 K-1]
+        #        All of the Q's have units of W m-2 = J s-1 m-2).
+        #
+        #        T0 is read from the config file.
+        #        The degree-day component has another T0 for meltrate,
+        #        but now T0_cc can also be specified in its CFG file.
+        #        See it's "set_missing_cfg_options()" method.
+        #        For the energy-balance comp, it's T0 is T0_cc.
+        #        This is the last var to be set in initialize().
+        #---------------------------------------------------------------
+        if not(hasattr(self, 'T0_cc')):
+           self.T0_cc = self.T0   # synonyms
+
+        #--------------------------------------------
+        # Compute initial cold content of snowpack
+        # See equation (10) in Zhang et al. (2000).
+        #--------------------------------------------
+        T_snow   = self.T_surf
+        del_T    = (self.T0_cc - T_snow)
+        self.Eccs = (self.rho_snow * self.Cp_snow) * self.h0_snow * del_T
+
+        #------------------------------------        
+        # Cold content must be nonnegative.
+        #----------------------------------------------
+        # Ecc > 0 if (T_snow < T0).  i.e. T_snow < 0.
+        #----------------------------------------------
+        np.maximum( self.Eccs, np.float64(0), out=self.Eccs)  # (in place)
+        
+    #   initialize_snow_cold_content()
+    #-------------------------------------------------------------------
+    def initialize_ice_cold_content( self ):
+
+        #----------------------------------------------------------------
+        # NOTES: This function is used to initialize the cold content
+        #        of glacier ice.
+        #        The cold content has units of [J m-2] (_NOT_ [W m-2]).
+        #        It is an energy (per unit area) threshold (or deficit)
+        #        that must be overcome before melting of ice can occur.
+        #        Cold content changes over time as the ice warms or
+        #        cools, but must always be non-negative.
+        #
+        #        K_snow is between 0.063 and 0.71  [W m-1 K-1]
+        #        All of the Q's have units of W m-2 = J s-1 m-2).
+        #
+        #        T0 is read from the config file.
+        #        The degree-day component has another T0 for meltrate,
+        #        but now T0_cc can also be specified in its CFG file.
+        #        See it's "set_missing_cfg_options()" method.
+        #        For the energy-balance comp, it's T0 is T0_cc.
+        #        This is the last var to be set in initialize().
+        #---------------------------------------------------------------
+        if not(hasattr(self, 'T0_cc')):
+           self.T0_cc = self.T0   # synonyms
+
+        #--------------------------------------------
+        # Compute initial cold content of snowpack
+        # See equation (10) in Zhang et al. (2000).
+        #--------------------------------------------
+        T_ice   = self.T_surf
+        del_T    = (self.T0_cc - T_ice)
+        self.Ecci = (self.rho_ice * self.Cp_ice) * self.h_active_layer * del_T
+
+        #------------------------------------        
+        # Cold content must be nonnegative.
+        #----------------------------------------------
+        # Ecc > 0 if (T_snow < T0).  i.e. T_snow < 0.
+        #----------------------------------------------
+        np.maximum( self.Ecci, np.float64(0), out=self.Ecci)  # (in place)
+        
+    #   initialize_ice_cold_content()
     #-------------------------------------------------------------------
     def update_snow_meltrate(self):
         #---------------------------------------------------------
@@ -500,6 +615,20 @@ class glacier_component( BMI_base.BMI_component ):
             
     #   update_IM_integral()
     #-------------------------------------------------------------------
+    def update_snow_cold_content(self):
+
+        #-----------------------------------------------------------    
+        # 2023-09-25. This is overridden in snow_energy_balance.py
+        # and could do the same in snow_degree_day.py using some
+        # other (temperature-based) method.
+        # This is only needed for snow because snow can accumulate
+        # and thus add cold content, whereas ice only melts (in 
+        # this model)
+        #-----------------------------------------------------------
+        pass
+
+    #   update_cold_content()
+    #-------------------------------------------------------------------   
     def extract_previous_swe(self):
         #------------------------------------------------
         # Extract swe from previous timestep for use in 

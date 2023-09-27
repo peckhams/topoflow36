@@ -8,8 +8,12 @@ functions.  It inherits from the glacier "base class" in
 #  Copyright (c) 2001-2023, Scott D. Peckham
 #
 #  Sep 2023. Checked sign in initialize_cold_content().
-#  Aug 2023.  Removed trailing space in 'J kg-1 K-1 '.
-#             Added missing "vol_swe" in initialize_computed_vars.
+#            Separate function: update_cold_content().
+#            Moved initialize_cold_content() back to base class.
+#            Renamed T0 to avoid conflict w/ degree-day method.
+#            Removed separate version of initialize_computed_vars().
+#  Aug 2023. Removed trailing space in 'J kg-1 K-1 '.
+#            Added missing "vol_swe" in initialize_computed_vars.
 #
 #-----------------------------------------------------------------------
 #
@@ -24,11 +28,10 @@ functions.  It inherits from the glacier "base class" in
 #      ----------------------
 #      check_input_types()
 #      initialize_input_file_vars()   
-#      initialize_snow_cold_content() 
-#      initialize_ice_cold_content()   
 #      initialize_computed_vars()  # from glacier_base.py
 #      update_snow_meltrate()
 #      update_ice_meltrate()
+#      update_snow_cold_content()
 #      ----------------------
 #      open_input_files()
 #      read_input_files()
@@ -339,182 +342,6 @@ class glacier_component( glacier_base.glacier_component ):
     
     #   initialize_input_file_vars()
     #-------------------------------------------------------------------
-    def initialize_computed_vars(self):
-
-        #----------------------------------------------
-        # NOTE:  This function overrides the version
-        #        that is inherited from glacier_base.py.
-        #----------------------------------------------
-        # If T_air or precip are grids, then make
-        # sure that h_snow, h_swe, h_ice, and h_iwe 
-        # are grids
-        #----------------------------------------------
-        T_IS_GRID = self.is_grid('T_air')
-        P_IS_GRID = self.is_grid('P_snow')
-        H0_SNOW_IS_SCALAR = self.is_scalar('h0_snow')
-        H0_SWE_IS_SCALAR  = self.is_scalar('h0_swe') 
-        H0_ICE_IS_SCALAR  = self.is_scalar('h0_ice')
-        H0_IWE_IS_SCALAR  = self.is_scalar('h0_iwe') 
-
-        #------------------------------------------------------
-        # If h0_snow, h0_swe, h0_ice, or h0_iwe are scalars,
-        # the use of copy() here requires they were converted 
-        # to numpy scalars. Using copy() may not be necessary 
-        # for scalars.
-        #------------------------------------------------------
-        h_snow = self.h0_snow.copy()    # [meters]
-        h_swe  = self.h0_swe.copy()     # [meters]
-        h_ice  = self.h0_ice.copy()     # [meters]
-        h_iwe  = self.h0_iwe.copy()     # [meters]
-
-        #--------------------------------------------------------------       
-        # For the Energy Balance method, SM, IM, h_snow, h_swe, 
-        # and h_ice are always grids because Q_sum is always a grid.
-        #---------------------------------------------------------------------
-        # Convert h_snow, h_swe, h_ice and h_iwe to grids if not already grids
-        #---------------------------------------------------------------------
-        if (H0_SNOW_IS_SCALAR):
-            self.h_snow = h_snow + np.zeros([self.ny, self.nx], dtype='float64')
-        else:
-            self.h_snow = h_snow  # (is already a grid)
-        if (H0_SWE_IS_SCALAR):
-            self.h_swe = h_swe + np.zeros([self.ny, self.nx], dtype='float64')
-        else:
-            self.h_swe = h_swe    # (is already a grid) 
-        if (H0_ICE_IS_SCALAR):
-            self.h_ice = h_ice + np.zeros([self.ny, self.nx], dtype='float64')
-        else:
-            self.h_ice = h_ice # (is already a grid)         
-        if (H0_IWE_IS_SCALAR):
-            self.h_iwe = h_iwe + np.zeros([self.ny, self.nx], dtype='float64')
-        else:
-            self.h_iwe = h_iwe    # (is already a grid)
-
-        self.SM      = np.zeros([self.ny, self.nx], dtype='float64')
-        self.IM      = np.zeros([self.ny, self.nx], dtype='float64')
-        self.vol_SM  = self.initialize_scalar( 0, dtype='float64') # (m3)
-        self.vol_IM  = self.initialize_scalar( 0, dtype='float64') # (m3)
-        #-------------------------------------------
-        # 2023-08-28.  Added next line to fix bug.
-        #-------------------------------------------
-        self.vol_swe = self.initialize_scalar( 0, dtype='float64') # (m3)         
-        self.vol_swe_start = self.initialize_scalar( 0, dtype='float64') # (m3)  
-        self.vol_iwe = self.initialize_scalar( 0, dtype='float64') # (m3)         
-        self.vol_iwe_start = self.initialize_scalar( 0, dtype='float64') # (m3)  
-        #-----------------------------------------------------
-        # Compute density ratio for water to snow/ice
-        # rho_H2O is for liquid water close to 0 degrees C.
-        # Water is denser than snow/ice, so density_ratio > 1.
-        #-----------------------------------------------------
-        self.ws_density_ratio = (self.rho_H2O / self.rho_snow)
-        self.wi_density_ratio = (self.rho_H2O / self.rho_ice)
-
-        #-------------------------------------------------------------
-        # Initialize the cold content of snowpack/ice column
-        #-------------------------------------------------------------
-        # This is the only difference from initialize_computed_vars()
-        # method in glacier_base.py.
-        #-------------------------------------------------------------
-        self.initialize_snow_cold_content()
-        self.initialize_ice_cold_content()
-        
-    #   initialize_computed_vars()
-    #---------------------------------------------------------------------
-    def initialize_snow_cold_content( self ):
-
-        #----------------------------------------------------------------
-        # NOTES: This function is used to initialize the cold content
-        #        of a snowpack.
-        #        The cold content has units of [J m-2] (_NOT_ [W m-2]).
-        #        It is an energy (per unit area) threshold (or deficit)
-        #        that must be overcome before melting of snow can occur.
-        #        Cold content changes over time as the snowpack warms or
-        #        cools, but must always be non-negative.
-        #
-        #        K_snow is between 0.063 and 0.71  [W m-1 K-1]
-        #        All of the Q's have units of W m-2 = J s-1 m-2).
-        #
-        #        T0 is read from the config file.  This is a different
-        #        T0 from the one used by the Degree-Day method.
-        #---------------------------------------------------------------
-
-        #--------------------------------------------
-        # Compute initial cold content of snowpack
-        # See equation (10) in Zhang et al. (2000).
-        #--------------------------------------------
-        T_snow    = self.T_surf
-        del_T     = (self.T0 - T_snow)
-        self.Eccs  = (self.rho_snow * self.Cp_snow) * self.h0_snow * del_T
-        # print('Snow Cold Content:')
-        # print(self.Eccs)
-        # print("T_Surf:")
-        # print(self.T_surf)
-        # print('Cp_snow')
-        # print(self.Cp_snow)
-        # print('rho_snow')
-        # print(self.rho_snow)
-        # print('h0_snow')
-        # print(self.h0_snow)
-
-        #------------------------------------        
-        # Cold content must be nonnegative.
-        #----------------------------------------------
-        # Eccs > 0 if (T_snow < T0).  i.e. T_snow < 0.
-        #----------------------------------------------
-        np.maximum( self.Eccs, np.float64(0), out=self.Eccs)  # (in place)
-        # print('Updated Snow Cold Content:')
-        # print(self.Eccs)
-        # print('Max initial Eccs:')
-        # print(np.max(self.Eccs))
-
-    #   initialize_snow_cold_content()
-    #-------------------------------------------------------------------
-    def initialize_ice_cold_content( self ):
-
-        #----------------------------------------------------------------
-        # NOTES: This function is used to initialize the cold content
-        #        of glacier ice.
-        #        The cold content has units of [J m-2] (_NOT_ [W m-2]).
-        #        It is an energy (per unit area) threshold (or deficit)
-        #        that must be overcome before melting of ice can occur.
-        #        Cold content changes over time as the ice warms or
-        #        cools, but must always be non-negative.
-        #
-        #        K_snow is between 0.063 and 0.71  [W m-1 K-1]
-        #        All of the Q's have units of W m-2 = J s-1 m-2).
-        #
-        #        T0 is read from the config file.  This is a different
-        #        T0 from the one used by the Degree-Day method.
-        #---------------------------------------------------------------
-
-        #--------------------------------------------
-        # Compute initial cold content of ice
-        #--------------------------------------------
-        T_ice    = self.T_surf
-        del_T     = (self.T0 - T_ice)
-        self.Ecci  = (self.rho_ice * self.Cp_ice) * self.h_active_layer * del_T 
-        # print('Ice Cold Content:')
-        # print(self.Ecci)
-        # print('Cp_ice')
-        # print(self.Cp_ice)
-        # print('rho_ice')
-        # print(self.rho_ice)
-        # print('h0_ice')
-        # print(self.h0_ice)
-
-        #------------------------------------        
-        # Cold content must be nonnegative.
-        #----------------------------------------------
-        # Ecci > 0 if (T_ice < T0).  i.e. T_ice < 0.
-        #----------------------------------------------
-        np.maximum( self.Ecci, np.float64(0), out=self.Ecci)  # (in place)
-        # print('Updated Ice Cold Content:')
-        # print(self.Ecci)
-        # print('Max initial Ecci:')
-        # print(np.max(self.Ecci))
-
-    #   initialize_ice_cold_content()
-    #-------------------------------------------------------------------
     def update_snow_meltrate(self):
 
         #------------------------------------------------------------
@@ -623,19 +450,6 @@ class glacier_component( glacier_base.glacier_component ):
             self.SM.fill( M )
         else:
             self.SM[:] = M
-        #--------------------------------------------------
-        # Update the cold content of the snowpack [J m-2]
-        # If this is positive, there was no melt so far.
-        #--------------------------------------------------
-        ## self.Eccs = np.maximum((self.Eccs - E_in), np.float64(0))
-        Eccs = np.maximum((self.Eccs - E_in), np.float64(0))
-        if (np.size(self.Eccs) == 1):
-            Eccs = np.float64(Eccs)  # avoid type change
-            self.Eccs.fill( Eccs )
-        else:
-            self.Eccs[:] = Eccs
-        # print('Max Eccs:')
-        # print(np.max(self.Eccs))
 
         #-----------------------------------------------------------
         # Note: enforce_max_snow_meltrate() method is always called
@@ -645,6 +459,29 @@ class glacier_component( glacier_base.glacier_component ):
         #  self.enforce_max_snow_meltrate()
 
     #   update_snow_meltrate()
+    #---------------------------------------------------------------------
+    def update_snow_cold_content(self):
+
+        #--------------------------------------------------
+        # Update the cold content of the snowpack [J m-2]
+        # If this is positive, there was no melt so far.
+        #--------------------------------------------------
+        # (9/13/14) Bug fix: Ecc wasn't stored into self.
+        #-----------------------------------------------------
+        # Recall that Ecc was initialized as:
+        #    Ecc  = (rho_snow * Cp_snow) * h0_snow * del_T
+        # Why doesn't Ecc still depend on h0_snow and del_T?
+        #-----------------------------------------------------        
+        ## self.Ecc = np.maximum((self.Ecc - E_in), np.float64(0))
+        E_in = (self.Q_sum * self.dt)  # [J m-2]
+        Eccs  = np.maximum((self.Eccs - E_in), np.float64(0))
+        if (np.size(self.Eccs) == 1):
+            Eccs = np.float64(Eccs)  # avoid type change
+            self.Eccs.fill( Eccs )
+        else:
+            self.Eccs[:] = Eccs
+
+    #   update_snow_cold_content()
     #---------------------------------------------------------------------
     def update_ice_meltrate(self):
 
