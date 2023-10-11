@@ -81,6 +81,7 @@ class glacier_component( glacier_base.glacier_component ):
         'atmosphere_bottom_air__mass-per-volume_density',
         'atmosphere_bottom_air__mass-specific_isobaric_heat_capacity',
         'atmosphere_bottom_air__temperature',
+        'atmosphere_bottom_air_water-vapor__relative_saturation',
         'atmosphere_water__snowfall_leq-volume_flux',
         'land_surface__temperature',    # (used to initialize Eccs, Ecci)
         'land_surface_net-total-energy__energy_flux',
@@ -139,6 +140,7 @@ class glacier_component( glacier_base.glacier_component ):
         'atmosphere_bottom_air__mass-per-volume_density': 'rho_air',
         'atmosphere_bottom_air__mass-specific_isobaric_heat_capacity': 'Cp_air',
         'atmosphere_bottom_air__temperature': 'T_air',
+        'atmosphere_bottom_air_water-vapor__relative_saturation': 'RH',
         'atmosphere_water__snowfall_leq-volume_flux': 'P_snow',
         'land_surface_net-total-energy__energy_flux': 'Q_sum',
         'land_surface__temperature': 'T_surf',        
@@ -186,6 +188,7 @@ class glacier_component( glacier_base.glacier_component ):
         'atmosphere_bottom_air__mass-per-volume_density': 'kg m-3',
         'atmosphere_bottom_air__mass-specific_isobaric_heat_capacity': 'J kg-1 K-1', # (see Notes above)
         'atmosphere_bottom_air__temperature': 'deg_C',  # (see Notes above)
+        'atmosphere_bottom_air_water-vapor__relative_saturation': '1',
         'atmosphere_water__snowfall_leq-volume_flux': 'm s-1',
         'land_surface_net-total-energy__energy_flux': 'W m-2',
         'land_surface__temperature': 'deg_C',        
@@ -291,6 +294,7 @@ class glacier_component( glacier_base.glacier_component ):
                           self.is_scalar('rho_air'),
                           self.is_scalar('Cp_air'),
                           self.is_scalar('T_air'),   ##### CHECK THIS ONE.
+                          self.is_scalar('RH'),
                           self.is_scalar('T_surf'),
                           self.is_scalar('Q_sum'),
                           self.is_scalar('rho_snow'),
@@ -471,10 +475,60 @@ class glacier_component( glacier_base.glacier_component ):
         # Recall that Ecc was initialized as:
         #    Ecc  = (rho_snow * Cp_snow) * h0_snow * del_T
         # Why doesn't Ecc still depend on h0_snow and del_T?
-        #-----------------------------------------------------        
-        ## self.Ecc = np.maximum((self.Ecc - E_in), np.float64(0))
+        #-----------------------------------------------------
+        # Where new snow has fallen, add cold content using
+        # the same equation used for initializing cold content,
+        # but use wet bulb temperature as T_snow for new snow:
+        #--------------------------------------------------------------------
+        # Wet bult temp. equation from Stull 2011. Adapted from R code:
+        # https://github.com/SnowHydrology/humidity/blob/master/R/humidity.R
+        #--------------------------------------------------------------------
+        Eccs = self.Eccs # copy previous timesteps Eccs before adjusting
+        #------------------------------------------------------------
+        # Calculate del_T for any cold content additions for NEW snow
+        #------------------------------------------------------------
+        T_wb = self.T_air * np.arctan(0.151977 * ( (self.RH + 8.313659) ** 0.5)) + \
+            np.arctan(self.T_air + self.RH) - \
+            np.arctan(self.RH - 1.676331) + \
+            ((0.00391838 * (self.RH ** 1.5)) * np.arctan(0.023101 * self.RH)) - \
+            4.86035
+        
+        del_T    = (self.T0_cc - T_wb)
+
+        #----------------------------------------------------
+        # Where there was no snow previously, but new snow
+        # has fallen, the only cold content should be that
+        # calculated for the newly fallen snow
+        #----------------------------------------------------
+        Eccs = np.where((self.previous_h_snow == 0) & (self.h_snow > self.previous_h_snow), # could also use P_snow, in fact you probably want to? or use both? earlier on P_snow is * by self.dt... is this necessary?
+                        (np.maximum(((self.rho_snow * self.Cp_snow) * self.h_snow * del_T), np.float64(0))),
+                        Eccs) # make sure signs check out
+        # Eccs = np.maximum(Eccs, np.float64(0)) # make sure signs check out
+        
+        #------------------------------------------------------
+        # Where there was previously snow and no new snow
+        # has fallen, increment CC by atmosphere energy fluxes
+        #------------------------------------------------------
         E_in = (self.Q_sum * self.dt)  # [J m-2]
-        Eccs  = np.maximum((self.Eccs - E_in), np.float64(0))
+        # Eccs  = np.maximum((self.Eccs - E_in), np.float64(0))
+        Eccs = np.where((self.previous_h_snow > 0) & (self.h_snow <= self.previous_h_snow), 
+                        np.maximum((Eccs - E_in), np.float64(0)), 
+                        Eccs) 
+        #----------------------------------------------------
+        # Where there was previously snow and new snow has 
+        # fallen, increment by atmosphere energy fluxes AND
+        # add CC calculated for the newly fallen snow
+        #----------------------------------------------------
+        Eccs = np.where((self.previous_h_snow > 0) & (self.h_snow > self.previous_h_snow),
+                        np.maximum((Eccs + ((self.rho_snow * self.Cp_snow) * self.h_snow * del_T) - E_in), np.float64(0)),
+                        Eccs)
+
+        #--------------------------------------------------
+        # Where there is no snow, there is no cold content.
+        # Set Eccs to 0:
+        #--------------------------------------------------
+        Eccs = np.where((self.h_snow == 0), np.float64(0), Eccs)       
+        
         if (np.size(self.Eccs) == 1):
             Eccs = np.float64(Eccs)  # avoid type change
             self.Eccs.fill( Eccs )
