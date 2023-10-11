@@ -228,10 +228,11 @@ class glacier_component( BMI_base.BMI_component ):
         # Update computed values 
         #-------------------------
         self.extract_previous_swe()
+        self.extract_previous_snow_depth() # used in update_snow_cold_content()
+
         self.update_snow_meltrate()       # (meltrate = SM)
         self.enforce_max_snow_meltrate()  # (before SM integral!)
         self.update_SM_integral()
-        self.update_snow_cold_content()
 
         #----------------------------------------------------------
         # Call update_swe/iwe() and before update_snow/ice_depth()
@@ -251,6 +252,12 @@ class glacier_component( BMI_base.BMI_component ):
 
         self.update_snow_depth()
         self.update_ice_depth()
+        #----------------------------------------------------------
+        # Call update_snow_cold_content() after update_snow_depth()
+        # so lack of snow or added cold content from new snow can
+        # be accounted for
+        #----------------------------------------------------------   
+        self.update_snow_cold_content() 
         #----------------------------------------------
         # Write user-specified data to output files ?
         #----------------------------------------------
@@ -324,6 +331,7 @@ class glacier_component( BMI_base.BMI_component ):
                           self.is_scalar('rho_H2O'),
                           self.is_scalar('rho_air'),
                           self.is_scalar('Cp_air'),
+                          self.is_scalar('RH'),
                           #----------------------------------
                           self.is_scalar('rho_snow'),
                           self.is_scalar('Cp_snow'),
@@ -350,6 +358,7 @@ class glacier_component( BMI_base.BMI_component ):
         #------------------------------------------
         T_IS_GRID = self.is_grid('T_air')
         P_IS_GRID = self.is_grid('P_snow')
+        RH_IS_GRID = self.is_grid('RH')
         H0_SNOW_IS_SCALAR = self.is_scalar('h0_snow')
         H0_SWE_IS_SCALAR  = self.is_scalar('h0_swe') 
         H0_ICE_IS_SCALAR = self.is_scalar('h0_ice')
@@ -746,6 +755,19 @@ class glacier_component( BMI_base.BMI_component ):
             
     #   update_iwe_integral()   
     #-------------------------------------------------------------------
+    def extract_previous_snow_depth(self):
+        #------------------------------------------------
+        # Extract swe from previous timestep for use in 
+        # toggling between ice/snow routines
+        #------------------------------------------------
+        self.previous_h_snow = self.h_snow.copy()
+        #--------------
+        # For testing
+        #--------------
+        # print('Previous h_snow: ')
+        # print(self.previous_h_snow)
+    #   extract_previous_snow_depth()
+    #-------------------------------------------------------------------
     def update_snow_depth(self):
 
         #--------------------------------------------------------
@@ -903,6 +925,7 @@ class glacier_component( BMI_base.BMI_component ):
         self.imr_gs_file = (self.out_directory + self.imr_gs_file)
         self.hi_gs_file = (self.out_directory + self.hi_gs_file)
         self.cci_gs_file = (self.out_directory + self.cci_gs_file)
+        self.iw_gs_file = (self.out_directory + self.iw_gs_file)
         #---------------------------------------------------------
         self.smr_ts_file = (self.out_directory + self.smr_ts_file)
         self.hs_ts_file = (self.out_directory + self.hs_ts_file)
@@ -911,6 +934,13 @@ class glacier_component( BMI_base.BMI_component ):
         self.imr_ts_file = (self.out_directory + self.imr_ts_file)
         self.hi_ts_file = (self.out_directory + self.hi_ts_file)
         self.cci_ts_file =(self.out_directory + self.cci_ts_file)
+        self.iw_ts_file =(self.out_directory + self.iw_ts_file)
+        self.psnow_ts_file =(self.out_directory + self.psnow_ts_file)
+        self.tair_ts_file =(self.out_directory + self.tair_ts_file)
+        self.tsurf_ts_file =(self.out_directory + self.tsurf_ts_file)
+        self.RH_ts_file =(self.out_directory + self.RH_ts_file)
+        self.qsum_ts_file =(self.out_directory + self.qsum_ts_file)
+
 
     #   update_outfile_names()
     #-------------------------------------------------------------------  
@@ -1046,6 +1076,28 @@ class glacier_component( BMI_base.BMI_component ):
                                            long_name='ice_cold_content',
                                            units_name='J/m^2')
             
+        model_output.open_new_ts_file( self, self.psnow_ts_file, IDs,
+                                var_name='psnow',
+                                long_name='snow_precipitation',
+                                units_name='m/h')
+        
+        model_output.open_new_ts_file( self, self.tair_ts_file, IDs,
+                                var_name='tair',
+                                long_name='air_temperature',
+                                units_name='C')
+        model_output.open_new_ts_file( self, self.tsurf_ts_file, IDs,
+                                var_name='tsurf',
+                                long_name='surface_temperature',
+                                units_name='C')
+        model_output.open_new_ts_file( self, self.RH_ts_file, IDs,
+                                var_name='RH',
+                                long_name='relative_humidity',
+                                units_name='1')
+        model_output.open_new_ts_file( self, self.qsum_ts_file, IDs,
+                                var_name='qsum',
+                                long_name='land_surface_energy_flux',
+                                units_name='1')
+            
     #   open_output_files()
     #-------------------------------------------------------------------
     def write_output_files(self, time_seconds=None):
@@ -1092,6 +1144,11 @@ class glacier_component( BMI_base.BMI_component ):
         if (self.SAVE_IMR_PIXELS):model_output.close_ts_file( self, 'imr')
         if (self.SAVE_HI_PIXELS): model_output.close_ts_file( self, 'hi')
         if (self.SAVE_CCI_PIXELS): model_output.close_ts_file( self, 'cci')
+        model_output.close_ts_file( self, 'psnow')
+        model_output.close_ts_file( self, 'tair')
+        model_output.close_ts_file( self, 'tsurf')
+        model_output.close_ts_file( self, 'RH')
+        model_output.close_ts_file( self, 'qsum')
         
     #-------------------------------------------------------------------  
     def save_grids(self):
@@ -1150,5 +1207,11 @@ class glacier_component( BMI_base.BMI_component ):
 
         if (self.SAVE_CCI_PIXELS):
             model_output.add_values_at_IDs( self, time, self.Ecci, 'cci', IDs )
+
+        model_output.add_values_at_IDs( self, time, self.P_snow, 'psnow', IDs)
+        model_output.add_values_at_IDs( self, time, self.T_air, 'tair', IDs)
+        model_output.add_values_at_IDs( self, time, self.T_surf, 'tsurf', IDs)
+        model_output.add_values_at_IDs( self, time, self.RH, 'RH', IDs)
+        model_output.add_values_at_IDs( self, time, self.Q_sum, 'qsum', IDs)
     #   save_pixel_values()
     #------------------------------------------------------------------- 
