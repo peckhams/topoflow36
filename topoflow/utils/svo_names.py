@@ -90,6 +90,11 @@ def get_svo_name_map():
     svo_name_map['cc']  = svo_name_map['Eccs']
     svo_name_map['iw']  = svo_name_map['h_iwe']
     svo_name_map['cci']  = svo_name_map['Ecci']
+    svo_name_map['psnow'] = svo_name_map['P_snow']
+    svo_name_map['tair'] = svo_name_map['T_air']
+    svo_name_map['tsurf'] = svo_name_map['T_surf']
+    svo_name_map['RH'] = svo_name_map['RH']
+    svo_name_map['qsum'] = svo_name_map['Q_sum']
 
     return svo_name_map
     
