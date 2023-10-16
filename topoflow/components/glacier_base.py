@@ -238,6 +238,7 @@ class glacier_component( BMI_base.BMI_component ):
         # Call update_swe/iwe() and before update_snow/ice_depth()
         #----------------------------------------------------------   
         self.update_swe()
+        self.update_snowfall_cold_content()
         # self.update_swe_integral() 
 
         self.update_ice_meltrate()
@@ -257,7 +258,7 @@ class glacier_component( BMI_base.BMI_component ):
         # so lack of snow or added cold content from new snow can
         # be accounted for
         #----------------------------------------------------------   
-        self.update_snow_cold_content() 
+        self.update_snowpack_cold_content() 
         #----------------------------------------------
         # Write user-specified data to output files ?
         #----------------------------------------------
@@ -624,7 +625,19 @@ class glacier_component( BMI_base.BMI_component ):
             
     #   update_IM_integral()
     #-------------------------------------------------------------------
-    def update_snow_cold_content(self):
+    def update_snowfall_cold_content(self):
+
+        #-----------------------------------------------------------    
+        # 2023-09-25. This is overridden in snow_energy_balance.py
+        # and could do the same in snow_degree_day.py using some
+        # other (temperature-based) method.
+        # This is only needed for snow because snow can accumulate
+        # and thus add cold content, whereas ice only melts (in 
+        # this model)
+        #-----------------------------------------------------------
+        pass
+    #-------------------------------------------------------------------
+    def update_snowpack_cold_content(self):
 
         #-----------------------------------------------------------    
         # 2023-09-25. This is overridden in snow_energy_balance.py

@@ -464,17 +464,9 @@ class glacier_component( glacier_base.glacier_component ):
 
     #   update_snow_meltrate()
     #---------------------------------------------------------------------
-    def update_snow_cold_content(self):
-
-        #--------------------------------------------------
-        # Update the cold content of the snowpack [J m-2]
-        # If this is positive, there was no melt so far.
-        #--------------------------------------------------
-        # (9/13/14) Bug fix: Ecc wasn't stored into self.
-        #-----------------------------------------------------
-        # Recall that Ecc was initialized as:
-        #    Ecc  = (rho_snow * Cp_snow) * h0_snow * del_T
-        # Why doesn't Ecc still depend on h0_snow and del_T?
+    def update_snowfall_cold_content(self):
+        new_h_snow = self.P_snow * self.ws_density_ratio * self.dt
+        
         #-----------------------------------------------------
         # Where new snow has fallen, add cold content using
         # the same equation used for initializing cold content,
@@ -500,28 +492,43 @@ class glacier_component( glacier_base.glacier_component ):
         # has fallen, the only cold content should be that
         # calculated for the newly fallen snow
         #----------------------------------------------------
-        Eccs = np.where((self.previous_h_snow == 0) & (self.h_snow > self.previous_h_snow), # could also use P_snow, in fact you probably want to? or use both? earlier on P_snow is * by self.dt... is this necessary?
-                        (np.maximum(((self.rho_snow * self.Cp_snow) * self.h_snow * del_T), np.float64(0))),
+        Eccs = np.where((self.P_snow > 0), # could also use P_snow, in fact you probably want to? or use both? earlier on P_snow is * by self.dt... is this necessary?
+                        (np.maximum(Eccs + ((self.rho_snow * self.Cp_snow) * new_h_snow * del_T), np.float64(0))),
                         Eccs) # make sure signs check out
         # Eccs = np.maximum(Eccs, np.float64(0)) # make sure signs check out
-        
-        #------------------------------------------------------
-        # Where there was previously snow and no new snow
-        # has fallen, increment CC by atmosphere energy fluxes
-        #------------------------------------------------------
+
+        if (np.size(self.Eccs) == 1):
+            Eccs = np.float64(Eccs)  # avoid type change
+            self.Eccs.fill( Eccs )
+        else:
+            self.Eccs[:] = Eccs
+
+        # update_snowfall_cold_content()
+    #---------------------------------------------------------------------
+    def update_snowpack_cold_content(self):
+
+        #--------------------------------------------------
+        # Update the cold content of the snowpack [J m-2]
+        # If this is positive, there was no melt so far.
+        #--------------------------------------------------
+        # (9/13/14) Bug fix: Ecc wasn't stored into self.
+        #-----------------------------------------------------
+        # Recall that Ecc was initialized as:
+        #    Ecc  = (rho_snow * Cp_snow) * h0_snow * del_T
+        # Why doesn't Ecc still depend on h0_snow and del_T?
+        #-----------------------------------------------------
+
+        Eccs = self.Eccs # copy previous timesteps Eccs before adjusting
+
+        #----------------------------------------------------
+        # Where there is snow, adjust CC for land surface 
+        # energy fluxes
+        #----------------------------------------------------
         E_in = (self.Q_sum * self.dt)  # [J m-2]
         # Eccs  = np.maximum((self.Eccs - E_in), np.float64(0))
-        Eccs = np.where((self.previous_h_snow > 0) & (self.h_snow <= self.previous_h_snow), 
+        Eccs = np.where((self.h_snow > 0), 
                         np.maximum((Eccs - E_in), np.float64(0)), 
                         Eccs) 
-        #----------------------------------------------------
-        # Where there was previously snow and new snow has 
-        # fallen, increment by atmosphere energy fluxes AND
-        # add CC calculated for the newly fallen snow
-        #----------------------------------------------------
-        Eccs = np.where((self.previous_h_snow > 0) & (self.h_snow > self.previous_h_snow),
-                        np.maximum((Eccs + ((self.rho_snow * self.Cp_snow) * self.h_snow * del_T) - E_in), np.float64(0)),
-                        Eccs)
 
         #--------------------------------------------------
         # Where there is no snow, there is no cold content.
@@ -535,7 +542,7 @@ class glacier_component( glacier_base.glacier_component ):
         else:
             self.Eccs[:] = Eccs
 
-    #   update_snow_cold_content()
+    #   update_snowpack_cold_content()
     #---------------------------------------------------------------------
     def update_ice_meltrate(self):
 
