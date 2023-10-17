@@ -17,7 +17,7 @@ functions.  It inherits from the glacier "base class" in
 #
 #-----------------------------------------------------------------------
 #
-#  class snow_energy_balance
+#  class glacier_energy_balance
 #
 #      get_component_name()
 #      get_attribute()          
@@ -30,8 +30,9 @@ functions.  It inherits from the glacier "base class" in
 #      initialize_input_file_vars()   
 #      initialize_computed_vars()  # from glacier_base.py
 #      update_snow_meltrate()
+#      update_snowfall_cold_content()
+#      update_snowpack_cold_content()
 #      update_ice_meltrate()
-#      update_snow_cold_content()
 #      ----------------------
 #      open_input_files()
 #      read_input_files()
@@ -101,10 +102,10 @@ class glacier_component( glacier_base.glacier_component ):
                         
                                   
     #-------------------------------------------------------------
-    # Note: The main output of the Energy-Balance method is SM.
+    # Note: The main output of the Energy-Balance method is SM/IM.
     #       Functions in glacier_base.py compute additional output
     #       vars, such as:
-    #       update_SM_integral(), update_snow/ice_depth(), 
+    #       update_SM/IM_integral(), update_snow/ice_depth(), 
     #       update_swe/iwe().
     #       They need things like: rho_H2O, rho_snow, and rho_ice.
     #-------------------------------------------------------------
@@ -134,7 +135,9 @@ class glacier_component( glacier_base.glacier_component ):
         'glacier__initial_liquid_equivalent_depth', # h0_iwe
         'glacier_ice__melt_volume_flux', # IM
         'glacier_ice__mass-per-volume_density', # rho_ice
-        'glacier_ice__mass-specific_isobaric_heat_capacity' ] # Cp_ice 
+        'glacier_ice__mass-specific_isobaric_heat_capacity', # Cp_ice 
+        'cryosphere__melt_volume_flux', # M_total
+        'cryosphere__domain_time_integral_of_melt_volume_flux' ] #vol_M_total 
     
     _var_name_map = {
         'atmosphere_bottom_air__mass-per-volume_density': 'rho_air',
@@ -178,7 +181,9 @@ class glacier_component( glacier_base.glacier_component ):
         'glacier__initial_liquid_equivalent_depth': 'h0_iwe',
         'glacier_ice__melt_volume_flux': 'IM',
         'glacier_ice__mass-per-volume_density': 'rho_ice',
-        'glacier_ice__mass-specific_isobaric_heat_capacity': 'Cp_ice' }
+        'glacier_ice__mass-specific_isobaric_heat_capacity': 'Cp_ice',
+        'cryosphere__melt_volume_flux': 'M_total',
+        'cryosphere__domain_time_integral_of_melt_volume_flux' : 'vol_M_total'}
     
     #-----------------------------------------------------------------
     # Note: We need to be careful with whether units are C or K,
@@ -226,14 +231,9 @@ class glacier_component( glacier_base.glacier_component ):
         'glacier__initial_liquid_equivalent_depth': 'm',
         'glacier_ice__melt_volume_flux': 'm s-1',
         'glacier_ice__mass-per-volume_density': 'kg m-3',
-        'glacier_ice__mass-specific_isobaric_heat_capacity': 'J kg-1 K-1' 
+        'glacier_ice__mass-specific_isobaric_heat_capacity': 'J kg-1 K-1',
+        'cryosphere__melt_volume_flux': 'm s-1' 
           }
-
-    #------------------------------------------------    
-    # Return NumPy string arrays vs. Python lists ?
-    #------------------------------------------------
-    ## _input_var_names  = np.array( _input_var_names )
-    ## _output_var_names = np.array( _output_var_names )
 
     #-------------------------------------------------------------------
     def get_component_name(self):
@@ -422,8 +422,6 @@ class glacier_component( glacier_base.glacier_component ):
         E_in  = (self.Q_sum * self.dt)
         E_rem = np.maximum( E_in - self.Eccs, np.float64(0) )
         Qm    = (E_rem / self.dt)  # [W m-2]
-        # print('E_in:')
-        # print(E_in[17,29])
         
         #-------------------------------------
         # Convert melt energy to a melt rate
@@ -510,15 +508,12 @@ class glacier_component( glacier_base.glacier_component ):
         #--------------------------------------------------
         # Update the cold content of the snowpack [J m-2]
         # If this is positive, there was no melt so far.
-        #--------------------------------------------------
-        # (9/13/14) Bug fix: Ecc wasn't stored into self.
         #-----------------------------------------------------
-        # Recall that Ecc was initialized as:
-        #    Ecc  = (rho_snow * Cp_snow) * h0_snow * del_T
-        # Why doesn't Ecc still depend on h0_snow and del_T?
-        #-----------------------------------------------------
-
-        Eccs = self.Eccs # copy previous timesteps Eccs before adjusting
+        # Copy previous timesteps Eccs/the Eccs accounting for
+        # new snowfall before adjusting for land surface 
+        # energy fluxes    
+        #-----------------------------------------------------   
+        Eccs = self.Eccs 
 
         #----------------------------------------------------
         # Where there is snow, adjust CC for land surface 
@@ -647,15 +642,11 @@ class glacier_component( glacier_base.glacier_component ):
         #------------------------------------------
         IM = np.maximum(M, np.float64(0))
         self.IM = np.where((self.h_swe == 0) & (self.previous_swe == 0), IM, np.float64(0))
-        # print('Current SWE:')
-        # print(self.h_swe)
-        # print('Previous SWE:')
-        # print(self.previous_swe)
+
         #--------------------------------------------------
         # Update the cold content of the ice [J m-2]
         # If this is positive, there was no melt so far.
         #--------------------------------------------------
-        ## self.Ecci = np.maximum((self.Ecci - E_in), np.float64(0))
         Ecci = np.maximum((self.Ecci - E_in), np.float64(0))
         if (np.size(self.Ecci) == 1):
             Ecci = np.float64(Ecci)  # avoid type change
@@ -663,7 +654,6 @@ class glacier_component( glacier_base.glacier_component ):
         else:
             self.Ecci[:] = Ecci
 
-        # print(self.Ecci[17,29])
         #-----------------------------------------------------------
         # Note: enforce_max_ice_meltrate() method is always called
         #       by update() in the base class to make sure that
@@ -672,6 +662,18 @@ class glacier_component( glacier_base.glacier_component ):
         #  self.enforce_max_ice_meltrate()
             
     #   update_ice_meltrate()
+    #---------------------------------------------------------------------
+    # def update_combined_meltrate(self):
+    #     #-------------------------------------------------------------
+    #     # We want to feed combined snow and ice melt to GIUH for 
+    #     # runoff, so combine the IM and SM variables to create Mtotal.
+    #     #-------------------------------------------------------------
+
+    #     M_total = self.IM + self.SM
+
+    #     self.M_total = M_total
+
+    # #   update_combined_meltrate()
     #---------------------------------------------------------------------
     def open_input_files(self):
 

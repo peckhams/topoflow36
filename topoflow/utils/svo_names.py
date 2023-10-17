@@ -84,17 +84,14 @@ def get_svo_name_map():
     #------------------------------------
     svo_name_map['smr']  = svo_name_map['SM']
     svo_name_map['imr'] = svo_name_map['IM']
+    svo_name_map['tmr'] = svo_name_map['M_total']
     svo_name_map['hs']  = svo_name_map['h_snow']
     svo_name_map['hi']  = svo_name_map['h_ice']
     svo_name_map['sw']  = svo_name_map['h_swe']
     svo_name_map['cc']  = svo_name_map['Eccs']
     svo_name_map['iw']  = svo_name_map['h_iwe']
     svo_name_map['cci']  = svo_name_map['Ecci']
-    svo_name_map['psnow'] = svo_name_map['P_snow']
-    svo_name_map['tair'] = svo_name_map['T_air']
-    svo_name_map['tsurf'] = svo_name_map['T_surf']
-    svo_name_map['RH'] = svo_name_map['RH']
-    svo_name_map['qsum'] = svo_name_map['Q_sum']
+    svo_name_map['tmr'] = svo_name_map['M_total']
 
     return svo_name_map
     
@@ -280,6 +277,8 @@ def get_short_name_map():
     'snowpack__melt_volume_flux' : 'SM',
     'snowpack__z_mean_of_mass-per-volume_density' : 'rho_snow',
     'snowpack__z_mean_of_mass-specific_isobaric_heat_capacity' : 'Cp_snow',
+    'cryosphere__domain_time_integral_of_melt_volume_flux' : 'vol_M_total',
+    'cryosphere__melt_volume_flux' : 'M_total',
     'soil__freeze_depth' : 'd_freeze',  ########
     'soil__porosity' : 'phi',
     'soil__reference_depth_temperature' : 'T_soil_x',   # x -> z, more clear?
