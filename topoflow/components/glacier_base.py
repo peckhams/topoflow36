@@ -948,12 +948,6 @@ class glacier_component( BMI_base.BMI_component ):
         self.hi_ts_file = (self.out_directory + self.hi_ts_file)
         self.cci_ts_file =(self.out_directory + self.cci_ts_file)
         self.iw_ts_file =(self.out_directory + self.iw_ts_file)
-        self.psnow_ts_file =(self.out_directory + self.psnow_ts_file)
-        self.tair_ts_file =(self.out_directory + self.tair_ts_file)
-        self.tsurf_ts_file =(self.out_directory + self.tsurf_ts_file)
-        self.RH_ts_file =(self.out_directory + self.RH_ts_file)
-        self.qsum_ts_file =(self.out_directory + self.qsum_ts_file)
-
 
     #   update_outfile_names()
     #-------------------------------------------------------------------  
@@ -1089,28 +1083,6 @@ class glacier_component( BMI_base.BMI_component ):
                                            long_name='ice_cold_content',
                                            units_name='J/m^2')
             
-        model_output.open_new_ts_file( self, self.psnow_ts_file, IDs,
-                                var_name='psnow',
-                                long_name='snow_precipitation',
-                                units_name='m/h')
-        
-        model_output.open_new_ts_file( self, self.tair_ts_file, IDs,
-                                var_name='tair',
-                                long_name='air_temperature',
-                                units_name='C')
-        model_output.open_new_ts_file( self, self.tsurf_ts_file, IDs,
-                                var_name='tsurf',
-                                long_name='surface_temperature',
-                                units_name='C')
-        model_output.open_new_ts_file( self, self.RH_ts_file, IDs,
-                                var_name='RH',
-                                long_name='relative_humidity',
-                                units_name='1')
-        model_output.open_new_ts_file( self, self.qsum_ts_file, IDs,
-                                var_name='qsum',
-                                long_name='land_surface_energy_flux',
-                                units_name='1')
-            
     #   open_output_files()
     #-------------------------------------------------------------------
     def write_output_files(self, time_seconds=None):
@@ -1157,11 +1129,6 @@ class glacier_component( BMI_base.BMI_component ):
         if (self.SAVE_IMR_PIXELS):model_output.close_ts_file( self, 'imr')
         if (self.SAVE_HI_PIXELS): model_output.close_ts_file( self, 'hi')
         if (self.SAVE_CCI_PIXELS): model_output.close_ts_file( self, 'cci')
-        model_output.close_ts_file( self, 'psnow')
-        model_output.close_ts_file( self, 'tair')
-        model_output.close_ts_file( self, 'tsurf')
-        model_output.close_ts_file( self, 'RH')
-        model_output.close_ts_file( self, 'qsum')
         
     #-------------------------------------------------------------------  
     def save_grids(self):
@@ -1220,11 +1187,6 @@ class glacier_component( BMI_base.BMI_component ):
 
         if (self.SAVE_CCI_PIXELS):
             model_output.add_values_at_IDs( self, time, self.Ecci, 'cci', IDs )
-
-        model_output.add_values_at_IDs( self, time, self.P_snow, 'psnow', IDs)
-        model_output.add_values_at_IDs( self, time, self.T_air, 'tair', IDs)
-        model_output.add_values_at_IDs( self, time, self.T_surf, 'tsurf', IDs)
-        model_output.add_values_at_IDs( self, time, self.RH, 'RH', IDs)
-        model_output.add_values_at_IDs( self, time, self.Q_sum, 'qsum', IDs)
+            
     #   save_pixel_values()
     #------------------------------------------------------------------- 
