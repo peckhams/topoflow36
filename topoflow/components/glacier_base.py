@@ -38,7 +38,8 @@ See glacier_degree_day.py and glacier_energy_balance.py.
 #      set_missing_cfg_options()   # 2023-09-25 (placeholder)
 #      check_input_types()
 #      initialize_computed_vars()
-#      initialize_cold_content()   # NEED TO RENAME T0 for CC
+#      initialize_snow_cold_content()   # NEED TO RENAME T0 for CC
+#      initialize_ice_cold_content() 
 #      ----------------------------
 #      update_snow_meltrate()
 #      update_ice_meltrate()
@@ -46,19 +47,26 @@ See glacier_degree_day.py and glacier_energy_balance.py.
 #      enfore_max_ice_meltrate()
 #      update_SM_integral()
 #      update_IM_integral()
-#      update_snow_cold_content()
+#      update_snowfall_cold_content()
+#      update_snowpack_cold_content()
+#      extract_previous_swe()
 #      update_swe()
+#      update_density_ratio()
 #      update_swe_integral()   
 #      update_iwe()
 #      update_iwe_integral() 
+#      extract_previous_snow_depth()
 #      update_snow_depth()
 #      update_ice_depth()
+#      update_total_snowpack_water_volume()
+#      update_total_ice_water_volume()
 #      -----------------------
 #      open_input_files()
 #      read_input_files()
 #      close_input_files()
 #      -----------------------
 #      update_outfile_names()
+#      disable_all_output()
 #      open_output_files()
 #      write_output_files()
 #      close_output_files()
@@ -100,24 +108,24 @@ class glacier_component( BMI_base.BMI_component ):
                 
     #   set_constants()       
     #-------------------------------------------------------------------
-    # def latent_heat_of_sublimation(self):
+    def latent_heat_of_sublimation(self):
 
-    #     #----------------------------------------------------------    
-    #     # Notes:  See:  http://en.wikipedia.org/wiki/Latent_heat
-    #     #         Valid for T in [-40, 0] deg C.
-    #     #----------------------------------------------------------
-    #     # sublimation/deposition.  What about fusion/melting?
-    #     # deposition, desublimation and resublimation are synonyms
-    #     #----------------------------------------------------------
-    #     a = np.float64( 2834.1 )
-    #     b = np.float64( -0.29 )
-    #     c = np.float64( -0.004 )
-    #     T = self.T_air
+        #----------------------------------------------------------    
+        # Notes:  See:  http://en.wikipedia.org/wiki/Latent_heat
+        #         Valid for T in [-40, 0] deg C.
+        #----------------------------------------------------------
+        # sublimation/deposition.  What about fusion/melting?
+        # deposition, desublimation and resublimation are synonyms
+        #----------------------------------------------------------
+        a = np.float64( 2834.1 )
+        b = np.float64( -0.29 )
+        c = np.float64( -0.004 )
+        T = self.T_air
         
-    #     self.Lf = a + (b * T) + (c * (T**2))  # [J g-1]
-    #     self.Lf *= np.float64( 1000 ) # [J kg-1]
+        self.Lf = a + (b * T) + (c * (T**2))  # [J g-1]
+        self.Lf *= np.float64( 1000 ) # [J kg-1]
         
-    # #   latent_heat_of_sublimation()  
+    #   latent_heat_of_sublimation()  
     # #-------------------------------------------------------------------
     def initialize(self, cfg_file=None, mode="nondriver",
                    SILENT=False):
@@ -127,6 +135,7 @@ class glacier_component( BMI_base.BMI_component ):
         #---------------------------------------------------------
         # Notes:  Need to make sure than h_swe matches h_snow 
         #         User may have entered incompatible values.
+        #         The same goes for h_iwe and h_ice.
         #---------------------------------------------------------
         if not(self.SILENT):
             print(' ')
@@ -257,11 +266,11 @@ class glacier_component( BMI_base.BMI_component ):
 
         self.update_snow_depth()
         self.update_ice_depth()
-        #----------------------------------------------------------
-        # Call update_snow_cold_content() after update_snow_depth()
+        #--------------------------------------------------------------
+        # Call update_snowpack_cold_content() after update_snow_depth()
         # so lack of snow or added cold content from new snow can
         # be accounted for
-        #----------------------------------------------------------   
+        #--------------------------------------------------------------   
         self.update_snowpack_cold_content() 
         #----------------------------------------------
         # Write user-specified data to output files ?
@@ -647,8 +656,8 @@ class glacier_component( BMI_base.BMI_component ):
     def update_snowfall_cold_content(self):
 
         #-----------------------------------------------------------    
-        # 2023-09-25. This is overridden in snow_energy_balance.py
-        # and could do the same in snow_degree_day.py using some
+        # 2023-09-25. This is overridden in glacier_energy_balance.py
+        # and could do the same in glacier_degree_day.py using some
         # other (temperature-based) method.
         # This is only needed for snow because snow can accumulate
         # and thus add cold content, whereas ice only melts (in 
@@ -659,8 +668,8 @@ class glacier_component( BMI_base.BMI_component ):
     def update_snowpack_cold_content(self):
 
         #-----------------------------------------------------------    
-        # 2023-09-25. This is overridden in snow_energy_balance.py
-        # and could do the same in snow_degree_day.py using some
+        # 2023-09-25. This is overridden in glacier_energy_balance.py
+        # and could do the same in glacier_degree_day.py using some
         # other (temperature-based) method.
         # This is only needed for snow because snow can accumulate
         # and thus add cold content, whereas ice only melts (in 
@@ -676,11 +685,7 @@ class glacier_component( BMI_base.BMI_component ):
         # toggling between ice/snow routines
         #------------------------------------------------
         self.previous_swe = self.h_swe.copy()
-        #--------------
-        # For testing
-        #--------------
-        # print('Previous SWE: ')
-        # print(self.previous_swe > 0)
+
     #   extract_previous_swe()
     #-------------------------------------------------------------------
     def update_swe(self):
@@ -716,11 +721,6 @@ class glacier_component( BMI_base.BMI_component ):
         self.h_swe -= dh2_swe
         np.maximum(self.h_swe, np.float64(0), self.h_swe)  # (in place)
         
-        #--------------
-        # For testing
-        #--------------
-        # print('Current SWE: ')
-        # print(self.h_swe)
     #   update_swe()
     #-------------------------------------------------------------------
     def update_iwe(self):
@@ -732,11 +732,6 @@ class glacier_component( BMI_base.BMI_component ):
         self.h_iwe -= dh2_iwe
         np.maximum(self.h_iwe, np.float64(0), self.h_iwe)  # (in place)
 
-        #--------------
-        # For testing
-        #--------------
-        # print('Current IWE: ')
-        # print(self.h_iwe)
     #   update_iwe()
     #-------------------------------------------------------------------
     def update_density_ratio(self):
@@ -793,11 +788,7 @@ class glacier_component( BMI_base.BMI_component ):
         # toggling between ice/snow routines
         #------------------------------------------------
         self.previous_h_snow = self.h_snow.copy()
-        #--------------
-        # For testing
-        #--------------
-        # print('Previous h_snow: ')
-        # print(self.previous_h_snow)
+
     #   extract_previous_snow_depth()
     #-------------------------------------------------------------------
     def update_snow_depth(self):
