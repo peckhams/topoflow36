@@ -463,20 +463,26 @@ class glacier_component( glacier_base.glacier_component ):
     #   update_snow_meltrate()
     #---------------------------------------------------------------------
     def update_snowfall_cold_content(self):
-        new_h_snow = self.P_snow * self.ws_density_ratio * self.dt
+        new_h_snow = (self.P_snow * self.dt) * self.ws_density_ratio
         
-        #-----------------------------------------------------
-        # Where new snow has fallen, add cold content using
+        #----------------------------------------------------
+        # Copy previous timestep's CC and adjust from here
+        #----------------------------------------------------
+        Eccs = self.Eccs 
+
+        #----------------------------------------------------
+        # Prepare to adjust CC for land surface energy fluxes
+        #----------------------------------------------------
+        E_in = (self.Q_sum * self.dt)  # [J m-2]
+
+        #--------------------------------------------------------------------
+        # For newly fallen snow, add cold content using
         # the same equation used for initializing cold content,
         # but use wet bulb temperature as T_snow for new snow:
         #--------------------------------------------------------------------
-        # Wet bult temp. equation from Stull 2011. Adapted from R code:
+        # Wet bulb temp. equation from Stull 2011. Adapted from R code:
         # https://github.com/SnowHydrology/humidity/blob/master/R/humidity.R
         #--------------------------------------------------------------------
-        Eccs = self.Eccs # copy previous timesteps Eccs before adjusting
-        #------------------------------------------------------------
-        # Calculate del_T for any cold content additions for NEW snow
-        #------------------------------------------------------------
         T_wb = self.T_air * np.arctan(0.151977 * ( (self.RH + 8.313659) ** 0.5)) + \
             np.arctan(self.T_air + self.RH) - \
             np.arctan(self.RH - 1.676331) + \
@@ -486,12 +492,12 @@ class glacier_component( glacier_base.glacier_component ):
         del_T    = (self.T0_cc - T_wb)
 
         #----------------------------------------------------
-        # Where there was no snow previously, but new snow
-        # has fallen, the only cold content should be that
-        # calculated for the newly fallen snow
+        # Only where NEW snow has fallen (P_snow > 0), ADD 
+        # cold content for the new snow AND account for land 
+        # surface energy fluxes
         #----------------------------------------------------
-        Eccs = np.where((self.P_snow > 0), # could also use P_snow, in fact you probably want to? or use both? earlier on P_snow is * by self.dt... is this necessary?
-                        (np.maximum(Eccs + ((self.rho_snow * self.Cp_snow) * new_h_snow * del_T), np.float64(0))),
+        Eccs = np.where((self.P_snow > 0), 
+                        (np.maximum((Eccs + ((self.rho_snow * self.Cp_snow) * new_h_snow * del_T) - E_in), np.float64(0))),
                         Eccs) # make sure signs check out
         # Eccs = np.maximum(Eccs, np.float64(0)) # make sure signs check out
 
@@ -505,23 +511,20 @@ class glacier_component( glacier_base.glacier_component ):
     #---------------------------------------------------------------------
     def update_snowpack_cold_content(self):
 
-        #--------------------------------------------------
-        # Update the cold content of the snowpack [J m-2]
-        # If this is positive, there was no melt so far.
         #-----------------------------------------------------
-        # Copy previous timesteps Eccs/the Eccs accounting for
-        # new snowfall before adjusting for land surface 
-        # energy fluxes    
+        # Copy the CC that was only adjusted in places WITH 
+        # new snowfall before adjusting in places WITHOUT new 
+        # snowfall 
         #-----------------------------------------------------   
         Eccs = self.Eccs 
 
-        #----------------------------------------------------
-        # Where there is snow, adjust CC for land surface 
-        # energy fluxes
-        #----------------------------------------------------
+        #------------------------------------------------------
+        # In places where no new snow fell (P_snow !> 0), ONLY
+        # adjust CC for land surface energy fluxes
+        #------------------------------------------------------
         E_in = (self.Q_sum * self.dt)  # [J m-2]
         # Eccs  = np.maximum((self.Eccs - E_in), np.float64(0))
-        Eccs = np.where((self.h_snow > 0), 
+        Eccs = np.where((self.P_snow <= 0), 
                         np.maximum((Eccs - E_in), np.float64(0)), 
                         Eccs) 
 
@@ -648,6 +651,13 @@ class glacier_component( glacier_base.glacier_component ):
         # If this is positive, there was no melt so far.
         #--------------------------------------------------
         Ecci = np.maximum((self.Ecci - E_in), np.float64(0))
+
+        #--------------------------------------------------
+        # Where there is no ice, there is no cold content.
+        # Set Ecci to 0:
+        #--------------------------------------------------
+        Ecci = np.where((self.h_ice == 0), np.float64(0), Ecci)   
+
         if (np.size(self.Ecci) == 1):
             Ecci = np.float64(Ecci)  # avoid type change
             self.Ecci.fill( Ecci )
