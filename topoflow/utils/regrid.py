@@ -173,9 +173,9 @@ def get_raster_cellsize( gdal_unit ):
 #   get_raster_cellsize()
 #-------------------------------------------------------------------
 def read_geotiff(in_file=None, REPORT=True,
-                 MAKE_RTG=False, rtg_file=None ):
+                 MAKE_RTG=False, rtg_file=None, GEO=True ):
  
-    # Bounds = [ minlon, minlat, maxlon, maxlat ]'
+    # Bounds = [ minlon, minlat, maxlon, maxlat ]
 
     if (in_file is None):
         in_dir  = '/Users/peckhams/Conflict/Data/GPW-v4/'  
@@ -193,13 +193,20 @@ def read_geotiff(in_file=None, REPORT=True,
     print('Reading grid from GeoTIFF file...')
     in_unit     = gdal.Open( in_file, gdal.GA_ReadOnly )
     (dx, dy)    = get_raster_cellsize( in_unit )
-    in_xres_deg = dx
-    in_yres_deg = dy
-    in_xres_sec = (in_xres_deg * 3600.0)
-    in_yres_sec = (in_yres_deg * 3600.0)
     in_ncols    = in_unit.RasterXSize
     in_nrows    = in_unit.RasterYSize
     in_bounds   = get_raster_bounds( in_unit )   ######
+
+    if (GEO):
+        in_xres_deg = dx
+        in_yres_deg = dy
+        in_xres_sec = (in_xres_deg * 3600.0)
+        in_yres_sec = (in_yres_deg * 3600.0)
+        in_xres     = in_xres_sec
+        in_yres     = in_yres_sec
+    else:
+        in_xres = dx
+        in_yres = dy
 
     #------------------------------
     # Get min & max of input grid
@@ -220,18 +227,22 @@ def read_geotiff(in_file=None, REPORT=True,
     # Option to save as RTG file
     #-----------------------------
     if (MAKE_RTG):
-        rtg_path = in_dir + rtg_file   #####
+        rtg_path = rtg_file
         #-------------------------------
         # Option to create an RTI file
         #-------------------------------
+        if (GEO):
+            pixel_geom = 0
+        else:
+            pixel_geom = 1
         rti = rti_files.make_info(grid_file=rtg_path,
                   ncols=in_ncols, nrows=in_nrows,
-                  xres=in_xres_sec, yres=in_yres_sec,
+                  xres=in_xres, yres=in_yres,
                   #--------------------------------------
                   data_source='SEDAC',
                   data_type='FLOAT',  ## Must agree with dtype  #######
                   byte_order=rti_files.get_rti_byte_order(),
-                  pixel_geom=0,
+                  pixel_geom=pixel_geom,
                   zres=0.001, z_units='unknown',
                   y_south_edge=in_bounds[1],
                   y_north_edge=in_bounds[3],
@@ -255,8 +266,12 @@ def read_geotiff(in_file=None, REPORT=True,
         print('   ' + in_file )
         print('   ncols  =', in_ncols )
         print('   nrows  =', in_nrows )
-        print('   xres   =', in_xres_sec, ' [arcsecs]' )
-        print('   yres   =', in_yres_sec, ' [arcsecs]' )
+        if (GEO):
+            print('   xres   =', in_xres, ' [arcsecs]' )
+            print('   yres   =', in_yres, ' [arcsecs]' )
+        else:
+            print('   xres   =', in_xres, ' [meters]')
+            print('   yres   =', in_yres, ' [meters]')
         print('   bounds =', in_bounds )
         print('   dtype  =', in_dtype )
         print('   nodata =', in_nodata )
@@ -600,8 +615,8 @@ def clip_geotiff(in_file=None, out_file=None,
 #   clip_geotiff()
 #-------------------------------------------------------------------  
 def save_grid_to_geotiff( new_tif_file, grid,
-                          ulx, uly, xres, yres, nodata=None):
-                          #### nodata ):
+                          ulx, uly, xres, yres,
+                          dtype='float32', nodata=None):
                               
     #---------------------------------------------------------
     # Notes:
@@ -618,13 +633,25 @@ def save_grid_to_geotiff( new_tif_file, grid,
     # uly  = geotransform[3]
     # yrtn = geotransform[4]  # (not yres !!)
     # yres = geotransform[5]  # (not yrtn !!) 
-        
+     
+    if (dtype == 'float32'):
+        data_type = gdal.GDT_Float32
+    elif (dtype == 'int32'):
+        data_type = gdal.GDT_Int32
+    elif (dtype == 'int16'):
+        data_type = gdal.GDT_Int16
+    elif (dtype == 'float64'):
+        data_type = gdal.GDT_Float64
+    else:
+        data_type = gdal.GDT_Float32
+                        
     ncols  = grid.shape[1]
     nrows  = grid.shape[0]
     nbands = 1
     xrtn   = 0.0
     yrtn   = 0.0
-    data_type = gdal.GDT_Float32
+    
+
     #-----------------------------------------
     # Use same EPSG code as source data that
     # was downloaded from GES DISC DAAC.
