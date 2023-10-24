@@ -1,6 +1,15 @@
 
 # Copyright (c) 2023, Scott D. Peckham
 #
+# Oct 2023. Modified collate() to get HLR code for any lon/lat
+#           using new routines in hlr_tools.py.
+#           Added get_lon_col, get_lat_col.
+#           Moved to usgs_utils.py:  haversine, distance_on_sphere,
+#           get_closest_station.
+#           Added RFC basins to collate() function.
+# Sep 2023. Finished add_hlr_basins (new tools in usgs_utils.py).
+#           Updated get_closest_station() for nodata lon or lat.
+#           Started work on adding NOAA RFC basins.
 # Jul 2023. Added haversine, distance_on_sphere,
 #           get_closest_station, add_ars_basins, add_czo_basins,
 #           add_hlr_basins, add_lter_basins, add_neon_basins,
@@ -29,6 +38,8 @@
 #  get_n_records()
 #  get_id_column()
 #  get_name_column()
+#  get_lon_column()
+#  get_lat_column()
 #  get_minlon_column()
 #  get_header_lines()
 #  get_basin_ids()
@@ -36,10 +47,6 @@
 #
 #  get_basin_names()
 #  compare_basin_names()
-#
-#  haversine()
-#  distance_on_sphere()
-#  get_closest_station()
 #  
 #  get_dataset_key_names()
 #  get_next_line()
@@ -70,11 +77,13 @@
 #  add_hlr_basins()
 #  add_lter_basins()
 #  add_neon_basins()
-#
+#  add_gages3_basins()
 #  export_csv_to_tsv()
 #
 #---------------------------------------------------------------------
 from topoflow.utils.ngen import usgs_utils as usgs
+from topoflow.utils.ngen import hlr_tools as hlr
+from topoflow.utils import regrid  # (to read hlr code geotiff)
 
 import numpy as np
 import time
@@ -124,9 +133,11 @@ def get_data_directory( db_str='USGS_gauged' ):
     elif (db_str == 'NEON'):
         data_dir = repo_dir + 'NEON/'
     elif (db_str == 'RFC'):    
-        data_dir = repo_dir + 'NOAA_RFCs/'
+        data_dir = repo_dir + 'NOAA_RFCs/USGS-HADS_basins/'
     elif (db_str == 'USGS_gauged'):
         data_dir = repo_dir + 'USGS_Gauged_Basins/'
+    elif (db_str == 'USGS_NWIS_all'):
+        data_dir = repo_dir + 'USGS_NWIS/'
     else:
         print('SORRY: No match for:', db_str)
         data_dir = None
@@ -154,7 +165,7 @@ def get_data_filepath( db_str='USGS_gauged' ):
     elif (db_str == 'GAGES2_ref'):
         file_path = data_dir + 'new_gages2_ref.tsv'
     elif (db_str == 'HLR'):
-        file_path = data_dir + 'new_hlr_na_all_v2.csv'  ##########
+        file_path = data_dir + 'new_hlr_na_all.tsv'  ##########
     elif (db_str == 'LTER'):
         file_path = data_dir + 'new_lter_info.tsv'
     elif (db_str == 'MOPEX'):
@@ -162,11 +173,11 @@ def get_data_filepath( db_str='USGS_gauged' ):
     elif (db_str == 'NEON'):
         file_path = data_dir + 'NEON_Field_Site_Metadata_20230309.tsv'
     elif (db_str == 'RFC'):
-        print('SORRY: TSV file is not ready yet.', db_str)
-        file_path = None
-        # file_path = data_dir + 'new_rfc_info.csv'
+        file_path = data_dir + 'new_rfc_hads_sorted.tsv'
     elif (db_str == 'USGS_gauged'):
         file_path = data_dir + 'USGS_stream_gauge_data.tsv'
+    elif (db_str == 'USGS_NWIS_all'):
+        file_path = data_dir + 'USGS_NWIS_stream_stations_usgs.tsv'
     else:
         print('SORRY: No match for:', db_str)
         file_path = None
@@ -190,9 +201,9 @@ def get_n_records( db_str ):
     elif (db_str == 'GAGES2_ref'):
         n_records = 2057
     elif (db_str == 'HLR'):
-        n_records = 43391    # Correct number
+        n_records = 43391    # Total, correct number
         # n_records = 47479  # w/ repeated VALUEs
-        # n_records = 9796   # in new_hlr_na_all_v2.csv
+        # n_records = 9539   # Have outlet info in new_hlr_na_all.csv
     elif (db_str == 'LTER'):
         n_records = 30
     elif (db_str == 'MOPEX'):
@@ -200,10 +211,11 @@ def get_n_records( db_str ):
     elif (db_str == 'NEON'):
         n_records = 81
     elif (db_str == 'RFC'):
-        print('SORRY: TSV file is not ready yet.', db_str)
-        n_records = None
+        n_records = 10512
     elif (db_str == 'USGS_gauged'):
         n_records = 25420
+    elif (db_str == 'USGS_NWIS_all'):
+        n_records = 145375
     else:
         print('SORRY: No match for:', db_str)
         n_records = None
@@ -216,29 +228,33 @@ def get_id_column( db_str ):
 
     #--------------------------------------------------------
     # ID Column Heading for each dataset:
-    # ARS ID      = "Watershed ID"
-    # CAMELS ID   = "gauge_id"
-    # FPS ID      = "SiteNumber" (prepend 0 if 7 digits)
-    # GAGES2_all  = "STAID"
-    # GAGES2_ref  = "STAID"
-    # HLR         = "VALUE"
-    # LTER        = "Site Acronym" (e.g. "AND")
-    # MOPEX       = "SiteCode"
-    # NEON        = "field_site_id" (e.g. "ABBY")
-    # RFC         = "id" (for Gages.csv and Catchments.csv)
-    # USGS_gauged = "site_no"
+    # ARS           = "Watershed ID"
+    # CAMELS        = "gauge_id"
+    # FPS           = "SiteNumber" (prepend 0 if 7 digits)
+    # GAGES2_all    = "STAID"
+    # GAGES2_ref    = "STAID"
+    # HLR           = "VALUE"
+    # LTER          = "Site Acronym" (e.g. "AND")
+    # MOPEX         = "SiteCode"
+    # NEON          = "field_site_id" (e.g. "ABBY")
+    # RFC           = "USGS_ID"
+    # USGS_gauged   = "site_no"
+    # USGS_NWIS_all = "MonitoringLocationIdentifier"
     #--------------------------------------------------------
     id_col = None
     list1 = ['ARS', 'CAMELS', 'FPS', 'GAGES2_all',
-             'GAGES2_ref', 'HLR', 'LTER', 'MOPEX']
+             'GAGES2_ref', 'HLR', 'LTER', 'MOPEX', 'RFC']
     list2 = ['NEON', 'USGS_gauged']
-    
+    list3 = ['USGS_NWIS_all']
+
     if (db_str in list1):
         id_col = 0
     elif (db_str in list2):
         id_col = 1
+    elif (db_str in list3):
+        id_col = 2
     else:
-        #### CZO and RFC ####
+        #### CZO ####
         print('SORRY: No match for:', db_str)
         print('       Returning id_col = 0.')
         id_col = 0
@@ -251,28 +267,32 @@ def get_name_column( db_str ):
 
     #--------------------------------------------------------
     # Name Column Heading for each dataset:
-    # ARS ID      = "Watershed name" (vs. Location, etc.)
-    # CAMELS ID   = "gauge_name"
-    # FPS ID      = "SiteName"
-    # GAGES2_all  = "STANAME"
-    # GAGES2_ref  = "STANAME"
-    # HLR         =  No name given
-    # LTER        = "Site Name" (but not a basin name)
-    # MOPEX       = "SiteName"
-    # NEON        = "field_site_name"
-    # RFC         = "description"
-    # USGS_gauged = "station_nm"
+    # ARS           = "Watershed name" (vs. Location, etc.)
+    # CAMELS        = "gauge_name"
+    # FPS           = "SiteName"
+    # GAGES2_all    = "STANAME"
+    # GAGES2_ref    = "STANAME"
+    # HLR           =  No name given
+    # LTER          = "Site Name" (but not a basin name)
+    # MOPEX         = "SiteName"
+    # NEON          = "field_site_name"
+    # RFC           = "description"
+    # USGS_gauged   = "station_nm"
+    # USGS_NWIS_all = "MonitoringLocationName"
     #--------------------------------------------------------
     name_col = None
-    list1 = ['FPS', 'GAGES2_all', 'GAGES2_ref', 'LTER'  ]
+    list1 = ['FPS', 'GAGES2_all', 'GAGES2_ref', 'LTER', 'RFC'  ]
     list2 = ['CAMELS', 'MOPEX', 'NEON', 'USGS_gauged']
-    list3 = ['ARS']
+    list3 = ['USGS_NWIS_all']
+    list4 = ['ARS']
 
     if (db_str in list1):
         name_col = 1
     elif (db_str in list2):
         name_col = 2
     elif (db_str in list3):
+        name_col = 3
+    elif (db_str in list4):
         name_col = 4  # Watershed name
     else:
         #### CZO, HLR and RFC ####
@@ -283,6 +303,72 @@ def get_name_column( db_str ):
     return name_col
 
 #   get_name_column()
+#---------------------------------------------------------------------
+def get_lon_column( db_str ):
+
+    #--------------------------------------------------------
+    # Name Longitude Heading for each dataset:
+    # ARS           = 
+    # CAMELS        = 
+    # FPS           = 
+    # GAGES2_all    = "LNG_GAGE" 7
+    # GAGES2_ref    = "LNG_GAGE" 7
+    # HLR           =  
+    # LTER          = 
+    # MOPEX         = 
+    # NEON          = 
+    # RFC           = 
+    # USGS_gauged   = "dec_long_va" 5
+    # USGS_NWIS_all = "LongitudeMeasure" 12
+    #--------------------------------------------------------
+    if (db_str == 'GAGES2_all'):
+        lon_col = 7
+    elif (db_str == 'GAGES2_ref'):
+        lon_col = 7
+    elif (db_str == 'USGS_gauged'):
+        lon_col = 5
+    elif (db_str == 'USGS_NWIS_all'):
+        lon_col = 12
+    else:
+        print('SORRY: No match for:', db_str)
+        lon_col = None
+
+    return lon_col
+
+#   get_lon_column()
+#---------------------------------------------------------------------
+def get_lat_column( db_str ):
+
+    #--------------------------------------------------------
+    # Name Longitude Heading for each dataset:
+    # ARS           = 
+    # CAMELS        = 
+    # FPS ID        = 
+    # GAGES2_all    = "LAT_GAGE" 6
+    # GAGES2_ref    = "LAT_GAGE" 6
+    # HLR           =  
+    # LTER          = 
+    # MOPEX         = 
+    # NEON          = 
+    # RFC           = 
+    # USGS_gauged   = "dec_lat_va" 4
+    # USGS_NWIS_all = "LatitudeMeasure" 11
+    #--------------------------------------------------------
+    if (db_str == 'GAGES2_all'):
+        lat_col = 6
+    elif (db_str == 'GAGES2_ref'):
+        lat_col = 6
+    elif (db_str == 'USGS_gauged'):
+        lat_col = 4
+    elif (db_str == 'USGS_NWIS_all'):
+        lat_col = 11
+    else:
+        print('SORRY: No match for:', db_str)
+        lat_col = None
+
+    return lat_col
+
+#   get_lat_column()
 #---------------------------------------------------------------------
 def get_minlon_column( db_str, SILENT=False ):
 
@@ -348,8 +434,10 @@ def get_basin_ids( db_str='USGS_gauged' ):
         line = file_unit.readline()
         if (line == ''):
             break  # (reached end of file)
-        values = line.split( delim )
-        id = values[ id_col ].strip()  
+        values = line.split( delim )     
+        id = values[ id_col ].strip()
+        if (db_str == 'USGS_NWIS_all'):
+            id = id.replace('USGS-', '')
         id_list.append( id )     
 
     file_unit.close()
@@ -383,7 +471,6 @@ def compare_basin_ids( db_str1='USGS_gauged', db_str2='GAGES2_all'):
     ## return diff2
 
 #   compare_basin_ids()
-
 #---------------------------------------------------------------------
 def get_basin_names( db_str='USGS_gauged', UPPER=True,
                      REPLACE_PUNCTUATION=True,
@@ -459,72 +546,13 @@ def compare_basin_names( db_str1='USGS_gauged', db_str2='GAGES2'):
     ## return diff2
 
 #   compare_basin_names()
-#---------------------------------------------------------------------
-def haversine( lon1, lat1, lon2, lat2):
 
-    # p = 0.017453292519943295
-    p     = (np.pi / 180)
-    term1 = np.cos((lat2 - lat1)*p)/2
-    term2 = np.cos(lat1*p) * np.cos(lat2*p)
-    term3 = (1-np.cos((lon2 - lon1)*p)) / 2
-    haver = 0.5 - term1 + (term2 * term3) 
-    return haver
-    
-#   haversine()
-#---------------------------------------------------------------------
-def distance_on_sphere(lon1, lat1, lon2, lat2):
-
-    #----------------------------------
-    # 12742 = diameter of Earth in km
-    #--------------------------------------------------
-    # https://stackoverflow.com/questions/41336756/
-    #         find-the-closest-latitude-and-longitude
-    # https://en.wikipedia.org/wiki/Haversine_formula
-    #--------------------------------------------------
-    haver = haversine( lon1, lat1, lon2, lat2)
-    return 12742 * np.arcsin(np.sqrt( haver ))  # [km]
-    
-#   distance_on_sphere()
-
-#---------------------------------------------------------------------
-def get_closest_station(station_coords, lon, lat, REPORT=False):
-
-    #------------------------------------------------------
-    # Call usgs.get_usgs_station_coords() once to extract
-    # USGS gauging station data from USGS TSV file.
-    # station_data = [[id1,x1,y1],[id2,x2,y2],...]
-    #------------------------------------------------------
-    station_ids  = station_coords[:,0]
-    station_lons = np.float64( station_coords[:,1] )
-    station_lats = np.float64( station_coords[:,2] )
-
-    lon2 = np.float64( lon )  # could be string
-    lat2 = np.float64( lat )
-
-    dist_vals = distance_on_sphere(station_lons, station_lats, lon2, lat2)
-    dmin = dist_vals.min()
-    imin = np.argmin( dist_vals )
-    
-    closest_id  = station_ids[ imin ]
-    closest_lon = station_lons[ imin ]
-    closest_lat = station_lats[ imin ]
-
-    if (REPORT):
-        print('Closest USGS station ID =', closest_id)
-        print('   Station longitude    =', closest_lon)
-        print('   Station latitude     =', closest_lat)
-        print('   Station distance     =', dmin, '[km]')
-        print()
-
-    return closest_id, closest_lon, closest_lat, dmin
-
-#   get_closest_station()
 #---------------------------------------------------------------------
 def get_dataset_key_names():
   
     names = [
-    'ARS', 'CAMELS', 'CZO', 'FPS', 'GAGES2_all', 'HLR',
-    'LTER', 'MOPEX', 'NEON', 'USGS_gauged']
+    'ARS', 'CAMELS', 'CZO', 'FPS', 'GAGES2_all', 'HLR', 'LTER',
+    'MOPEX', 'NEON', 'RFC', 'USGS_gauged', 'USGS_NWIS_all']
     return names
 
 #   get_dataset_key_names()
@@ -901,7 +929,7 @@ def write_new_header( out_tsv_unit, base_header_line, delim ):
     #-------------------------------------------------------------
     'Is_USGS_Gauged', 'Is_GAGES2_Ref', 'Is_GAGES2_NonRef',
     'Is_CAMELS', 'Is_FPS', 'Is_MOPEX',
-    'Is_ARS', 'Is_CZO', 'IS_HLR', 'IS_LTER', 'Is_NEON' ]   
+    'Is_ARS', 'Is_CZO', 'Is_HLR', 'Is_LTER', 'Is_NEON', 'Is_RFC' ]   
     new_headings = base_headings + new_headings
     
     header = ''
@@ -920,9 +948,10 @@ def collate( out_tsv_file='all_basins.tsv',
     # that are no longer active.  The "GAGES2_all" dataset is
     # newer and contains both "ref" and "non-ref" basins.
     #-----------------------------------------------------------
-    start_time = time.time() 
-    base_key = 'USGS_gauged'   # 25420 data rows
-    # base_key = 'GAGES2_all'  # 9322 data rows
+    start_time = time.time()
+    # base_key = 'USGS_NWIS_ALL'  # 145375 data rows
+    base_key = 'USGS_gauged'      # 25420 data rows
+    # base_key = 'GAGES2_all'     # 9322 data rows
  
     repo_dir = get_repo_dir()
     out_tsv_path = repo_dir + out_tsv_file
@@ -934,6 +963,22 @@ def collate( out_tsv_file='all_basins.tsv',
     key_names = get_dataset_key_names()
     base_header_line = get_headings_line( key=base_key )
     state_code_map = get_state_code_map()
+
+    #---------------------------------------------------
+    # Get dictionary to map USGS ID to hydrograph type
+    #---------------------------------------------------
+    hydrograph_type_dict = usgs.get_hydrograph_type_dict()
+
+    #-------------------------------------------------------
+    # Get info to map HLR code to lon-lat pair
+    # This info is passed to: hlr.get_hlr_code_for_point()
+    #-------------------------------------------------------
+    hlr_grid_info = hlr.get_hlr_grid_info()
+    hlr_dir = hlr.get_hlr_data_dir()
+    hlr_raster_dir = hlr_dir + 'arctar00000/hlrus/'
+    hlr_code_tif_file = hlr_grid_info['code_file']
+    hlr_code_tif_path = hlr_raster_dir + hlr_code_tif_file
+    hlr_code_grid = regrid.read_geotiff( in_file=hlr_code_tif_path, GEO=False )
 
     #------------------------------------------------
     # Open TSV files for each of the basin datasets
@@ -957,7 +1002,8 @@ def collate( out_tsv_file='all_basins.tsv',
     #---------------------------------------------------
     # Read first station ID from some of the data sets
     #---------------------------------------------------
-    key_list1  = ['GAGES2_all', 'CAMELS', 'FPS', 'MOPEX']
+    ## key_list1  = ['GAGES2_all', 'CAMELS', 'FPS', 'MOPEX']
+    key_list1  = ['GAGES2_all', 'CAMELS', 'FPS', 'MOPEX', 'RFC']
     current_id   = dict()
     current_line = dict()
     for key in key_list1:
@@ -975,6 +1021,8 @@ def collate( out_tsv_file='all_basins.tsv',
     #-----------------------------------------------------
 #     usgs_id_col   = get_id_column( base_key )
 #     usgs_name_col = get_name_column( base_key )
+#     usgs_lon_col  = get_lon_column( base_key )
+#     usgs_lat_col  = get_lat_column( base_key )
 #     usgs_unit     = file_units[ base_key ]
 # 
 #     IS_USGS_GAUGE_ID = (base_key == 'USGS_gauged')
@@ -984,12 +1032,13 @@ def collate( out_tsv_file='all_basins.tsv',
 #     IS_HLR_ID        = False
 #     IS_LTER_ID       = False
 #     IS_NEON_ID       = False
+#     IS_RFC_ID        = False
 # 
 #     n_bad_state_codes   = 0
 #     n_fixed_state_codes = 0
 #     counter = 0
 #     bmap = {True:'Y', False:'N'}
-#     print('Working on USGS, GAGES2, CAMELS, FPS, & MOPEX basins...')
+#     print('Working on USGS, GAGES2, CAMELS, FPS, MOPEX, & RFC basins...')
 #
 #     while (True):
 #         usgs_line = usgs_unit.readline()
@@ -1000,6 +1049,8 @@ def collate( out_tsv_file='all_basins.tsv',
 #         usgs_id    = values[ usgs_id_col ].strip()
 #         usgs_name  = values[ usgs_name_col ].strip()
 #         long_name  = usgs.get_usgs_long_name( usgs_name )
+#         usgs_lon   = values[ usgs_lon_col ].strip()
+#         usgs_lat   = values[ usgs_lat_col ].strip()
 #         state_code = get_state_code( long_name )
 #         if (state_code == ''):
 #             n_bad_state_codes += 1
@@ -1026,6 +1077,7 @@ def collate( out_tsv_file='all_basins.tsv',
 #             print('CAMELS ID     =', current_id['CAMELS']) 
 #             print('FPS ID        =', current_id['FPS']) 
 #             print('MOPEX ID      =', current_id['MOPEX']) 
+#             print('RFC ID        =', current_id['RFC']) 
 #        
 #         #-----------------------------
 #         # Is this also a GAGES2 ID ?
@@ -1118,11 +1170,45 @@ def collate( out_tsv_file='all_basins.tsv',
 #                 id = get_next_id( line, key, delim )
 #                 current_id[ key ]   = id
 #                 current_line[ key ] = line
+#
+#         #-------------------------------               
+#         # Is this also a NOAA RFC ID ?
+#         #-------------------------------
+#         key = 'RFC'
+#         hgraph_type = 'unknown'
+#         rfc_id = current_id[ key ]
+#         IS_RFC_ID = (usgs_id == rfc_id)
+#         if (IS_RFC_ID):
+#             if (DEBUG):
+#                 print('  Found match for NOAA-RFC.')
+#             line = current_line[ key ]
+#             vals = line.split( delim )
+#             bbox = get_bounding_box( line, key, delim )  #########
+#             try:
+#                 hgraph_type = hydrograph_type_dict( usgs_id )
+#             except:
+#                 hgraph_type = 'unknown'
+#         #--------------------------------------------------------
+#         # Use >=. Dataset may contain IDs not in USGS base set.
+#         # RFC tsv file has USGS IDs w/ station type != "stream"
+#         #--------------------------------------------------------                             
+#         if (usgs_id >= rfc_id):
+#             line = get_next_line( key, file_units )
+#             if (line != ''):
+#                 id = get_next_id( line, key, delim )
+#                 current_id[ key ]   = id
+#                 current_line[ key ] = line
 # 
 #         if (DEBUG):
 #             print('==========================================')
 #             if (counter == max_count):
 #                 break
+#
+#         #-----------------------------------------------------
+#         # Get the USGS HLR code for this station via lon-lat
+#         #-----------------------------------------------------
+#         hlr_code = hlr.get_hlr_code_for_point( usgs_lon, usgs_lat,
+#                    hlr_grid=hlr_code_grid, grid_info=hlr_grid_info)
 # 
 #         #-------------------------------------------------------
 #         # Extract the following fields from usgs_line:
@@ -1141,7 +1227,6 @@ def collate( out_tsv_file='all_basins.tsv',
 #         
 #         val_list = [
 #         new_usgs_line,
-#         ### hlr_code, ###############################
 #         #----------------------------------------------
 #         long_name, state_code, site_url,
 #         closest_station_id, closest_station_dist,
@@ -1153,7 +1238,8 @@ def collate( out_tsv_file='all_basins.tsv',
 #         bmap[IS_GAGES2_non_ref], bmap[IS_CAMELS_ID],
 #         bmap[IS_FPS_ID], bmap[IS_MOPEX_ID],
 #         bmap[IS_ARS_ID], bmap[IS_CZO_ID], bmap[IS_HLR_ID],
-#         bmap[IS_LTER_ID], bmap[IS_NEON_ID] ]
+#         bmap[IS_LTER_ID], bmap[IS_NEON_ID], bmap[IS_RFC_ID] ]
+#         ######### hlr_code, swb_code, hgraph_type ]  ##########
 #         new_line = ''
 #         for val in val_list:
 #             new_line += (val + delim)
@@ -1163,8 +1249,9 @@ def collate( out_tsv_file='all_basins.tsv',
     # Get coords of all USGS gauged basins so we
     # can find the closest station and distance
     #---------------------------------------------
-    usgs_station_coords = usgs.get_usgs_station_coords()
-    
+    ## usgs_station_coords = usgs.get_usgs_station_coords( NWIS_ALL=False )
+    usgs_station_coords = usgs.get_usgs_station_coords( NWIS_ALL=True )
+        
     #-----------------------------------    
     # Add rows for the USDA ARS basins
     #-----------------------------------
@@ -1182,9 +1269,9 @@ def collate( out_tsv_file='all_basins.tsv',
     #------------------------------
     # Add rows for the HLR basins
     #------------------------------
-#     hlr_unit = file_units['HLR']
-#     add_hlr_basins( hlr_unit, out_tsv_unit,
-#                     usgs_station_coords, delim)
+    hlr_unit = file_units['HLR']
+    add_hlr_basins( hlr_unit, out_tsv_unit,
+                    usgs_station_coords, delim)
 
     #-------------------------------    
     # Add rows for the LTER basins
@@ -1199,13 +1286,6 @@ def collate( out_tsv_file='all_basins.tsv',
     neon_unit = file_units['NEON']
     add_neon_basins( neon_unit, out_tsv_unit,
                      usgs_station_coords, delim)
-
-    #-----------------------------------    
-    # Add rows for the NOAA RFC basins
-    #-----------------------------------
-#     rfc_unit = file_units['RFC']
-#     add_rfc_basins( rfc_unit, out_tsv_unit,
-#                     usgs_station_coords, delim)
         
     #------------------  
     # Close all files
@@ -1299,10 +1379,10 @@ def add_ars_basins( ars_unit, out_tsv_unit,
             lon_str = '-999'
         #--------------------------------------------           
         closest_id, clon, clat, dmin = \
-            get_closest_station(usgs_station_coords, 
+            usgs.get_closest_station(usgs_station_coords, 
                 lon_str, lat_str, REPORT=False)
         closest_station_id   = closest_id
-        closest_station_dist = str(dmin)    # as a string
+        closest_station_dist = '{x:.2f}'.format(x=dmin)  # string
 
         #-------------------
         # Don't know these
@@ -1311,7 +1391,7 @@ def add_ars_basins( ars_unit, out_tsv_unit,
         hlr_code       = ''
         site_type      = '--'
         coord_acy_cd   = '--'
-        coord_datum_cd = 'NAD93??'   ####### FIND OUT
+        coord_datum_cd = 'NAD83?'   #### FIND OUT FOR SURE
         elev           = '-9999'
     
         #------------------------------------------
@@ -1423,10 +1503,10 @@ def add_czo_basins( czo_unit, out_tsv_unit,
         site_url   = get_czo_site_url( site_id )
         #-------------------------------------------------          
         closest_id, clon, clat, dmin = \
-            get_closest_station(usgs_station_coords, 
+            usgs.get_closest_station(usgs_station_coords, 
                 lon_str, lat_str, REPORT=False)
         closest_station_id   = closest_id
-        closest_station_dist = str(dmin)    # as a string
+        closest_station_dist = '{x:.2f}'.format(x=dmin)  # string
         
         #-------------------
         # Don't know these
@@ -1684,6 +1764,8 @@ def add_hlr_basins( hlr_unit, out_tsv_unit,
     hlr_id_col   = get_id_column( 'HLR' )
     ## hlr_name_col = get_name_column( 'HLR' )
     agency_code  = 'USGS-HLR'
+    station_info = usgs.get_usgs_station_info_dict()
+    mapped_to_gauge_count = 0
 
     print('Working on USGS HLR basins...')
     while (True):
@@ -1709,30 +1791,50 @@ def add_hlr_basins( hlr_unit, out_tsv_unit,
             lon_str = '-999'
         #--------------------------------------------           
         closest_id, clon, clat, dmin = \
-            get_closest_station(usgs_station_coords, 
+            usgs.get_closest_station(usgs_station_coords, 
                 lon_str, lat_str, REPORT=False)
         closest_station_id   = closest_id
-        closest_station_dist = str(dmin)    # as a string
+        closest_station_dist = '{x:.2f}'.format(x=dmin)  # string
 
         #--------------------------------------------------     
         # Try to get these from closest USGS station info
         #--------------------------------------------------
         bmap = {True:'Y', False:'N'}
-        IS_USGS_GAUGE_ID = (dmin < 1.0)  # within 1 km
+        IS_USGS_GAUGE_ID = (dmin < 1.0)  # within 1 km (found 1506)
+        ## IS_USGS_GAUGE_ID = (dmin < 2.0)  # within 2 km (found 3046)
         if (IS_USGS_GAUGE_ID):
             usgs_id     = closest_id
-            # Use usgs_id to get the next 5 attributes.
-            hlr_name   = usgs_name
-            long_name  = usgs_long_name  
-            state_code = # 2-letter state code
-            huc_code   = usgs_huc       
-            site_url   = usgs_site_url
+            # Use usgs_id to get more attributes.
+            try:
+                station_rec = station_info[ usgs_id ]  # station_info is dict.
+                hlr_name    = station_rec['name']
+                long_name   = usgs.get_usgs_long_name( hlr_name )  
+                state_code  = station_rec['state']   # 2-letter state code
+                huc_code    = station_rec['huc']       
+                site_url    = station_rec['url']
+                coord_datum_cd = 'NAD83'  # almost all of them & only one given
+                # Note: NAD83 uses meters;  NAD93 uses feet?
+                mapped_to_gauge_count += 1
+            except:
+                #-----------------------------------------------------------------
+                # This can only happen if we use a different spreadsheet
+                # in get_usgs_station_coords() and get_usgs_station_info_dict().
+                #-----------------------------------------------------------------
+                print('##### USGS ID not found in dictionary:', usgs_id)
+                print('##### Skipping...')
+                hlr_name   = ''
+                long_name  = ''
+                state_code = ''  # (maybe get from lon/lat ?)
+                huc_code   = ''
+                site_url   = ''
+                coord_datum_cd = 'unknown'            
         else: 
             hlr_name   = ''
             long_name  = ''
             state_code = ''  # (maybe get from lon/lat ?)
             huc_code   = ''
             site_url   = ''
+            coord_datum_cd = 'unknown'
            
         #-------------------
         # Don't know these
@@ -1741,7 +1843,6 @@ def add_hlr_basins( hlr_unit, out_tsv_unit,
         end_date       = ''
         site_type      = '--'
         coord_acy_cd   = '--'
-        coord_datum_cd = 'NAD93??'   #### FIND OUT
     
         #-------------------------------------
         # Write out values for HLR watershed
@@ -1750,6 +1851,7 @@ def add_hlr_basins( hlr_unit, out_tsv_unit,
         agency_code, hlr_id, hlr_name, site_type, lat_str, lon_str,
         coord_acy_cd, coord_datum_cd, elev, area,
         ### hlr_code, ###############################
+        ###### What about huc_code ??
         #----------------------------------------------
         long_name, state_code, site_url,
         closest_station_id, closest_station_dist,
@@ -1768,6 +1870,8 @@ def add_hlr_basins( hlr_unit, out_tsv_unit,
             new_line += (val + delim)
         out_tsv_unit.write( new_line + '\n' )
         
+    print('# HLR basins mapped to USGS gauge =', mapped_to_gauge_count)
+
 #   add_hlr_basins()
 #---------------------------------------------------------------------
 def add_lter_basins( lter_unit, out_tsv_unit,
@@ -1835,10 +1939,10 @@ def add_lter_basins( lter_unit, out_tsv_unit,
 #         site_url   = get_lter_site_url( site_id )
         #-------------------------------------------------          
         closest_id, clon, clat, dmin = \
-            get_closest_station(usgs_station_coords, 
+            usgs.get_closest_station(usgs_station_coords, 
                 lon_str, lat_str, REPORT=False)
         closest_station_id   = closest_id
-        closest_station_dist = str(dmin)    # as a string
+        closest_station_dist = '{x:.2f}'.format(x=dmin)  # string
 
         #-------------------
         # Don't know these
@@ -1968,10 +2072,10 @@ def add_neon_basins( neon_unit, out_tsv_unit,
         site_url       = field_site_url
         #-------------------------------------------------          
         closest_id, clon, clat, dmin = \
-            get_closest_station(usgs_station_coords, 
+            usgs.get_closest_station(usgs_station_coords, 
                 lon_str, lat_str, REPORT=False)
         closest_station_id   = closest_id
-        closest_station_dist = str(dmin)    # as a string
+        closest_station_dist = '{x:.2f}'.format(x=dmin)  # string
         
         #-------------------
         # Don't know these
@@ -2019,6 +2123,13 @@ def add_neon_basins( neon_unit, out_tsv_unit,
             out_tsv_unit.write( new_line + '\n' )
         
 #   add_neon_basins()
+#---------------------------------------------------------------------
+def add_gages3_basins( gages3_unit, out_tsv_unit,
+                       usgs_station_coords, delim ):
+
+    pass
+              
+#   add_gages3_basins()
 #---------------------------------------------------------------------      
 #---------------------------------------------------------------------
 def export_csv_to_tsv( csv_file='new_gages2_all.csv',

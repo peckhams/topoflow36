@@ -1,27 +1,37 @@
 #
 # Copyright (c) 2023, Scott D. Peckham
 #
+# Oct 2023. Wrote get_hlr_info_dict(), create_hlr_grid(),
+#           get_hlr_grid_info(), get_hlr_code_for_point(), &
+#           Lambert_Azimuthal_Equal_Area_XY().
+#           Wrote get_dem_info() as separate function.
+#           Wrote try_to_get_outlet_info() as separate function
+#           that calls several others to clean up code.
+#           Modified create_tsv() to include the closest USGS
+#           station ID and distance, by calling:
+#           usgs.get_closest_station().
+#           Changed string formatting for distance: 2-digit prec.
 # Jul 2023. Modified to use newer shape_utils.py, which
 #           contains many of the original functions from here.
 #           Added get_hlr_data_dir, get_hlr_dem_dir.
 #           Added get_repeated_value_list, to exclude them.
 # Jun 2023. Wrote convert_vat_adf_to_csv, get_bounding_box.
 #           Moved many functions into shape_utils.py.
-# May 2023. Wrote: create_tsv,
-#           get_polygon_points (all versions),
+# May 2023. Wrote: create_tsv, get_polygon_points (all versions),
 #           get_cols_and_rows, get_polygon_zvals,
-#           check_lon_lats, get_zmin_lon_and_lat,
-#           convert_coords)
+#           check_lon_lats, get_zmin_lon_and_lat, and
+#           convert_coords.
 #
 #---------------------------------------------------------------------
 #
 #  % conda activate tf36  (has gdal package)
 #  % python
 #  >>> from topoflow.utils.ngen import hlr_tools as hlr
-#  >>> hlr.create_tsv(nf_max=100, tsv_file='new_hlr_na_100.tsv')
-#  >>> hlr.create_tsv(nf_max=50000, tsv_file='new_hlr_na_all.tsv',
-#          REPORT=False)
-#
+#  >>> hlr.create_tsv(nb_max=100, tsv_file='new_hlr_na_100.tsv')
+#  >>> hlr.create_tsv(nb_max=50000, tsv_file='new_hlr_na_all2.tsv',
+#          SAVE_OUTLET_INFO=False, REPORT=False)
+#  >>> hlr.create_tsv(nb_max=50000, tsv_file='new_hlr_na_all.tsv',
+#          SAVE_OUTLET_INFO=True, REPORT=False)
 #  Last line results in 9539 basins that have a single, unique
 #  zmin (outlet elevation) value found from shapefile.
 #
@@ -38,7 +48,7 @@
 # dataset may be a draft version because it has several problems,
 # such as:
 #
-#    * 47479 features/basins (3648 more than 43391)
+#    * 47479 features/basins (3548 more than 43931)
 #
 #    * 659 basins with invalid HLR code of 0.
 #      These have COUNT=0, VALUE=-9999
@@ -130,9 +140,12 @@
 #  get_hlr_dem_dir()
 #  get_repeated_values_list()
 #  get_missing_basin_name()   # NOT READY YET
+#  get_dem_info()
 #
 #  create_tsv()      # main function
 #
+#  basin_in_dem()
+#  try_to_get_outlet_info()
 #  get_cols_and_rows()
 #  get_polygon_zvals()
 #  check_lons_lats()
@@ -140,14 +153,25 @@
 #  get_zmin_lon_and_lat1()  # uses np.argmin()
 #
 #  convert_vat_adf_to_csv()
+#  get_hlr_info_dict()
+#  create_hlr_grid()
+#  get_hlr_grid_info()
+#  Lambert_Azimuthal_Equal_Area_XY()
+#  get_hlr_code_for_point()
+#
+#  point_in_rectangle()
 #
 #---------------------------------------------------------------------
 import numpy as np
+import os, os.path, pickle  # to save dictionary
+
 from osgeo import ogr, osr
 import json, time
 
 from osgeo import gdal
 from topoflow.utils.ngen import shape_utils as su
+from topoflow.utils.ngen import usgs_utils as usgs
+from topoflow.utils import regrid  # to create grid of HLR codes
 
 # For convert_vat_adf_to_csv()
 import csv, sys, gdal
@@ -236,33 +260,7 @@ def get_missing_basin_name( lon, lat ):
     
 #   get_missing_basin_name()
 #---------------------------------------------------------------------
-def create_tsv( shape_dir=None, dem_dir=None,
-                shape_file='hlrus4.shp', # shape_file='hlrus4.shp',
-                ## prj_file='hlrus.prj',                     
-                prj_file='na_dem.prj', dem_file='na_dem.bil',
-                old_shapefile = False,  # old = original shapefile
-                tsv_file='new_hlr_na.tsv',  # only North America
-                #### ADD_BOUNDING_BOX=True, 
-                nf_max=50, SWAP_XY=True, REPORT=True ):
-
-    start_time = time.time()
-    REPORT2 = True  # for basins outside North America
-    # REPORT2 = REPORT
-    print('Running...')
-
-    if (shape_dir is None):
-        shape_dir = get_hlr_data_dir() + 'hlrshape/'
-    if (dem_dir is None):
-        dem_dir  = get_hlr_dem_dir()
-
-    ## prj_file = shape_file.replace('.shp', '.prj')
-    
-    shape_path = shape_dir + shape_file
-    prj_path   = shape_dir + prj_file
-    dem_path   = dem_dir   + dem_file
-    tsv_path   = shape_dir + tsv_file
-    shape_unit = su.open_shapefile( shape_path )
-    layer      = shape_unit.GetLayer()
+def get_dem_info( dem_path ):
 
     #-------------------------------------------
     # HYDRO-1K DEM Info (Lambert Azimuthal EA)
@@ -271,17 +269,24 @@ def create_tsv( shape_dir=None, dem_dir=None,
     # work appears to have: ncols=9106, nrows=6855
     # based on the HLR metadata page.
     #-----------------------------------------------
-    ncols = 9102
-    nrows = 8384
-    dx    = 1000.0  # meters
-    dy    = 1000.0  # meters
-    #-----------------------------
-    # Use half grid cell offsets
-    #-----------------------------
-    xmin  = -4462500.0
-    xmax  =  4639500.0
-    ymin  = -3999500.0
-    ymax  =  4384500.0
+    dem_info = dict()
+    dem_info['path']  = dem_path
+    dem_info['ncols'] = 9102
+    dem_info['nrows'] = 8384
+    dem_info['dx']    = 1000.0  # meters
+    dem_info['dy']    = 1000.0  # meters
+    #-------------------------------------------
+    # Use half grid cell offsets: 500 = 1000/2
+    #-------------------------------------------
+    dem_info['xmin']  = -4462500.0
+    dem_info['xmax']  =  4639500.0
+    dem_info['ymin']  = -3999500.0
+    dem_info['ymax']  =  4384500.0
+    dem_info['zmin']  = -207
+    dem_info['zmax']  = 6106  # Denali, AK
+    dem_info['nodata'] = -9999  # used for ocean grid cells
+    return dem_info
+
     #----------------------
     # From blw world file
     #----------------------
@@ -289,41 +294,91 @@ def create_tsv( shape_dir=None, dem_dir=None,
 #     xmax  = xmin + (ncols * dx)
 #     ymax  = 4384000.0
 #     ymin  = ymax - (nrows * dy)
-    #-----------------------------                 
-    zmin  = -207
-    zmax  = 6106    # Denali, AK
-    nodata = -9999  # used for ocean grid cells
+    
+#   get_dem_info()
+#---------------------------------------------------------------------
+def create_tsv( shape_dir=None, dem_dir=None,
+                ## shape_file='hlrus4.shp',
+                shape_file='hlrus.shp',
+                ## prj_file='hlrus.prj',                     
+                prj_file='na_dem.prj', dem_file='na_dem.bil',
+                old_shapefile = False,  # old = original shapefile
+                tsv_file='new_hlr_na.tsv',  # only North America
+                SAVE_OUTLET_INFO=True,
+                nb_max=50, SWAP_XY=True, REPORT=True ):
 
+    #---------------------------------------------------------
+    # Note: To use original shapefile "as is", set:
+    #       shape_file = 'hlrus.shp' and old_shapefile=True.
+    #---------------------------------------------------------
+    start_time = time.time()
+
+    hlr_dir = get_hlr_data_dir()
+    if (shape_dir is None):
+        shape_dir = hlr_dir + 'hlrshape/'
+    if (dem_dir is None):
+        dem_dir = get_hlr_dem_dir()
+
+    ## prj_file = shape_file.replace('.shp', '.prj')
+    
+    shape_path = shape_dir + shape_file
+    prj_path   = shape_dir + prj_file
+    dem_path   = dem_dir   + dem_file
+    tsv_path   = hlr_dir   + tsv_file
+    shape_unit = su.open_shapefile( shape_path )
+    layer      = shape_unit.GetLayer()
+
+    dem_info = get_dem_info( dem_path )
     dem_unit = open( dem_path, 'rb')
     tsv_unit = open( tsv_path, 'w') 
 
-    n_features        = np.int32(0)
-    zmin_matches      = np.int32(0)
-    one_zmin_matches  = np.int32(0)
-    all_good_matches  = np.int32(0)
-    #--------------------------------
-    two_try_count     = np.int32(0)
-    empty_zvals_count = np.int32(0)
-    code_zero_count   = np.int32(0)
-    not_in_dem_count  = np.int32(0)
-    one_cell_count    = np.int32(0)
-    count_area_count  = np.int32(0)  # for old_shapefile only
-   
-    repeated_val_list = get_repeated_values_list()
+    counters = dict()
+    counters['total_features']    = np.int32(0)
+    counters['unique_basins']     = np.int32(0)
+    counters['excluded_features'] = np.int32(0)
+    counters['saved_basins']      = np.int32(0)
+    #------------------------------------------
+    counters['one_cell_basin']  = np.int32(0)
+    counters['code_is_zero']    = np.int32(0)
+    #------------------------------------------
+    if (SAVE_OUTLET_INFO):   
+        counters['hlr_zmin_match'] = np.int32(0)   # hlr_zmin = zmin
+        counters['one_zmin']       = np.int32(0)
+        counters['one_zmin_match'] = np.int32(0)
+        counters['two_tries']      = np.int32(0)
+        counters['not_in_dem']     = np.int32(0)   # dem is only N. America
+        counters['no_zvalues']     = np.int32(0)   # can't happen now?
+        not_in_dem_vals = list()
+    count_area_count = np.int32(0)  # for old_shapefile only
+
+    ## This is outdated, or maybe applies only to old_shapefile.
+    ## repeated_val_list = get_repeated_values_list()
     
     max_val = 48000 
-    hlr_histogram   = np.zeros(21, dtype='int32')
-    val_histogram   = np.zeros(max_val, dtype='int32')
-    not_in_dem_vals = list()
+    hlr_histogram = np.zeros(21, dtype='int32')
+    val_histogram = np.zeros(max_val, dtype='int32')
+    insert_key    = 'VALUE'  # insert new cols after this one
+    hlr_zmin_match = np.zeros(max_val, dtype='bool')
     
-    insert_key    = 'VALUE'
-    new_headings  = ['OUTLON', 'OUTLAT', 'OUTCOL', 'OUTROW']
-    new_headings += ['MINLON', 'MAXLON', 'MINLAT', 'MAXLAT']
-    #--------------------------------------------------------------
-#     new_headings = ['OUTLON', 'OUTLAT', 'OUTCOL', 'OUTROW']
-#     if (ADD_BOUNDING_BOX):
-#         new_headings += ['MINLON', 'MAXLON', 'MINLAT', 'MAXLAT']
+    #-------------------------------------------
+    # Get column headings for the new TSV file
+    #-------------------------------------------
+    if (SAVE_OUTLET_INFO):
+        new_headings  = ['Closest_USGS_ID', 'dist_to_closest']
+        new_headings += ['OUTLON', 'OUTLAT', 'OUTCOL', 'OUTROW']
+        new_headings += ['MINLON', 'MAXLON', 'MINLAT', 'MAXLAT']
+    else:
+        new_headings = ['MINLON', 'MAXLON', 'MINLAT', 'MAXLAT']
 
+    #---------------------------------------------
+    # Get coords of all USGS gauged basins so we
+    # can find the closest station and distance
+    #---------------------------------------------
+    if (SAVE_OUTLET_INFO):
+        # NWIS_ALL = False  # 25,420 USGS stream gauges
+        NWIS_ALL = True   # 145,375 USGS stream gauges
+        usgs_station_coords = usgs.get_usgs_station_coords( NWIS_ALL=NWIS_ALL )
+    
     #-----------------------------------------    
     # Iterate over the features in the layer
     # GeometryType = 3 is POLYGON.
@@ -333,6 +388,7 @@ def create_tsv( shape_dir=None, dem_dir=None,
     # AQPERMNEW, SLOPE, TAVE, PPT, PET, SAND, PMPE, MINELE,
     # RELIEF, PFLATTOT, PFLATLOW, PFLATUP, HLR
     #---------------------------------------------------------
+    print('Working...')
     for feature in layer:
         geometry   = feature.GetGeometryRef()
         attributes = feature.items()  # This is a Python dictionary
@@ -341,9 +397,9 @@ def create_tsv( shape_dir=None, dem_dir=None,
         #--------------------------------
         # Write header for new TSV file
         #--------------------------------
-        if (n_features == 0):
-            su.write_tsv_header( tsv_unit, attributes, insert_key=insert_key,
-                  new_headings=new_headings )
+        if (counters['total_features'] == 0):
+            su.write_tsv_header( tsv_unit, attributes,
+                insert_key=insert_key, new_headings=new_headings )
               
         #-----------------------------
         # Get some of the attributes
@@ -357,185 +413,143 @@ def create_tsv( shape_dir=None, dem_dir=None,
         # For basin #28 (2 cells), AREA=2e6,
         # COUNT=377, PERIMETER=6e3
         #--------------------------------------------
-        if (old_shapefile):
-            hlr_area   = attributes['AREA']
-            hlr_perim  = attributes['PERIMETER']
-            if (hlr_area == 1e6 * hlr_count):
-                count_area_matches += 1
-            if (hlr_area == 1e6):
-                one_cell_matches += 1
         hlr_value  = attributes['VALUE']  # watershed ID  
         hlr_count  = attributes['COUNT'] 
         hlr_zmin   = attributes['MINELE']
         hlr_relief = attributes['RELIEF']
         hlr_slope  = attributes['SLOPE']
         hlr_code   = attributes['HLR']
+        #-----------------------------------
+        EXCLUDE = False
         if (hlr_code == 0):
-            code_zero_matches += 1
-        if (hlr_count == 1):
-            # In new shapefile, (min,max) = (31, 23476)
-            one_cell_matches += 1
+            counters['code_is_zero'] += 1
+            EXCLUDE = True  # skip this basin
+        #-----------------------------------            
+        if (old_shapefile):
+            hlr_area   = attributes['AREA']
+            hlr_perim  = attributes['PERIMETER']
+            if (hlr_area == 1e6 * hlr_count):
+                count_area_count += 1
+            if (hlr_area == 1e6):
+                counters['one_cell_basin'] += 1
+                EXCLUDE = True  ## skip this basin
+        else:
+            if (hlr_count == 1):
+                #----------------------------------
+                # In the new shapefile, hlr_count
+                # has (min,max) = (31, 23476)
+                #----------------------------------
+                counters['one_cell_basin'] += 1
+                EXCLUDE = True ## skip this basin
 
         #----------------------------------------
         # Print attributes in attribute table ?
         #----------------------------------------
         if (REPORT):
+            n_features = counters['total_features']
             su.print_attributes( attributes, n_features )
  
         #----------------------------------------------
-        # Skip 103 watersheds with "repeated VALUE"
+        # Skip all watersheds with "repeated VALUE"
         # that seem to have fragmented basin polygons
         #----------------------------------------------
         # Could return bounding box of the fragments
         # but then which outlet would we choose?
         #----------------------------------------------
-        if (int(hlr_value) in repeated_val_list):
-            print('Skipping repeated value =', hlr_value)
-            continue
-                          
-        #---------------------------------- 
-        # Get all points in this geometry
-        #----------------------------------
-        x1, y1 = su.get_polygon_points( feature )
+        counters['total_features'] += 1   # even if repeated VALUE
+        if (val_histogram[hlr_value] == 0):
+            counters['unique_basins'] += 1
+        val_histogram[ hlr_value ] += 1
+#         if (val_histogram[ hlr_value ] > 1):
+#             print('Skipping repeated HLR basin ID =', hlr_value)
+#             EXCLUDE = True
+        #----------------------------------------------
+        # This list only has 103 repeated values and
+        # doesn't seem to include all repeated values.
+        # See get_repeated_values_list().
+        #----------------------------------------------                
+#         if (int(hlr_value) in repeated_val_list):
+#             print('Skipping repeated HLR basin ID =', hlr_value)
+#             EXCLUDE = True
 
-        #----------------------------------
-        # Round to nearest 1000 or 500 ??
-        #----------------------------------------
-        # Most x1 values end in 16.5 or 16.625,
-        # and most y1 values end in 190.5.
-        #----------------------------------------
-#         x1 = np.around(x1 - 500, -3)
-#         y1 = np.around(y1 - 500, -3)
-#         x1 = np.around(x1, -3) + 500
-#         y1 = np.around(y1, -3) - 500
-#         x1 -= 16.5      # (old shapefile)  
-#         y1 -= 190.5
-#         x1 -= 16.6      # (new shapefile)  
-#         y1 -= 190.4     
-#         print('x1 =', x1)
-#         print('y1 =', y1)
+        #---------------------------------------------
+        # If EXCLUDE has been set, skip this feature
+        #---------------------------------------------
+        if (EXCLUDE):
+            counters['excluded_features'] += 1
+            continue
+                    
+        #------------------------------------------- 
+        # Get all points/vertices in this geometry
+        #-------------------------------------------
+        poly_x, poly_y = su.get_polygon_points( feature )
+
+        #------------------------------------ 
+        # Exclude the last, repeated vertex
+        #------------------------------------
+        poly_x = poly_x[:-1]
+        poly_y = poly_y[:-1]
+
+        #---------------------------------------
+        # Snap polygon coordinates to DEM grid
+        #---------------------------------------
+        poly_x, poly_y = snap_polygon_points( poly_x, poly_y, hlr_value, old_shapefile )
+        # print('poly_x =', poly_x)
+        # print('poly_y =', poly_y)
         # break
 
         #--------------------------------------------------        
         # Convert Lambert coords to Geo. lon/lat (WGS-84)
         #--------------------------------------------------
-        x2,y2 = su.convert_coords(x1,y1, inPRJfile=prj_path,
+        poly_lons, poly_lats = su.convert_coords(poly_x, poly_y,
+                                  inPRJfile=prj_path,
                                   SWAP_XY=SWAP_XY, PRINT=False)
-#         print('x2 =', x2)
-#         print('y2 =', y2)
+#         print('poly_lons =', poly_lons)
+#         print('poly_lats =', poly_lats)
 #         break
 
         #------------------------------ 
         # Get geographic bounding box
         #------------------------------
-        minlon, maxlon, minlat, maxlat = su.get_bounding_box(x2, y2)
-  
-        #----------------------------------------------------------
-        # The source DEM is the GTOPO30 HYDRO1K DEM and uses a
-        # Lambert Azimuthal EqArea projection as described above.
-        # Can index this 1-km DEM with the Lambert xy coords
-        # to get an elevation, then compare to MINELE attribute
-        # as a way to get the outlet xy.  Or just find the xy
-        # pair for each polygon with the lowest elevation.
-        # But the DEM will be pretty big.  The HYDRO1K DEM for
-        # North America includes Alaska, CONUS, PR, etc. but not
-        # Hawaii. It has 9102 cols and 8384 rows.  Need to
-        # convert Lambert xy coords to DEM column and row.
-        #----------------------------------------------------------
-        # See: http://www.ncgia.ucsb.edu/SANTA_FE_CD-ROM/
-        #       sf_papers/verdin_kristine/santafe2.html
-        # HYDRO1K DEM:  https://d9-wret.s3.us-west-2.amazonaws.com/
-        #    assets/palladium/production/s3fs-public/atoms/files/
-        #    HYDRO1kDocumentationReadMe.pdf
-        #----------------------------------------------------------
-        cols, rows = get_cols_and_rows( x1, y1, xmin, ymax, dx, dy,
-                         round_method='floor', print_c2_r2=False )
-        ## break
-         
-        #----------------------------------------------
-        # Need this because Hawaii is not in this DEM
-        #----------------------------------------------
-        lons, lats, cols, rows = check_lon_lats( cols, rows, ncols, nrows, x2, y2)       
-        if (lons.size == 0):
-            if (REPORT2):
-                print('##### WARNING #####')
-                print('Basin is not in the North America DEM.')
-                print('Watershed ID (VALUE) =', hlr_value)
-                print('It is likely in Hawaii.')
-                print('Skipping to next basin.')
-                print()
-            not_in_dem_count += 1
-            not_in_dem_vals.append( hlr_value )
-            continue
-               
-        #---------------------------------------------------       
-        # Get elevation (z) values for every polygon point
-        # then get zmin and corresponding lon and lat.
-        #---------------------------------------------------
-        zvals = get_polygon_zvals( cols, rows, ncols, dem_unit,
-                                   REPORT=REPORT )
-        # This cannot happen now.
-#         if (zvals.size == 0):
-#             empty_zvals_count += 1
-#             print('#### WARNING: zvals has size 0.')
-#             print('#### VALUE =', hlr_value)
-#             print()
-#             continue
-      
-        zmin, zmin_arg, lon, lat, one_zmin = get_zmin_lon_and_lat( zvals,
-              lons, lats, nodata, REPORT=REPORT)
+        minlon, maxlon, minlat, maxlat = \
+                su.get_bounding_box(poly_lons, poly_lats)
 
-        #--------------------------------------------------------        
-        # If zmin doesn't match hlr_zmin, then try again with
-        # round_method = 'ceil'.  Still don't get all matches.
-        # For old_shapefile,
-        # Got 168 matches out of first 200 polygons (16% fails)
-        # Also got 20/20, 28/30, 42/50.
-        #-------------------------------------------------------- 
-        if (zmin != hlr_zmin):
-            two_try_count += 1
-            cols, rows = get_cols_and_rows( x1, y1, xmin, ymax, dx, dy,
-                             round_method='ceil', print_c2_r2=False )
-            lons, lats, cols, rows = check_lon_lats( cols, rows, ncols, nrows, x2, y2)       
-            if (lons.size == 0):
-                if (REPORT2):
-                    print('##### WARNING #####')
-                    print('Basin is not in the North America DEM.')
-                    print('Watershed ID (VALUE) =', hlr_value)
-                    print('It is likely in Hawaii.')
-                    print('Skipping to next basin.')
-                    print()
-                not_in_dem_count += 1  # can't double count due to continue
-                not_in_dem_vals.append( hlr_value )
+        #------------------------------------------------ 
+        # Try to determine the basin outlet coordinates
+        #------------------------------------------------
+        if (SAVE_OUTLET_INFO):
+            if not(basin_in_dem(poly_x, poly_y, dem_info, hlr_value, 
+                                counters, not_in_dem_vals )):
                 continue
-            zvals = get_polygon_zvals( cols, rows, ncols, dem_unit,
-                                       REPORT=REPORT )
-            if (zvals.size == 0):
-                empty_zvals_count += 1
-                print('#### WARNING: zvals has size 0.')
-                print('#### VALUE =', hlr_value)
-                print()
-                continue      
-            zmin, zmin_arg, lon, lat, one_zmin = get_zmin_lon_and_lat( zvals,
-                  lons, lats, nodata, REPORT=REPORT )
-   
-        #-----------------------------------        
-        # Count when zmin matches hlr_zmin
-        #-----------------------------------
-        if (zmin == hlr_zmin):
-            zmin_matches += 1
-            if (one_zmin):
-                one_zmin_matches += 1
-        #------------------------------
-        col = cols[ zmin_arg ]
-        row = rows[ zmin_arg ]
-           
+            lon, lat, col, row, zmin, one_zmin, \
+               counters, not_in_dem_vals = \
+            try_to_get_outlet_info( dem_unit, dem_info,
+                                    hlr_zmin, hlr_value,
+                                    hlr_zmin_match,
+                                    poly_x,poly_y, poly_lons,poly_lats,
+                                    counters, not_in_dem_vals,
+                                    REPORT=REPORT)
+            print('###### For hlr_value =', hlr_value)
+            print('   Outlet col, row =', col, ',', row)
+            print('   count =', hlr_count)
+            print('   zmin, hlr_zmin =', zmin, ',', hlr_zmin)
+
+            #---------------------------------------------- 
+            # Note: For hlr_value = 115
+            #       Outlet col, row = 2260 , 698
+            #            count = 115
+            #            zmin, hlr_zmin = 149 , 177
+            # But outlet col should be 2261, which would
+            #    give: zmin = 177 and count/area = 117
+            #----------------------------------------------         
         if (REPORT):
             print()
+            n_features = counters['total_features']
             print('####### Basin number:', n_features, '########')
-            print('At lon,lat =', lon, ',', lat)
-            print('At col,row =', col, ',', row)
-            print('    zmin   =', zmin)       # meters
+            if (SAVE_OUTLET_INFO):
+                print('At lon,lat =', lon, ',', lat)
+                print('At col,row =', col, ',', row)
+                print('    zmin   =', zmin)       # meters
             print('hlr_zmin   =', hlr_zmin)   # meters
             print('hlr_relief =', hlr_relief) # meters
             print('hlr_value  =', hlr_value, '(watershed ID)')
@@ -547,52 +561,84 @@ def create_tsv( shape_dir=None, dem_dir=None,
                 print('hlr_perim  =', hlr_perim)  # meters
             print()
 
-        #--------------------------------
-        # How many "all good matches" ?
-        #--------------------------------
-        if (old_shapefile):
-            ALL_GOOD = ((hlr_area == 1e6 * hlr_count) and
-                (hlr_code > 0) and (hlr_area > 1e6) and
-                (zmin == hlr_zmin) and (one_zmin))
+        #---------------------------
+        # Get closest USGS station
+        #---------------------------
+        if (SAVE_OUTLET_INFO):
+            lon_str = '{x:.4f}'.format(x=lon)  # not accurate to 4 decimals
+            lat_str = '{x:.4f}'.format(x=lat)
+            closest_id, clon, clat, dmin = \
+                usgs.get_closest_station(usgs_station_coords, 
+                     lon_str, lat_str, REPORT=False)
+            closest_station_id   = closest_id
+            closest_station_dist = '{x:.2f}'.format(x=dmin)  # string
+
+        #-----------------------------------
+        # Save info for which HLR basins ?
+        #-----------------------------------
+        GOOD_INFO = ((hlr_code > 0) and (hlr_count > 1))
+#         if (old_shapefile):
+#             GOOD_INFO = ((hlr_area == 1e6 * hlr_count) and
+#                          (hlr_code > 0) and (hlr_area > 1e6))
+#         else:
+#             GOOD_INFO = ((hlr_code > 0) and (hlr_count > 1))
+        #--------------------------------------------------------        
+        if (SAVE_OUTLET_INFO):
+            GOOD_OUTLET = ((zmin == hlr_zmin) and (one_zmin))
+            ## GOOD_OUTLET = one_zmin
+            SAVE_INFO = (GOOD_INFO and GOOD_OUTLET)
         else:
-            ALL_GOOD = ((hlr_code > 0) and (hlr_count > 1) and
-                (zmin == hlr_zmin) and (one_zmin))
- 
-        #---------------------------------------------               
-        # Save info for good matches to new TSV file
-        #---------------------------------------------
-        if (ALL_GOOD):
-            all_good_matches += 1
+            SAVE_INFO = GOOD_INFO
+    
+        #------------------------------------------------               
+        # Save info for some HLR basins to new TSV file
+        #------------------------------------------------
+        if (SAVE_INFO):
+            counters['saved_basins'] += 1
 
-            su.write_tsv_line( tsv_unit, attributes, insert_key=insert_key,
-                    new_values=[lon,lat,col,row,minlon,maxlon,minlat,maxlat])
-            
+            if (SAVE_OUTLET_INFO):
+                su.write_tsv_line( tsv_unit, attributes,
+                   insert_key=insert_key,
+                   new_values=[closest_id,closest_station_dist,
+                               lon,lat,col,row,minlon,maxlon,minlat,maxlat])
+            else:
+                su.write_tsv_line( tsv_unit, attributes,
+                   insert_key=insert_key,
+                   new_values=[minlon,maxlon,minlat,maxlat])
+            #--------------------------------------     
             # How many basins with each HLR code?
-            hlr_histogram[ hlr_code ]  += 1
-            val_histogram[ hlr_value ] += 1
+            #--------------------------------------
+            hlr_histogram[ hlr_code ] += 1
 
-        n_features += 1
-        if (n_features == nf_max):
+        if (counters['total_features'] >= nb_max):
             break
             
     #--------------------------------
     # Print info, close files, etc.
     #--------------------------------
-    print('# features          =', n_features)
-    print('# zmin matches      =', zmin_matches, 'of', nf_max)
-    print('# one zmin matches  =', one_zmin_matches)
-    print('# all good matches  =', all_good_matches, '(written to TSV)')
-    #-------------------------------------------------------
-    print('# two try count     =', two_try_count)
-    print('# empty zvals count =', empty_zvals_count)
-    print('# code zero count   =', code_zero_count)
-    print('# not in dem count  =', not_in_dem_count)
-    print('# one cell count    =', one_cell_count)
+    print('========================================================')
+    print('# total features    =', counters['total_features'])
+    print('# excluded features =', counters['excluded_features'])
+    print('# unique basins     =', counters['unique_basins'])
+    print('# saved basins      =', counters['saved_basins'], '(written to TSV)')
+    print()
+    if (SAVE_OUTLET_INFO):    
+        ## print('# hlr zmin matches  =', counters['hlr_zmin_match'])
+        print('# hlr zmin matches  =', hlr_zmin_match.sum(), ' (unique)')
+        print('# one zmin in poly  =', counters['one_zmin'])
+        print('# one zmin & match  =', counters['one_zmin_match'])
+        print('# two try count     =', counters['two_tries'])
+        print('# not in dem count  =', counters['not_in_dem'])
+        # print('# no zvalues count  =', counters['no_zvalues'])
+        print()
+    print('# code zero count   =', counters['code_is_zero'])
+    print('# one cell count    =', counters['one_cell_basin'])
+
     if (old_shapefile):
         print('# count-area count  =', count_area_count)
         
     print()
-    print('hlr_histogram =')
+    print('hlr_histogram (for saved basins) =')
     print( hlr_histogram )
     print()
     #-------------------------
@@ -604,8 +650,9 @@ def create_tsv( shape_dir=None, dem_dir=None,
     print( i[w] )
     print('hist =')
     print( val_histogram[w] )
-    print('not_in_dem_vals =')
-    print( not_in_dem_vals )
+    if (SAVE_OUTLET_INFO):
+        print('not_in_dem_vals =')
+        print( not_in_dem_vals )
     print()
 
     dem_unit.close()
@@ -617,7 +664,350 @@ def create_tsv( shape_dir=None, dem_dir=None,
     
 #   create_tsv()
 #---------------------------------------------------------------------
+def basin_in_dem( poly_x, poly_y, dem_info, hlr_value,
+                  counters, not_in_dem_vals, REPORT=True):
+
+    #--------------------------------------------------------
+    # Need this because Hawaii, and maybe some other basins
+    # are not in the HYDRO1K DEM we have for North America
+    # See Notes at the top of this file for more info.
+    #--------------------------------------------------------
+    xmin = dem_info['xmin']
+    ymin = dem_info['ymin']
+    xmax = dem_info['xmax']
+    ymax = dem_info['ymax']
+    #------------------------
+    w1 = np.logical_and( poly_x >= xmin, poly_x < xmax)
+    w2 = np.logical_and( poly_y >= ymin, poly_y < ymax)
+    w  = np.logical_and( w1, w2 )
+    in_dem = (w.sum() > 0)
+
+    if not(in_dem):
+        counters['not_in_dem'] += 1
+        not_in_dem_vals.append( hlr_value )
+        if (REPORT):
+            print('##### WARNING #####')
+            print('Basin is not in the North America DEM.')
+            print('Watershed ID (VALUE) =', hlr_value)
+            print('It is likely in Hawaii.')
+            print('Skipping to next basin.')
+            print()
+    return in_dem
+
+#     x2 = poly_x[w]
+#     y2 = poly_y[w]
+
+#   basin_in_dem()
+#---------------------------------------------------------------------
+def snap_polygon_points( poly_x, poly_y, hlr_value, old_shapefile ):
+
+    #----------------------------------
+    # Round to nearest 1000 or 500 ??
+    #--------------------------------------------
+    # Most poly_x values end in 16.5 or 16.625,
+    # and most poly_y values end in 190.5.
+    #--------------------------------------------
+#         poly_x = np.around(poly_x - 500, -3)
+#         poly_y = np.around(poly_y - 500, -3)
+#         poly_x = np.around(poly_x, -3) + 500
+#         poly_y = np.around(poly_y, -3) - 500
+    if (old_shapefile):
+        poly_x += 16.5    # (old shapefile)
+        w0 = ((poly_x % 1000) != 0)
+        n0 = w0.sum()
+        if (n0 > 0):
+            poly_x[ w0 ] += 0.125
+        poly_y -= 190.5
+    else: 
+        poly_x += 16.6    # (new shapefile)  
+        poly_y -= 190.4
+#         poly_x += (16.6  + 500)   # (new shapefile)  
+#         poly_y -= (190.4 + 500)
+    #----------------------------
+    w1 = ((poly_x % 1000) != 0)   # boolean array
+    n1 = w1.sum()
+    w2 = ((poly_y % 1000) != 0)
+    n2 = w2.sum()
+    if (n1 > 0):
+        print('### WARNING: poly_x is not a multiple of 1000.')
+        print('    poly_x[w1] =', poly_x[w1] )
+        print('    hlr_value  =', hlr_value)
+    if (n2 > 0):
+        print('### WARNING: poly_y is not a multiple of 1000.')
+        print('    poly_y[w2] =', poly_y[w2] )
+        print('    hlr_value  =', hlr_value)
+        
+    return poly_x, poly_y
+    
+#   snap_polygon_points()     
+#---------------------------------------------------------------------
+def try_to_get_outlet_info( dem_unit, dem_info, hlr_zmin,
+                            hlr_value, hlr_zmin_match,
+                            x1,y1, lons,lats,
+                            counters, not_in_dem_vals,
+                            REPORT=False):
+
+    #----------------------------------------------------------
+    # The source DEM is the GTOPO30 HYDRO1K DEM and uses a
+    # Lambert Azimuthal EqArea projection as described above.
+    # Can index this 1-km DEM with the Lambert xy coords
+    # to get an elevation, then compare to MINELE attribute
+    # as a way to get the outlet xy.  Or just find the xy
+    # pair for each polygon with the lowest elevation.
+    # But the DEM will be pretty big.  The HYDRO1K DEM for
+    # North America includes Alaska, CONUS, PR, etc. but not
+    # Hawaii. It has 9102 cols and 8384 rows.  Need to
+    # convert Lambert xy coords to DEM column and row.
+    #----------------------------------------------------------
+    # See: http://www.ncgia.ucsb.edu/SANTA_FE_CD-ROM/
+    #       sf_papers/verdin_kristine/santafe2.html
+    # HYDRO1K DEM:  https://d9-wret.s3.us-west-2.amazonaws.com/
+    #    assets/palladium/production/s3fs-public/atoms/files/
+    #    HYDRO1kDocumentationReadMe.pdf
+    #----------------------------------------------------------
+    ncols  = dem_info['ncols']
+    nrows  = dem_info['nrows']
+    xmin   = dem_info['xmin']
+    ymax   = dem_info['ymax']
+    dx     = dem_info['dx']
+    dy     = dem_info['dy']
+    nodata = dem_info['nodata']
+
+    #-------------------------------------------------------    
+    # Get cols and rows of dem grid cells on basin polygon
+    #-------------------------------------------------------
+    cols, rows = get_cols_and_rows( x1, y1, xmin, ymax, dx, dy,
+                     round_method='floor', print_c2_r2=False )
+    ## break
+           
+    #---------------------------------------------------       
+    # Get elevation (z) values for every polygon point
+    # then get zmin and corresponding lon and lat.
+    #---------------------------------------------------
+    zvals = get_polygon_zvals( cols, rows, ncols, dem_unit,
+                               REPORT=REPORT )
+
+    #------------------------------------------      
+    # Get lon and lat for grid cell with zmin
+    # Recall grid cell size is 1 km (HYDRO1K)
+    #------------------------------------------      
+    zmin, zmin_arg, lon, lat, one_zmin = get_zmin_lon_and_lat( zvals,
+          lons, lats, nodata, REPORT=REPORT)
+#     if (zmin != hlr_zmin):
+#         #----------------------------------------------------
+#         # Note: This may only happen for "fragmented" basin
+#         #       polygons where hlr_value is repeated.
+#         #----------------------------------------------------
+#         print('zmin != hlr_zmin for VALUE =', hlr_value)
+#     else:
+#         print('zmin == hlr_zmin for VALUE =', hlr_value)
+                 
+    #--------------------------------------------------------        
+    # If zmin doesn't match hlr_zmin, then try again with
+    # round_method = 'ceil'.  Still don't get all matches.
+    # For old_shapefile,
+    # Got 168 matches out of first 200 polygons (16% fails)
+    # Also got 20/20, 28/30, 42/50.
+    #--------------------------------------------------------
+    # Note: Could have one_zmin=True and (hlr_zmin != zmin)
+    #-------------------------------------------------------- 
+#     if (zmin != hlr_zmin):
+#         counters['two_tries'] += 1
+#         cols, rows = get_cols_and_rows( x1, y1, xmin, ymax, dx, dy,
+#                          round_method='ceil', print_c2_r2=False )
+#         zvals = get_polygon_zvals( cols, rows, ncols, dem_unit,
+#                                    REPORT=REPORT )    
+#         zmin, zmin_arg, lon, lat, one_zmin = get_zmin_lon_and_lat( zvals,
+#               lons, lats, nodata, REPORT=REPORT )
+
+    #-----------------------------------        
+    # Count when zmin matches hlr_zmin
+    #--------------------------------------------------------
+    # The polygon with HLR VALUE=25 is fragmented/repeated,
+    # and zmin == hlr_zmin for some pieces and not others.
+    #-------------------------------------------------------- 
+    if (zmin == hlr_zmin):
+        hlr_zmin_match[ hlr_value ] = True  ################
+        counters['hlr_zmin_match'] += 1
+        if (one_zmin):
+            counters['one_zmin_match'] += 1
+    if (one_zmin):
+        counters['one_zmin'] += 1
+    #------------------------------
+    col = cols[ zmin_arg ]
+    row = rows[ zmin_arg ]
+
+    return lon, lat, col, row, zmin, one_zmin, \
+           counters, not_in_dem_vals
+ 
+#   try_to_get_outlet_info()
+#---------------------------------------------------------------------
 def get_cols_and_rows( x1, y1, xmin, ymax, dx, dy,
+                       round_method=None, print_c2_r2=None):
+
+    #-----------------------------------------------------------    
+    # Note: The polygon vertices are in clockwise order and
+    # they trace around the outer edges of the DEM grid cells
+    # that are contained in a given basin.  In order to get
+    # the cols and rows of grid cells in the basin, we note
+    # the following.
+    #
+    # (1) If next vertex is to the right of the last one, then
+    #     the grid cell below this edge is on the boundary.
+    # (2) If next vertex is to the left of the last one, then
+    #     the grid cell above this edge is on the boundary.
+    # (3) If next vertex is below the last one, then the grid
+    #     cell to the left of this edge is on the boundary.
+    # (4) If next vertex is above the last one, then the grid
+    #     cell to the right of this edge is on the boundary.
+    #
+    # A given grid cell may be included more than once, so
+    # need to remove duplicates (non-unique pairs) at the end.
+    #
+    # This won't work as written for hlrus4.shp, because it
+    # doesn't include all boundary vertices.      
+    #------------------------------------------------------------
+    # Formula 1 comes from taking the smallest x1
+    # value of x1 = (xmin + dx/2) to get 0th col.
+    # Formula 2 comes from taking the largest y1
+    # value of y1 = (ymax - dy/2) to get 0th row.
+    #------------------------------------------------
+    DEBUG = False
+
+    #-----------------------------------------------------
+    # Note: The first hlr_values are for Alaska and 
+    #       there are many fragmented basins along the
+    #       northern coastline.  The following info is
+    #       for the original shapefile: hlrus.shp,
+    #       and with only one "try".
+    #       get_cols_and_rows() does not yet support
+    #       hlrus4.shp.
+    #-----------------------------------------------------
+    # For xoffset=500, yoffset=0:
+    #   zmin = hlr_zmin matches are 56 of first 200.
+    #   zmin = hlr_zmin matches are 119 of first 500.
+    #      one_zmin_in_poly   = 146
+    #      one_zmin_and_match = 119
+    #   zmin = hlr_zmin matches are 249 of first 1000.
+    #      hlr zmin matches   = 698 (incl. more than one)
+    #      one_zmin_in_poly   = 318
+    #      one_zmin_and_match = 249
+    #   zmin = hlr_zmin matches are 863 of first 3000 "features".
+    #      unique basins      = 2582
+    #      excluded features  = 304
+    #      hlr zmin matches   = 2310 (incl. more than one)
+    #      one_zmin_in_poly   = 1124
+    #      one_zmin_and_match = 863
+    #   zmin = hlr_zmin matches are 2589 of first 10000 "features".
+    #      unique basins      = 8495
+    #      excluded features  = 1117
+    #      hlr zmin matches   = 6888 (incl. more than one)
+    #      one_zmin_in_poly   = 4014 
+    #      one_zmin_and_match = 2589
+    #   This includes hlr_values = 115 and 50.
+    #   But not hlr_value = 64 or 148. (32767 vs. 0)
+    #-----------------------------------------------------
+    # For xoffset=500, yoffset=-500:
+    #   zmin = hlr_zmin matches are 53 of first 200.
+    #   This includes hlr_value = 115.
+    #-----------------------------------------------------
+    # For xoffset=1000, yoffset=0:
+    #   zmin = hlr_zmin matches are 43 of first 200.
+    #   This doesn't include hlr_value = 115.
+    #-----------------------------------------------------
+    # For xoffset=400, yoffset=0:
+    #   zmin = hlr_zmin matches are 42 of first 200.
+    #   This doesn't include hlr_value = 115.
+    #-----------------------------------------------------
+    # For xoffset=0, yoffset=0:
+    #   zmin = hlr_zmin matches are 42 of first 200.
+    #   This doesn't include hlr_value = 115.
+    #-----------------------------------------------------
+    # For xoffset=600, yoffset=0:
+    #   zmin = hlr_zmin matches are 34 of first 200.
+    #   This doesn't include hlr_value = 115.
+    #----------------------------------------------------
+    # For xoffset=500, yoffset=500:
+    #   zmin = hlr_zmin matches are 34 of first 200.
+    #   This doesn't include hlr_value = 115.
+    #----------------------------------------------------
+    ### CHECK hlr_value = 50
+    ## xoffset = 0
+    ## xoffset = 1000
+    xoffset =  500  # grid cell centers
+    # yoffset = -500
+    yoffset = 0
+    ## yoffset = 500
+    cell_x = np.zeros( x1.size, dtype='int32')
+    cell_y = np.zeros( y1.size, dtype='int32')
+    x1_next = np.roll(x1, -1)  # last item rolls to first position
+    y1_next = np.roll(y1, -1)
+    #------------------------------------
+    w1 = (x1_next > x1)
+    w1[-1] = False  # exclude last item
+    n1 = w1.sum()
+    i1 = 0
+    i2 = i1 + n1
+    cell_x[i1:i2] = x1[ w1 ] + xoffset
+    cell_y[i1:i2] = y1[ w1 ] - yoffset
+    #------------------------------------
+    w2 = (x1_next < x1)
+    w2[-1] = False
+    n2 = w2.sum()
+    i1 = i2
+    i2 = i1 + n2
+    cell_x[i1:i2] = x1[ w2 ] - xoffset
+    cell_y[i1:i2] = y1[ w2 ] + yoffset
+    #------------------------------------
+    w3 = (y1_next < y1)
+    w3[-1] = False
+    n3 = w3.sum()
+    i1 = i2
+    i2 = i1 + n3
+    cell_x[i1:i2] = x1[ w3 ] - xoffset
+    cell_y[i1:i2] = y1[ w3 ] - yoffset
+    #------------------------------------
+    w4 = (y1_next > y1)
+    w4[-1] = False
+    n4 = w4.sum()
+    i1 = i2
+    i2 = i1 + n4
+    cell_x[i1:i2] = x1[ w4 ] + xoffset
+    cell_y[i1:i2] = y1[ w4 ] + yoffset
+    #------------------------------------
+    cell_x = cell_x[:i2]  # remove extras
+    cell_y = cell_y[:i2]
+   
+    #----------------------------------------  
+    # Keep only unique cell_x, cell_y pairs
+    #----------------------------------------    
+    xstr = cell_x.astype('<U16')
+    ystr = cell_y.astype('<U16')
+    str_pairs = np.char.add(xstr, ystr)
+    uniq_pairs, indices_of_uniq = np.unique(str_pairs, return_index=True) 
+    cell_x = cell_x[ indices_of_uniq ]
+    cell_y = cell_y[ indices_of_uniq ]
+    #-----------------------------------------------
+    # Recall that row 0 is top row; goes with ymax
+    #-----------------------------------------------
+    c1   = (cell_x - xmin) / dx  # formula1, float
+    r1   = (ymax - cell_y) / dy  # formula2, float
+    cols = np.int32(c1)
+    rows = np.int32(r1)
+    
+    if (DEBUG):
+        print('### x1.size     =', x1.size)
+        print('### len(cell_x) =', len(cell_x))
+        # print('cell_x =')
+        # print( cell_x )
+        print('### size(cols)  =', cols.size)
+        print()
+
+    return cols, rows
+    
+#   get_cols_and_rows()                 
+#---------------------------------------------------------------------
+def get_cols_and_rows2( x1, y1, xmin, ymax, dx, dy,
                        round_method='floor',
                        int_method='int32',
                        print_c2_r2=False ):
@@ -755,12 +1145,12 @@ def get_polygon_zvals( cols, rows, ncols, dem_unit,
         ## print('zval.dtype =', val.dtype)
         ## print('zval =', val[0])
 
-    #------------------------------------------
-    # Note: First and last zvals are the same
-    #------------------------------------------
     if (REPORT):
         print('zvals =', zvals)  #######
-        print('n_pts =', zvals.size - 1)
+        print('n_pts =', zvals.size)
+        # Note: Use this if first and last zvals are the same
+        #       meaning last poly vertex is repeated.
+        ## print('n_pts =', zvals.size - 1)
         print()
     return zvals
  
@@ -768,6 +1158,7 @@ def get_polygon_zvals( cols, rows, ncols, dem_unit,
 #---------------------------------------------------------------------
 def check_lon_lats( cols, rows, ncols, nrows, x2, y2):
 
+    # Now obsolete?
     #----------------------------------------------
     # Need this because Hawaii is not in this DEM
     #----------------------------------------------
@@ -785,10 +1176,10 @@ def check_lon_lats( cols, rows, ncols, nrows, x2, y2):
 def get_zmin_lon_and_lat( zvals, lons, lats, nodata,
                           REPORT=True ):
 
-    #--------------------------------------------------
-    # This version does not use np.argmin(), since it
-    # only returns index of the first min value.
-    #--------------------------------------------------
+    #------------------------------------------------------
+    # This version does not use np.argmin(), since that
+    # function only returns index of the first min value.
+    #------------------------------------------------------
     zvals[ zvals == nodata ] = 32767  # Need this
     zmin = zvals.min()
     ivals = np.arange( zvals.size )
@@ -807,11 +1198,11 @@ def get_zmin_lon_and_lat( zvals, lons, lats, nodata,
     outlon   = lons[ zmin_arg ]  # for outlet
     outlat   = lats[ zmin_arg ]
     
-    #----------------------------------- 
+    #--------------------------------------- 
     # Round to 4 places after decimal;
     # roughly 11 meters.  Can only do
-    # in-place w/out for ndarrays.
-    #-----------------------------------
+    # in-place w/out keyword for ndarrays.
+    #---------------------------------------
     outlon = np.around(outlon, decimals=4)
     outlat = np.around(outlat, decimals=4)
 
@@ -839,7 +1230,7 @@ def get_zmin_lon_and_lat( zvals, lons, lats, nodata,
 #     lat = lats[ zmin_arg ]
 #     return zmin, lon, lat
 # 
-# #   get_zmin_lon_and_lat1()             
+# #   get_zmin_lon_and_lat1()           
 #---------------------------------------------------------------------
 def convert_vat_adf_to_csv( vat_adf_file=None, csv_file=None):
 
@@ -923,8 +1314,446 @@ def convert_vat_adf_to_csv( vat_adf_file=None, csv_file=None):
     # Note: "with" closes the new CSV file.
     # ds = None  # (Close vat.adf file)
 
-#   convert_vat_adf_to_csv() 
+#   convert_vat_adf_to_csv()
+#---------------------------------------------------------------------
+def get_hlr_info_dict( in_csv_file='vat_adf.csv', CODE_ONLY=False ): 
+
+    #-------------------------------------------------------------
+    # Note: The file vat_adf.csv contains attributes for the
+    #       43931 HLR basins, obtained from the raster version
+    #       of the HLR data set in the arctar00000/hlrus folder.
+    #       See Notes for convert_vat_adf_to_csv, above.
+    #----------------------------------------------------------------------------------
+#     Shapefile attributes are defined here:
+#     https://water.usgs.gov/GIS/metadata/usgswrd/XML/hlrus.xml
+# 
+#     Value     = Watershed ID, in range [1,44594]  ######## IN MULTIPLE ROWS
+#     Count     = Watershed area in square kilometers, in range [31, 23476]
+#                 (really a # of grid cells)
+#     Aqpermnew = Aquifer permeability class (1-7, lowest-highest)
+#     Slope     = Slope in percent rise
+#     Tave      = Mean annual temperature in degrees Fahrenheit, in [18.7, 75.0]
+#     Ppt       = Mean annual precipitation in inches per year, in [3.2, 136.8]
+#     PET       = Mean annual potential evapotrans. in inches per year, in [12.8, 52,7]
+#     Sand      = Percent sand in soil, in [2.5, 100]
+#     PMPE      = Mean annual precipitation minus potential evapotranspiration
+#                 in inches per year, in [-48.6, 99.7]
+#     Minele    = Minimum elevation in watershed in meters, in [-79, 3169]
+#     Relief    = Maximum elevation in watershed minus minimum elevation
+#                 in watershed in meters, in range [0, 5618]
+#     Pflattot  = Total percent flat land (slope less than 1 percent)
+#                 in watershed, in range [0,100]
+#     Pflatlow  = Percent flat land (slope less than 1 percent) in watershed
+#                 lowland (elevation less than midpoint between minimum
+#                 and maximum elevation), in range [0, 100]
+#     Pflatup   = Percent flat land (slope less than 1 percent) in watershed
+#                 upland (elevation greater than or equal to midpoint
+#                 between minimum and maximum elevation), in range [0, 100]
+#     Hlr       = Hydrologic landscape region identification number, in [1,20]
+    #----------------------------------------------------------------------------------
+    hlr_dir = get_hlr_data_dir()
+    hlr_raster_dir = hlr_dir + 'arctar00000/hlrus/'
+    dict_file = 'HLR_basin_info_dict.pkl'
+    file_path = hlr_raster_dir + dict_file
+    if (os.path.exists( file_path ) and not(CODE_ONLY)):
+        print('Reading saved HLR basin info dictionary...')
+        file_unit = open( file_path, 'rb')
+        hlr_info_dict = pickle.load( file_unit )
+        file_unit.close()
+        print('Finished.')
+        print()
+        return hlr_info_dict
+
+    delim = ','  # CSV file
+    print('Working...')
+    hlr_basin_count = 0
+ 
+    #------------------
+    # Open input file
+    #------------------
+    in_csv_path = hlr_raster_dir + in_csv_file
+    in_csv_unit = open(in_csv_path,  'r')
+
+    #-----------------------    
+    # Skip the header line
+    #-----------------------
+    header = in_csv_unit.readline()
+    hlr_info_dict = dict()
+
+    #------------------------------
+    # Map zero to zero for nodata
+    #------------------------------
+    if (CODE_ONLY):
+        hlr_info_dict[0] = 0
+    else:
+        hlr_info_dict[0] = {'area': '0.0', 'slope':'0.0', 'T_avg':'0.0',
+            'P_avg':'0.0', 'PET_avg':'0.0', 'min_elev':'0', 'relief':'0',
+            'hlr_code':0}  # integer, not string
+
+    while (True):
+        line = in_csv_unit.readline()
+        if (line == ''):
+            break  # (reached end of file)
+        values = line.split( delim )
+        hlr_basin_count  += 1
+
+        value    = values[0].strip()   # this is the basin ID
+        area     = values[1].strip()   # this is COUNT; each cell is 1 km2.
+        slope    = values[3].strip()   # [%]
+        T_avg    = values[4].strip()   # [deg_F]
+        P_avg    = values[5].strip()   # [in/yr]
+        PET_avg  = values[6].strip()   # [in/yr]
+        min_elev = values[9].strip()   # [meters]
+        relief   = values[10].strip()  # [meters]
+        hlr_code = values[14].strip()  # in {1,...,20}
+
+        #------------------------------------------        
+        # Save info in dictionary w/ value as key
+        # Save each entry as original string or
+        # as a re-formatted string.
+        #------------------------------------------
+#         hlr_info_dict[ value ] = { 'area':area, 'slope':slope, 'T_avg':T_avg,
+#             'P_avg':P_avg, 'PET_avg':PET_avg, 'min_elev':min_elev,
+#             'relief':relief, 'hlr_code':hlr_code }
+        #------------------------------------------
+        val_num = np.int32(value)
+        if (CODE_ONLY):
+            hlr_info_dict[ val_num ] = np.int16(hlr_code)
+        else:      
+            hlr_info_dict[ val_num ] = {
+            'area':   '{x:.2f}'.format(x=np.float32(area)),  # int to float, [km2]
+            'slope':  '{x:.4f}'.format(x=np.float32(slope)),
+            'T_avg':  '{x:.4f}'.format(x=np.float32(T_avg)),
+            'P_avg':  '{x:.4f}'.format(x=np.float32(P_avg)),
+            'PET_avg':'{x:.4f}'.format(x=np.float32(PET_avg)),
+            #-----------------------------------------------------
+            'min_elev': np.int16(min_elev),    # an integer
+            'relief':   np.int16(relief),      # an integer
+            'hlr_code': np.int16(hlr_code) }   # an integer
+                
+    SAVE_TO_FILE = not(CODE_ONLY)
+    if (SAVE_TO_FILE):
+        file_unit = open( file_path, 'wb' )
+        pickle.dump( hlr_info_dict, file_unit, protocol=pickle.HIGHEST_PROTOCOL)
+        file_unit.close()
+        print('Saved HLR basin info dictionary to file:')
+        print('  ' + file_path)
+        print()
+        
+    #-------------------------------   
+    # Close input and output files
+    #-------------------------------
+    in_csv_unit.close()
+    print('Number of HLR basins =', hlr_basin_count )
+    print('Finished.')
+    
+    return hlr_info_dict
+
+#   get_hlr_info_dict()
 #---------------------------------------------------------------------   
+def create_hlr_grid( value_tif_file='HLR_value_grid_9106x6855_1K.tif',
+                     code_tif_file='HLR_code_grid_9106x6855_1K.tif',
+                     code_rtg_file='HLR_code_grid_9106x6855_1K.rtg',
+                     REPORT=True ):
+
+    #---------------------------------------------------------
+    # Note: We can export a grid of HLR values from QGIS.
+    #       This routine creates a similar grid of HLR codes
+    #       by mapping each HLR value to its code.
+    #       Using this grid, we can assign an HLR code to
+    #       any lon/lat pair that lies within the grid.
+    #---------------------------------------------------------
+    # max_hlr_value = 44594
+    # value_nodata  = -2147483647.0 
+    # code_nodata   = 0
+
+    hlr_info_dict = get_hlr_info_dict( CODE_ONLY=True )
+    
+    #------------------------------    
+    # Read the grid of HLR values
+    #------------------------------
+    hlr_dir = get_hlr_data_dir()
+    hlr_raster_dir = hlr_dir + 'arctar00000/hlrus/'
+    value_tif_path = (hlr_raster_dir + value_tif_file)
+    code_tif_path  = (hlr_raster_dir + code_tif_file)
+    code_rtg_path  = (hlr_raster_dir + code_rtg_file)
+    value_grid = regrid.read_geotiff( in_file=value_tif_path )
+                        ##### MAKE_RTG=True, rtg_file=code_rtg_path )
+    ## grid_shape = value_grid.shape
+
+    #------------------------------    
+    # Map HLR values to HLR codes
+    #------------------------------ 
+    print('Mapping HLR values to HLR codes...')
+    w0 = (value_grid < 1)
+    value_grid[ w0 ] = 0
+    hlr_map  = np.vectorize(hlr_info_dict.__getitem__) 
+    hlr_grid = hlr_map( value_grid )
+
+    #-------------------------------------------------------------------
+    # np.vectorize() has an "otypes" keyword to set output type
+    #    but this doesn't work:
+    # hlr_map = np.vectorize(hlr_info_dict.__getitem__, otypes='int16')
+    # So convert to int16 afterwards.  Also see save_grid_to_geotiff().
+    #--------------------------------------------------------------------    
+    hlr_grid = hlr_grid.astype('int16')  ###############
+
+    if (REPORT):
+        print('hlr_grid.shape =', hlr_grid.shape )
+        print('hlr_grid.dtype =', hlr_grid.dtype )
+        print('hlr_grid.min() =', hlr_grid.min() )
+        print('hlr_grid.max() =', hlr_grid.max() )
+
+    #-------------------------------------
+    # Save new grid of HLR codes to file
+    #-------------------------------------
+    # bounds = [ulx, lry, lrx, uly]  # [xmin, ymin, xmax, ymax]
+    ulx  = -6175016.6
+    uly  = 4324190.4
+    xres = 1000.0
+    yres = 1000.0
+    regrid.save_grid_to_geotiff( code_tif_path, hlr_grid,
+                        ulx, uly, xres, yres, 
+                        dtype='int16', nodata=0)
+    print('Finished.')
+
+#   create_hlr_grid()
+#---------------------------------------------------------------------
+def get_hlr_grid_info():
+
+    #------------------------------------
+    # bounds = [ulx, lry, lrx, uly]
+    #        = [xmin, ymin, xmax, ymax]
+    #------------------------------------
+    grid_info = dict()
+    grid_info['ncols'] = 9106
+    grid_info['nrows'] = 6855
+    grid_info['dx']    = 1000.0
+    grid_info['dy']    = 1000.0
+    grid_info['xmin']  = -6175016.6
+    grid_info['xmax']  =  2930983.4
+    grid_info['ymin']  = -2530809.6
+    grid_info['ymax']  =  4324190.4
+    #------------------------------------------------------------
+    grid_info['code_file']  = 'HLR_code_grid_9106x6855_1K.tif'
+    grid_info['value_file'] = 'HLR_value_grid_9106x6855_1K.tif'
+    
+    return grid_info
+
+#   get_hlr_grid_info()
+#---------------------------------------------------------------------
+def Lambert_Azimuthal_Equal_Area_XY( lon, lat,
+            lon0=-100.0, lat1=45.0):
+
+    #---------------------------------------------
+    # Note: Formulas from Snyder's Book, p. 185.
+    #---------------------------------------------
+    # R = radius of Clarke 1866 Authalic Sphere
+    # Central_Meridian   = lon0 = -100.0
+    # Latitude of Origin = lat0 = 45.0
+    #--------------------------------------------------
+    # Equivalent PROJ4 command string:
+    # +proj=laea +lat_0=45 +lon_0=-100 +x_0=0 +y_0=0
+    #    +a=6370997 +b=6370997 +units=m +no_defs
+    #--------------------------------------------------
+    # Was able to test using this PROJ4 string at:
+    #    https://mygeodata.cloud/cs2cs/
+    # and got perfect agreement.
+    #--------------------------------------------------     
+    R   = 6370997.0   # [meters]
+    d2r = (np.pi / 180.0)
+    lon_rad  = lon  * d2r   # psi in Snyder
+    lon0_rad = lon0 * d2r
+    lon_diff_rad = (lon_rad - lon0_rad)
+    lat_rad  = lat  * d2r   # phi in Snyder
+    lat1_rad = lat1 * d2r
+
+    #----------------------------------------------------------
+    # Note: Origin of map projection is at (lon0, lat1).
+    #       x is positive to the east of the map origin
+    #       and increases from west to east as it should.
+    #       (-100, 45)   -> (0.0, 0.0)
+    #       (-100.5, 45) -> (-39313.012957, 121.2945992)
+    #       (-99.5, 45)  -> ( 39313.012957, 121.2945992)
+    #----------------------------------------------------------
+    # Note: y is positive to the north of the map origin
+    #       and increases from south to north as it should.
+    #       (-100, 45.5) -> (0.0,  55597.26072638)
+    #       (-100, 44.5) -> (0.0, -55597.26072638)
+    #----------------------------------------------------------   
+    kterm1 = np.sin(lat1_rad) * np.sin(lat_rad)
+    kterm2 = np.cos(lat1_rad) * np.cos(lat_rad) * np.cos(lon_diff_rad)
+    kp     = np.sqrt(2 / (1 + kterm1 + kterm2))  # k_prime in Snyder
+    #----------------------------------------------------------
+    x      = R * kp * np.cos(lat_rad) * np.sin(lon_diff_rad)
+    #----------------------------------------------------------
+    yterm1 = np.cos(lat1_rad) * np.sin(lat_rad)
+    yterm2 = np.sin(lat1_rad) * np.cos(lat_rad) * np.cos(lon_diff_rad)
+    y      = R * kp * (yterm1 - yterm2)
+    return x,y
+
+#   Lambert_Azimuthal_Equal_Area_XY()
+#---------------------------------------------------------------------
+def get_hlr_code_for_point( lon, lat, hlr_grid=None, grid_info=None,
+                            out_prj_file=None, USE_GDAL=False,
+                            REPORT=True):
+
+    if (grid_info is None):
+        grid_info = get_hlr_grid_info()
+
+    if (hlr_grid is None):
+        hlr_dir = get_hlr_data_dir()
+        hlr_raster_dir = hlr_dir + 'arctar00000/hlrus/'
+        code_tif_file = grid_info['code_file']
+        code_tif_path = hlr_raster_dir + code_tif_file
+        hlr_grid = regrid.read_geotiff( in_file=code_tif_path, GEO=False )
+        print('## hlr_grid shape =', hlr_grid.shape)
+        print('## hlr_grid dtype =', hlr_grid.dtype)
+        print('## hlr_grid min   =', hlr_grid.min())
+        print('## hlr_grid max   =', hlr_grid.max())
+        print()
+
+    if (out_prj_file is None):
+        hlr_dir = get_hlr_data_dir()
+        hlr_raster_dir = hlr_dir + 'arctar00000/hlrus/'
+        out_prj_file = 'hlrus.prj'
+        out_prj_file = (hlr_raster_dir + out_prj_file)
+
+    xmin = grid_info['xmin']
+    xmax = grid_info['xmax']
+    ymin = grid_info['ymin']
+    ymax = grid_info['ymax']
+    dx   = grid_info['dx']     # 1000.0 for HLR data set
+    dy   = grid_info['dy']     # 1000.0 
+
+    #----------------------------------------------
+    # EPSG = 4326 is Geographic coords (WGS 84)
+    # HLR data uses: Lambert_Azimuthal_Equal_Area
+    #   with particular projection parameters.
+    #-------------------------------------------------
+    # EPSG = 2163 is a Lambert Azimuthal Equal Area
+    # projection w/ almost identical info to our PRJ
+    # https://spatialreference.org/ref/epsg/2163/
+    # https://epsg.io/2163
+    # Download PRJ file and compare.
+    # Also very similar to EPSG = 9311, which is a
+    #  "non-deprecated replacement" for EPSG 2163?
+    #-------------------------------------------------
+    # Bounds of conterminous US are:
+    #     maxlat = 49.382808
+    #     minlat = 24.521208
+    #     maxlon = -66.945392
+    #     minlon = -124.736342
+    # Also see Notes in hydrofab_tools.py.
+    #-------------------------------------------------
+    if (USE_GDAL):
+        #--------------------------------------------------------- 
+        # Note: This also works, but only if we switch the order
+        #       lon and lat args and set SWAP_XY=False and use
+        #       out_proj_file. It fails if we keep lon,lat order
+        #       and set SWAP_XY=True or False.
+        #---------------------------------------------------------   
+        lon_np = np.float64(lon)  # convert_coords needs this type
+        lat_np = np.float64(lat)
+        ## x,y = su.convert_coords(lon_np, lat_np,
+        x,y = su.convert_coords(lat_np, lon_np,
+                         inEPSG=4326,  inPRJfile=None,
+                         ## outEPSG=9311, outPRJfile=None,
+                         ## outEPSG=2163, outPRJfile=None,
+                         outEPSG=None, outPRJfile=out_prj_file, 
+                         PRINT=False, SWAP_XY=False)
+    else:
+        x,y = Lambert_Azimuthal_Equal_Area_XY( lon, lat )
+
+    #----------------------------------------
+    # Check if x and y fall inside the grid
+    #----------------------------------------
+    in_xrange = (x > xmin) and (x < xmax)
+    in_yrange = (y > ymin) and (y < ymax)
+    if not( in_xrange and in_yrange ):
+        print('### ERROR: Computed x,y falls outside of grid.')
+        print('###        Returning hlr_code = 0.')
+        if not( in_xrange ):
+            print('### xmin, xmax =', xmin, ',', xmax)
+            print('### x =', x)
+        if not (in_yrange ):
+            print('### ymin, ymax =', ymin, ',', ymax)
+            print('### y =', y) 
+        return 0 
+            
+    #------------------------------------------------
+    # Recall that row 0 is top row & goes with ymax
+    #------------------------------------------------
+    col = np.int32((x - xmin) / dx)
+    row = np.int32((ymax - y) / dy)
+    hlr_code = hlr_grid[ row, col ] 
+
+    if (REPORT):
+        print('## HLR Information for Lon/Lat:')
+        print('lon, lat =', lon, ',', lat)
+        print('x =', x)
+        print('y =', y)
+        print('col  =', col)
+        print('row  =', row)
+        print('code =', hlr_code)
+                       
+    return hlr_code
+
+#   get_hlr_code_for_point()
+#---------------------------------------------------------------------   
+# def point_in_rectangle(xP,yP, xA,yA, xB,yB, xC,yC, xD,yD):
+def point_in_rectangle(xP,yP, xA,yA, xC,yC):
+
+    #-------------------------------------------------------------
+    # Note:  This is for a rectangle with arbitrary orientation,
+    #        but in our case the top and bottom edges are
+    #        parallel to the x-axis (east-west axis).
+    #        This version allows the arguments to be arrays.
+    #
+    #        . (xA,yA)        . (xB,yB)
+    #                                        . (xP,yP)
+    #        . (xD,yD)        . (xC,yC)
+    #    
+    #        So in our case:
+    #           xA = xD = minlon
+    #           xB = xC = maxlon
+    #           yC = yD = minlat
+    #           yA = yB = maxlat
+    #   
+    # See:   https://martin-thoma.com/
+    #        how-to-check-if-a-point-is-inside-a-rectangle/
+    #-------------------------------------------------------------
+    # Rectangle with arbitrary rotation or orientation.
+    #----------------------------------------------------
+#     ABCD = 0.5 * np.abs((yA - yC)*(xD - xB) + (yB - yD)*(xA - xC))
+#     ABP  = 0.5 * np.abs(xA*(yB - yP) + xB*(yP - yA) + xP*(yA - yB))
+#     BCP  = 0.5 * np.abs(xB*(yC - yP) + xC*(yP - yB) + xP*(yB - yC))
+#     CDP  = 0.5 * np.abs(xC*(yD - yP) + xD*(yP - yC) + xP*(yC - yD))
+#     DAP  = 0.5 * np.abs(xD*(yA - yP) + xA*(yP - yD) + xP*(yD - yA))
+#     return np.invert(ABCD < (ABP + BCP + CDP + DAP))
+
+    #---------------------------------------
+    # Rectangle as geographic bounding box
+    #-------------------------------------------------- 
+    # This lets us eliminate xB,yB and xD,yD to get:
+    #--------------------------------------------------  
+#     ABCD = (xC - xA) * (yA - yC)
+#     ABP  = 0.5 * np.abs(xA*(yA - yP) + xC*(yP - yA) )
+#     BCP  = 0.5 * np.abs(xC*(yC - yP) + xC*(yP - yA) + xP*(yA - yC) )
+#     CDP  = 0.5 * np.abs(xC*(yC - yP) + xA*(yP - yC) )
+#     DAP  = 0.5 * np.abs(xA*(yA - yP) + xA*(yP - yC) + xP*(yC - yA) )
+#     return np.invert(ABCD < (ABP + BCP + CDP + DAP))
+
+    #-------------------------------------------------------
+    # Rectangle as geographic bounding box: simpler method
+    # Here again, xA,yA, xC,yC can be arrays.
+    #-------------------------------------------------------
+    in_xrange = np.logical_and( xP >= xA, xP <= xC )
+    in_yrange = np.logical_and( yP >= yC, yP <= yA )
+    return np.logical_and( in_xrange, in_yrange )
+
+#   point_in_rectangle()
+#--------------------------------------------------------------------- 
 
 
 

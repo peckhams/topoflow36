@@ -221,7 +221,9 @@ def write_tsv_line( tsv_unit, attributes, insert_key=None,
         key = key_list[ k ]
         if (key == insert_key):
             for value in new_values:
-                line += str(value) + delim
+                val_str = str(value)  # works on strings, too
+                ## val_str = '{x:.4f}'.format(x=value)
+                line += val_str + delim
         k += 1
     line = line[:-1] + '\n'   # remove delim, add newline
     tsv_unit.write( line )
@@ -324,32 +326,54 @@ def get_polygon_points1( geometry ):
 #   get_polygon_points1()
 #---------------------------------------------------------------------
 def convert_coords(x1, y1, inEPSG=None, inPRJfile=None,
-                   outEPSG=4326, PRINT=False, SWAP_XY=True):
+                   outEPSG=4326, outPRJfile=None,
+                   PRINT=False, SWAP_XY=True):
 
     #--------------------------------------------------------
-    # Note: ESPG=4326 is for WGS-84 (Geographic lon/lat)
+    # Note: EPSG=4326 is for WGS-84 (Geographic lon/lat)
     #--------------------------------------------------------
     # Read WKT (Well Known Text) from shapefile's PRJ file.
     #--------------------------------------------------------
     # Note: Must set SWAP_XY to True for most datasets.
-    #--------------------------------------------------------    
+    #--------------------------------------------------------
+
+    #------------------------------------------------    
+    # Get Spatial Reference System for input coords
+    #------------------------------------------------
+    srs_in = osr.SpatialReference() 
     if (inPRJfile is not None):
         prj_unit = open(inPRJfile, 'r')
         prj_wkt  = prj_unit.read()
         prj_unit.close()
+        srs_in.ImportFromWkt( prj_wkt )
+    elif (inEPSG is not None):
+        srs_in.ImportFromEPSG( inEPSG )
+    else:
+        print('### SORRY: An input SRS must be specified')
+        print('### using the inEPSG or inPRJfile keyword.')
+        print()
+        return
 
+    #-------------------------------------------------    
+    # Get Spatial Reference System for output coords
+    #-------------------------------------------------  
+    srs_out = osr.SpatialReference()
+    if (outPRJfile is not None):
+        prj_unit = open(outPRJfile, 'r')
+        prj_wkt  = prj_unit.read()
+        prj_unit.close()
+        srs_out.ImportFromWkt( prj_wkt )
+    elif (outEPSG is not None):
+        srs_out.ImportFromEPSG( outEPSG )
+    else:
+        print('### SORRY: An output SRS must be specified')
+        print('### using the outEPSG or outPRJfile keyword.')
+        print()
+        return
+        
     #-----------------------------------
     # Create coordinate transformation
     #-----------------------------------
-    srs_in = osr.SpatialReference()
-    if (inEPSG is None):
-        srs_in.ImportFromWkt( prj_wkt )
-    else:
-        srs_in.ImportFromEPSG( inESPG )
-    
-    srs_out = osr.SpatialReference()
-    srs_out.ImportFromEPSG( outEPSG )
-
     coordTransform = osr.CoordinateTransformation(srs_in, srs_out)
 
     #------------------------------------------

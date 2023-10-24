@@ -1,7 +1,11 @@
 
 # Copyright (c) 2023, Scott D. Peckham
 #
-# Sep 2023. Added get_usgs_station_info_by_id() and
+# Oct 2023. Added get_station_type_dict().
+#           Moved more functions here from collate_basins.py:
+#           haversine, distance_on_sphere, get_closest_station.
+#           Added get_hlr_outlet_info & get_closest_hlr_outlet.
+# Sep 2023. Added get_usgs_station_info_dict() and
 #           usgs_state_code_map() to map HLR basins to stations.
 # Jul 2023. Utils to work with USGS station info.
 #           Moved several functions here from collate_basins.py.
@@ -24,7 +28,9 @@
 #  get_usgs_filepath()
 #  get_usgs_header_lines()
 #  get_n_records()
-#  get_station_subset()
+#
+#  get_station_subset()       ###
+#  get_station_type_dict()    ###
 #
 #  get_usgs_station_coords()
 #  compare_usgs_station_coords()
@@ -49,11 +55,19 @@
 #  get_usgs_missing_lat_lon()
 #  get_usgs_missing_state()
 #
+#  haversine()            # moved here from collate_basins.py
+#  distance_on_sphere()
+#  get_closest_station()
+#  get_hlr_outlet_info()
+#  get_closest_hlr_outlet()
+#
 #---------------------------------------------------------------------
 
 import numpy as np
 import os, os.path
+from topoflow.utils.ngen import hlr_tools as hlr
 
+import pickle    # to save usgs station info map
 import requests  # for get_usgs_missing_lat_lon, get_usgs_missing_state
 import time
 
@@ -133,6 +147,15 @@ def get_station_subset(loc_type='usgs_stream',
                        in_tsv_file='USGS_NWIS_stations.tsv', 
                        out_tsv_file='USGS_NWIS_stream_stations.tsv'):
 
+    #------------------------------------------------------------
+    # Note: USGS_NWIS_stations.tsv contains info for 1,739,528
+    #       basins, which have different "station types", such
+    #       as Stream, Atmosphere, Lake and Well and different
+    #       responsible agencies.
+    #------------------------------------------------------------
+    #       USGS_NWIS_stream_stations.tsv contains info for
+    #       152,926 USGS stations of type "Stream".
+    #------------------------------------------------------------    
     delim = '\t'  # tab character
     print('Working...')
     in_count  = 0
@@ -204,10 +227,123 @@ def get_station_subset(loc_type='usgs_stream',
     
 #   get_station_subset()
 #---------------------------------------------------------------------
+def get_station_type_dict( in_tsv_file='USGS_NWIS_stations.tsv' ): 
+
+    #------------------------------------------------------------
+    # Note: USGS_NWIS_stations.tsv contains info for 1,739,528
+    #       basins, which have different "station types", such
+    #       as Stream, Atmosphere, Lake and Well.
+    #------------------------------------------------------------
+    usgs_dir  = get_usgs_dir( NWIS_ALL=True )
+    dict_file = 'USGS_NWIS_station_type_dict.pkl'
+    file_path = usgs_dir + dict_file
+    if (os.path.exists( file_path )):
+        print('Reading saved USGS-NWIS station type dictionary...')
+        file_unit = open( file_path, 'rb')
+        station_type_dict = pickle.load( file_unit )
+        file_unit.close()
+        print('Finished.')
+        print()
+        return station_type_dict
+
+    delim = '\t'  # tab character
+    print('Working...')
+    in_count = 0
+    usgs_station_count = 0
+ 
+    #------------------
+    # Open input file
+    #------------------
+    in_tsv_path = usgs_dir + in_tsv_file
+    in_tsv_unit = open(in_tsv_path,  'r')
+
+    #-----------------------    
+    # Skip the header line
+    #-----------------------
+    header = in_tsv_unit.readline()
+    station_type_dict = dict()
+    station_type_list = list()
+
+    while (True):
+        line = in_tsv_unit.readline()
+        if (line == ''):
+            break  # (reached end of file)
+        values = line.split( delim )
+        in_count  += 1
+
+        station_id   = values[2].strip()
+        station_type = values[4].strip()
+        
+        if (station_id.startswith('USGS-')):
+            sid = station_id.replace('USGS-', '')
+            station_type_dict[ sid ] = station_type
+            usgs_station_count += 1
+
+        #----------------------------------------------------         
+        # E.g. atmosphere, canal, lake, spring stream, well
+        #---------------------------------------------------- 
+        if (station_type not in station_type_list):
+            station_type_list.append( station_type )
+                                
+        if ((in_count % 10000) == 0):
+            print('  in_count =', in_count)
+
+    print('Unique station types =')
+    print( station_type_list )
+
+    SAVE_TO_FILE = True
+    if (SAVE_TO_FILE):
+        file_unit = open( file_path, 'wb' )
+        pickle.dump( station_type_dict, file_unit, protocol=pickle.HIGHEST_PROTOCOL)
+        file_unit.close()
+        print('Saved USGS-NWIS station type dictionary to file:')
+        print('  ' + file_path)
+        print()
+        
+    #-------------------------------   
+    # Close input and output files
+    #-------------------------------
+    in_tsv_unit.close()
+    print('Total in count =', in_count)
+    print('Number of USGS stations =', usgs_station_count )
+    print('Finished.')
+    
+    return station_type_dict
+
+#   get_station_type_dict()
+#---------------------------------------------------------------------
 def get_usgs_station_coords( delim='\t', NWIS_ALL=False,
                              SAVE_TO_FILE=False):
 
-    usgs_dir  = get_usgs_dir( NWIS_ALL=NWIS_ALL )
+    #--------------------------------------------------------------
+    # Note: Even though the NWIS_ALL spreadsheet has many more
+    #       stations, the "USGS Gauged Basins" spreadsheet
+    #       contains 16 station IDs that are not in the
+    #       NWIS_ALL spreadsheet for station type "Stream"
+    #       because they have some other station type.
+    #       These IDs are:
+    # 02203536, 04095090, 06146500, 06647000, 06780500, 08366400,
+    # 08385503, 09196960, 09442958, 09527660, 10010500, 11204680,
+    # 12485500, 13080000, 14246900, 14313600
+    #--------------------------------------------------------------
+    # These "missing" station IDs all seem to have valid URLs:
+    # https://waterdata.usgs.gov/nwis/inventory/?site_no=02203536
+    #    Tidal stream site
+    # https://waterdata.usgs.gov/nwis/inventory/?site_no=04095090
+    #    Ditch site
+    # https://waterdata.usgs.gov/nwis/inventory/?site_no=06146500
+    #    Ditch site
+    # https://waterdata.usgs.gov/nwis/inventory/?site_no=06647000
+    #    Canal site
+    # https://waterdata.usgs.gov/nwis/inventory/?site_no=06780500
+    #    Canal site
+    # https://waterdata.usgs.gov/nwis/inventory/?site_no=08366400
+    #    Canal site
+    # https://waterdata.usgs.gov/nwis/inventory/?site_no=08385503
+    #    Canal site
+    #--------------------------------------------------------------
+    usgs_dir = get_usgs_dir( NWIS_ALL=NWIS_ALL )
+    # Note: file_name is same, but directories are different.
     file_path = usgs_dir + 'USGS_station_coords.npy'
     if (os.path.exists( file_path )):
         print('Reading saved USGS station coords...')
@@ -499,15 +635,16 @@ def usgs_state_code_map():
 
 #   usgs_state_code_map()
 #---------------------------------------------------------------------
-def get_usgs_station_info_dict( delim='\t', 
-                             SAVE_TO_FILE=False):
+def get_usgs_station_info_dict():
 
-    usgs_dir  = get_usgs_dir( NWIS_ALL=True )
-    station_info_file = 'USGS_station_info_dict.npy'
+    usgs_dir = get_usgs_dir( NWIS_ALL=True )
+    station_info_file = 'USGS_station_info_dict.pkl'
     file_path = usgs_dir + station_info_file
     if (os.path.exists( file_path )):
         print('Reading saved USGS station info dictionary...')
-        station_info = np.load( file_path ).flat[0]  #############
+        file_unit = open( file_path, 'rb')
+        station_info = pickle.load( file_unit )
+        file_unit.close()
         print('Finished.')
         print()
         return station_info
@@ -518,6 +655,7 @@ def get_usgs_station_info_dict( delim='\t',
     print('Getting USGS station info as dictionary...')
     usgs_path = get_usgs_filepath( NWIS_ALL=True )
     usgs_unit = open( usgs_path, 'r' )
+    delim = '\t'
 
     #-----------------------
     # Skip over the header
@@ -544,15 +682,16 @@ def get_usgs_station_info_dict( delim='\t',
             break  # (reached end of file)
         vals = usgs_line.split( delim )
 
-        sid  = vals[2].strip()
-        sid  = sid.replace('USGS-', '')
-        name = vals[3].strip()
-        huc  = vals[6].strip()
-        lat  = vals[11].strip()  # lat, then lon in file
-        lon  = vals[12].strip()
-        fips = vals[25].strip()  # state FIPS code        
-        sc   = sc_map[ int(fips) ][0]  # 2-letter code
-        url  = get_usgs_site_url( sid )
+        sid   = vals[2].strip()
+        sid   = sid.replace('USGS-', '')
+        name  = vals[3].strip()
+        # stype = vals[4].strip()  # always "Stream"
+        huc   = vals[6].strip()
+        lat   = vals[11].strip()  # lat, then lon in file
+        lon   = vals[12].strip()
+        fips  = vals[25].strip()  # state FIPS code        
+        sc    = sc_map[ int(fips) ][0]  # 2-letter code
+        url   = get_usgs_site_url( sid )
 
         #------------------------------------------------
         # This was triggered 236 times for NWIS_ALL and
@@ -579,10 +718,13 @@ def get_usgs_station_info_dict( delim='\t',
         print('  Okinawa, Palau, etc.')
         print()
    
+    SAVE_TO_FILE = True
     if (SAVE_TO_FILE):
         usgs_dir  = get_usgs_dir( NWIS_ALL=True )
         file_path = usgs_dir + station_info_file
-        np.save( file_path, station_info)
+        file_unit = open( file_path, 'wb' )
+        pickle.dump( station_info, file_unit, protocol=pickle.HIGHEST_PROTOCOL)
+        file_unit.close()
         print('Saved USGS station info dictionary to file:')
         print('  ' + file_path)
         print()
@@ -1084,6 +1226,8 @@ def replace_state_letters( name ):
         name = name[:-5] + ' CO'
     if (name[-5:] == ' CONN'):
         name = name[:-5] + ' CT'
+    if (name[-5:] == ' MASS'):
+        name = name[:-5] + ' MA'
     if (name[-5:] == ' MICH'):
         name = name[:-5] + ' MI'
     if (name[-5:] == ' MINN'):
@@ -1513,7 +1657,208 @@ def get_usgs_missing_state( site_id, code_map, REPORT=False ):
         
 #   get_usgs_missing_state()
 #---------------------------------------------------------------------
+def haversine( lon1, lat1, lon2, lat2):
 
+    # p = 0.017453292519943295
+    p     = (np.pi / 180)
+    term1 = np.cos((lat2 - lat1)*p)/2
+    term2 = np.cos(lat1*p) * np.cos(lat2*p)
+    term3 = (1-np.cos((lon2 - lon1)*p)) / 2
+    haver = 0.5 - term1 + (term2 * term3) 
+    return haver
+    
+#   haversine()
+#---------------------------------------------------------------------
+def distance_on_sphere(lon1, lat1, lon2, lat2):
+
+    #----------------------------------
+    # 12742 = diameter of Earth in km
+    #--------------------------------------------------
+    # https://stackoverflow.com/questions/41336756/
+    #         find-the-closest-latitude-and-longitude
+    # https://en.wikipedia.org/wiki/Haversine_formula
+    #--------------------------------------------------
+    haver = haversine( lon1, lat1, lon2, lat2)
+    return 12742 * np.arcsin(np.sqrt( haver ))  # [km]
+    
+#   distance_on_sphere()
+#---------------------------------------------------------------------
+def get_closest_station(station_coords, lon, lat, REPORT=False):
+
+    #------------------------------------------------------
+    # Call usgs.get_usgs_station_coords() once to extract
+    # USGS gauging station data from USGS TSV file.
+    # station_data = [[id1,x1,y1],[id2,x2,y2],...]
+    #------------------------------------------------------
+    station_ids  = station_coords[:,0]
+    station_lons = np.float64( station_coords[:,1] )
+    station_lats = np.float64( station_coords[:,2] )
+
+    lon2 = np.float64( lon )  # could be string
+    lat2 = np.float64( lat )
+    if ((lon2 <= -999) or (lat2 < -90.0) or (lat2 > 90.0)):
+        closest_id  = 'unknown'
+        closest_lon = 'unknown'
+        closest_lat = 'unknown'
+        dmin        = -999.0
+        return closest_id, closest_lon, closest_lat, dmin
+        
+    dist_vals = distance_on_sphere(station_lons, station_lats, lon2, lat2)
+    dmin = dist_vals.min()
+    imin = np.argmin( dist_vals )
+    
+    closest_id  = station_ids[ imin ]
+    closest_lon = station_lons[ imin ]
+    closest_lat = station_lats[ imin ]
+
+    if (REPORT):
+        print('Closest USGS station ID =', closest_id)
+        print('   Station longitude    =', closest_lon)
+        print('   Station latitude     =', closest_lat)
+        print('   Station distance     =', dmin, '[km]')
+        print()
+
+    return closest_id, closest_lon, closest_lat, dmin
+
+#   get_closest_station()
+#---------------------------------------------------------------------
+def get_hlr_outlet_info():
+
+    usgs_dir  = get_usgs_dir( NWIS_ALL=True )
+    info_path = usgs_dir + 'USGS_HLR_outlet_info.npy'
+    if (os.path.exists( info_path )):
+        print('Reading saved HLR basin outlet info...')
+        hlr_outlet_info = np.load( info_path )
+        print('Finished.')
+        print()
+        return hlr_outlet_info
+      
+    #----------------------------------------------------
+    # Note: Use the set of USGS HLR basins for which
+    # we have been able to determine basin outlet info.
+    # This is 9539 of the 43391 basins in HLR set.
+    #----------------------------------------------------
+    print('Getting HLR basin outlet info...')
+    hlr_dir  = hlr.get_hlr_data_dir()
+    hlr_file = 'new_hlr_na_all.tsv'
+    hlr_path = hlr_dir + hlr_file
+    hlr_unit = open( hlr_path, 'r' )
+    hlr_line = hlr_unit.readline()   # skip one-line header
+    n_stations = 9539
+    
+    #--------------------------------------    
+    # Construct the hlr_outlet_info array
+    #-----------------------------------------------
+    # Numpy Unicode string array w/ up to 16 chars
+    # Every element is initialized as null string
+    # basin_id, lon, lat, hlr_code
+    #-----------------------------------------------
+    k = 0
+    delim = '\t'  # tab character
+
+    hlr_outlet_info = np.zeros((n_stations,4), dtype='<U16')
+    n_bad_lats = 0
+    n_bad_lons = 0
+
+    while (True):
+        hlr_line = hlr_unit.readline()
+        if (hlr_line == ''):
+            break  # (reached end of file)
+        vals = hlr_line.split( delim )
+        #--------------------------------
+        hlr_id   = vals[0].strip()
+        hlr_lon  = vals[3].strip()
+        hlr_lat  = vals[4].strip()        
+        hlr_code = vals[24].strip()
+
+        #----------------------        
+        # Check lon and lat ?
+        #----------------------
+        if (hlr_lat == '-999'):
+            n_bad_lats += 1
+        if (hlr_lon == '-999'):
+            n_bad_lons += 1
+
+        #-------------------------------------    
+        # Save info in hlr_outlet_info array
+        #-------------------------------------
+        hlr_outlet_info[k,0] = hlr_id
+        hlr_outlet_info[k,1] = hlr_lon
+        hlr_outlet_info[k,2] = hlr_lat
+        hlr_outlet_info[k,3] = hlr_code
+        k += 1
+   
+    #----------------------------------
+    # Sort by HLR outlet id ? (VALUE)
+    #----------------------------------
+#     hlr_ids = hlr_outlet_info[:,0]
+#     w = np.argsort( hlr_ids )
+#     hlr_outlet_info = hlr_outlet_info[w,:]
+
+    #------------------------- 
+    # Close the HLR TSV file
+    #-------------------------
+    hlr_unit.close()
+    
+    SAVE_TO_FILE = True
+    if (SAVE_TO_FILE):
+        np.save( info_path, hlr_outlet_info )
+        print('Saved HLR outlet info to file:')
+        print('  ' + info_path)
+        print()
+         
+    return hlr_outlet_info
+    
+#   get_hlr_outlet_info()
+#---------------------------------------------------------------------
+def get_closest_hlr_outlet(usgs_id, usgs_station_info,
+                           hlr_outlet_info, REPORT=False):
+
+    #------------------------------------------------------------
+    # This function uses usgs_station_info and hlr_outlet_info.
+    # This function's caller should obtain these via functions:
+    # get_usgs_station_info_dict() & get_hlr_outlet_info().
+    #------------------------------------------------------------
+    station_info = usgs_station_info[ usgs_id ]
+    usgs_lon = station_info[ 'lon' ]
+    usgs_lat = station_info[ 'lat' ]
+    
+    hlr_ids   = hlr_outlet_info[:,0]
+    hlr_lons  = np.float64( hlr_outlet_info[:,1] )
+    hlr_lats  = np.float64( hlr_outlet_info[:,2] )
+    hlr_codes = np.float64( hlr_outlet_info[:,3] )
+    
+    lon2 = np.float64( usgs_lon )  # could be string
+    lat2 = np.float64( usgs_lat )
+    if ((lon2 <= -999) or (lat2 < -90.0) or (lat2 > 90.0)):
+        closest_id  = 'unknown'
+        closest_lon = 'unknown'
+        closest_lat = 'unknown'
+        dmin        = -999.0
+        hlr_code    = -1
+        return closest_id, closest_lon, closest_lat, dmin, hlr_code
+        
+    dist_vals = distance_on_sphere(hlr_lons, hlr_lats, lon2, lat2)
+    dmin = dist_vals.min()
+    imin = np.argmin( dist_vals )
+    
+    closest_id  = hlr_ids[ imin ]   # an HLR outlet ID ("value")
+    closest_lon = hlr_lons[ imin ]
+    closest_lat = hlr_lats[ imin ]
+    hlr_code    = hlr_codes[ imin ]
+
+    if (REPORT):
+        print('Closest HLR outlet ID  =', closest_id)
+        print('   Outlet longitude    =', closest_lon)
+        print('   Outlet latitude     =', closest_lat)
+        print('   Outlet distance     =', dmin, '[km]')
+        print('   Basin HLR code      =', hlr_code)    # in {1,...,20}
+        print()
+
+    return closest_id, closest_lon, closest_lat, dmin, hlr_code
+
+#   get_closest_hlr_outlet()
+#---------------------------------------------------------------------
 
 
 
