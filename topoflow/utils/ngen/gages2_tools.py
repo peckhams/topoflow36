@@ -1,11 +1,13 @@
 
 # Copyright (c) 2023, Scott D. Peckham
 #
-# Oct 2023. Added merge_SB_info_for_regions(),
+# Oct 2023. Moved get_swb_class_names() and get_swb_class() to
+#           swb_tools.py.      
+#           Added merge_SB_info_for_regions(),
 #           get_sb_region_headings(), compute_swb_classes(),
 #           get_snow_precip_fraction(), get_precip_timing_index(),
-#           get_aridity_index(), get_seasonal_water_balance_class(),
-#           get_swb_class().     
+#           get_aridity_index(), get_swb_class_names(),
+#           get_swb_class().      
 # Jun 2023. Started from hlr_tools.py and wrote a more general
 #              set of shapefile functions in shape_utils.py.
 #           Then wrote create_tsv0, create_tsv_from_shapefile,
@@ -40,14 +42,16 @@
 #  check_bounding_box()
 #  check_basin_poly_file()
 #
+#  The following functions are for GAGES-II "Selected Basins":
+#  https://www.sciencebase.gov/catalog/item/5a4e9bcbe4b0d05ee8c6643f
+#  which are a subset of the Reference basins.
+#
 #  merge_SB_info_for_regions()
 #  get_sb_region_headings()
 #  compute_swb_classes()
 #     get_snow_precip_fraction()
 #     get_precip_timing_index()
 #     get_aridity_index()
-#     get_seasonal_water_balance_class()
-#     get_swb_class()         # See detailed Notes.
 #
 #---------------------------------------------------------------------
 
@@ -56,6 +60,7 @@ from osgeo import ogr, osr
 import json, sys, time
 
 from topoflow.utils.ngen import shape_utils as su
+from topoflow.utils.ngen import swb_tools as swb
 
 #---------------------------------------------------------------------
 def get_basin_repo_dir():
@@ -82,6 +87,8 @@ def get_gages2_data_dir( gtype='root' ):
        data_dir += 'gagesII_9322_point_shapefile/'
     elif (gtype == 'polygons'):
        data_dir += 'boundaries-shapefiles-by-aggeco/'
+    elif (gtype == 'SB3'):
+       data_dir += 'Selected_Basins/'
        
     return data_dir
        
@@ -623,8 +630,7 @@ def merge_SB_info_for_regions( out_csv_file=None, SORT_BY_ID=True,
     #       had multiple sheets: SB_untransfBCs.new.xlsx.
     #----------------------------------------------------------------
     delim = ','  # CSV files
-    gages2_dir = get_gages2_data_dir()
-    gages2_SB_dir = gages2_dir + '__Selected_Basin_Info/'
+    gages2_SB_dir = get_gages2_data_dir( gtype='SB3')
 
     if (out_csv_file is None):
         out_csv_file = 'SB3_all_regions_untransfBCs.csv'
@@ -758,7 +764,7 @@ def compute_swb_classes( in_csv_file=None, ORIGINAL=False,
     #       Balance method described in Berghuijs et al. (2014).
     #       It uses 3 parameters: precip_timing_index (delta_p), 
     #       snow_precip_fraction (f_s), and aridity_index (phi).
-    #       See the function:  get_swb_class() below.
+    #       See the function:  get_swb_class() in swb_tools.py.
     #--------------------------------------------------------------
     #  In filenames, "SB" stands for "Selected Basins", and
     #  "untransf" is short for "untransformed" values of vars.
@@ -768,33 +774,43 @@ def compute_swb_classes( in_csv_file=None, ORIGINAL=False,
     #--------------------------------------------------------------  
     if (in_csv_file is None):
         in_csv_file = 'SB3_all_regions_untransfBCs_sorted.csv'
-    out_csv_file = in_csv_file.replace('.csv', '_SWB.csv')
-
-    delim = ','  # CSV files
-    gages2_dir = get_gages2_data_dir()
-    gages2_SB_dir = gages2_dir + '__Selected_Basin_Info/'
+    out_tsv_file = in_csv_file.replace('.csv', '_SWB.tsv')
+    ### out_tsv_file = 'new_SB3_info_all_regions_sorted.tsv'
+    
+    delim  = ','   # CSV file
+    delim2 = '/t'  # TSV file
+    gages2_SB_dir = get_gages2_data_dir( gtype='SB3' )
     in_csv_path   = gages2_SB_dir + in_csv_file
     in_csv_unit   = open( in_csv_path, 'r' )
     #----------------------------------------------
-#     out_csv_path  = gages2_SB_dir + out_csv_file
-#     out_csv_unit  = open( out_csv_path, 'w' )
+#     out_tsv_path  = gages2_SB_dir + out_tsv_file
+#     out_tsv_unit  = open( out_tsv_path, 'w' )
     
     headings = get_sb_region_headings( in_csv_unit, delim=',' )
+    #------------------------------------------------------------------
+    # Headings to keep or rename (remove others for now):
+    # StnID, REGION, DRAIN_SQKM, LAT_CENT, LONG_CENT, PPTAVG_BASIN,
+    # T_AVG_BASIN, RH_BASIN, PET (mm), SNOW_PCT_PRECIP, 
+    # PRECIP_SEAS_IND ????, JUL_JAN_TMP_DIFF_DEGC, ELEV_RANGE_M_BASIN
+    #------------------------------------------------------------------
+    # Headings to add:
+    # PRECIP_TIMING_INDEX, ARIDITY_INDEX, SWB_CLASS, SWB2_CLASS
+    #------------------------------------------------------------------
+#     headings2 = subset_list + ['PRECIP_TIMING_INDEX', 'ARIDITY_INDEX', 
+#                     'SWB_CLASS', 'SWB2_CLASS']
+    
     fs_min  = 1000.0
     fs_max  = -1000.0
     phi_min = 1000.0
     phi_max = -1000.0
     dp_min  = 1000.0
     dp_max  = -1000.0
-    #-----------------------
+    #---------------------
     n_basins   = 0
     class_count = dict()
-    if (USE_B3):
-        classes = ['A1','A2','A3','B1','B2','B3',
-                   'C1','C2','D1','D2','D3','None']
-    else:
-        classes = ['A1','A2','A3','B1','B2','C1','C2','D1','D2','D3','None']
-    for name in classes:
+
+    names = swb.get_swb_class_names( USE_B3=USE_B3 )
+    for name in names:
         class_count[ name ] = 0
 
     while (True):
@@ -819,12 +835,22 @@ def compute_swb_classes( in_csv_file=None, ORIGINAL=False,
         #       f_s     = snow_precip_fraction
         #       phi     = aridity_index
         #---------------------------------------------------
-        f_s     = get_snow_precip_fraction( val_dict, REPORT=REPORT )
+        f_s     = get_snow_precip_fraction( val_dict, PERCENT=True,
+                                            REPORT=REPORT )
         delta_p = get_precip_timing_index( val_dict, f_s, REPORT=REPORT )
         phi     = get_aridity_index( val_dict, REPORT=REPORT )
-        swb_class = get_swb_class( delta_p, f_s, phi,
+        #--------------------------------------------------------------        
+        swb_class = swb.get_swb_class( delta_p, f_s, phi,
                                    ORIGINAL=ORIGINAL, USE_B3=USE_B3)
         class_count[ swb_class ] += 1  # (swb_class may be 'None')
+        
+        #------------------------------------------------
+        # Later, save both of these in the new CSV file
+        #------------------------------------------------       
+#         swb1_class = swb.get_swb_class( delta_p, f_s, phi,
+#                                    ORIGINAL=True, USE_B3=USE_B3)                                   
+#         swb2_class = swb.get_swb_class( delta_p, f_s, phi,
+#                                    ORIGINAL=False, USE_B3=USE_B3)
         n_basins += 1
         
         dp_min  = np.minimum( dp_min, delta_p )
@@ -834,22 +860,31 @@ def compute_swb_classes( in_csv_file=None, ORIGINAL=False,
         phi_min = np.minimum( phi_min, phi )
         phi_max = np.maximum( phi_max, phi )
 
+        #--------------------------------------------
+        # Add new heading/value pairs to dictionary
+        #--------------------------------------------
+#         val_dict['PRECIP_TIMING_INDEX'] = delta_p
+#         # val_dict['SNOW_PRECIP_FRACTION'] = f_s    # (vs. PCT or %)
+#         val_dict['ARIDITY_INDEX']       = phi
+#         val_dict['SWB_CLASS']           = swb_class
+#         val_dict['SWB2_CLASS']          = swb2_class
+        
         #----------------------------------------
-        # For each heading in all_headings,
+        # For each heading in headings2,
         # write corresponding value to new file
         #----------------------------------------
 #         out_line = ''
-#         for h in headings:
+#         for h in headings2:
 #             value = val_dict[h]
-#             out_line += value + ','
+#             out_line += value + delim2
 #         out_line = out_line[:-1] + '\n'
-#         out_csv_unit.write( out_line )
+#         out_tsv_unit.write( out_line )
 
     #-------------------
     # Close both files
     #-------------------
     in_csv_unit.close()
-#     out_csv_unit.close()
+#     out_tsv_unit.close()
     #---------------------------
     print('del_p_min, del_p_max =', dp_min, ',', dp_max)
     print('fs_min, fs_max       =', fs_min, ',', fs_max)
@@ -858,14 +893,14 @@ def compute_swb_classes( in_csv_file=None, ORIGINAL=False,
     print('Number of basins     =', n_basins)
     print('Number unclassified  =', class_count['None'] )
     print()
-    for name in classes:
+    for name in names:
         print('   count[ ' + name + ' ] =', class_count[name] )
     print('Finished.')
     print()
 
 #   compute_swb_classes()
 #---------------------------------------------------------------------
-def get_snow_precip_fraction( val_dict, REPORT=False ):
+def get_snow_precip_fraction( val_dict, PERCENT=True, REPORT=False ):
 
     #----------------------------------------
     # If f_s = 0, all precip falls as rain.
@@ -884,7 +919,8 @@ def get_snow_precip_fraction( val_dict, REPORT=False ):
             print('### WARNING: No data for f_s; setting to 0.')
             print()
         val = 0.0
-    f_s = (val / 100.0)  # in [0,1]
+    if (PERCENT):
+        f_s = (val / 100.0)  # convert percent to [0,1]
     return f_s
 
 #   get_snow_precip_fraction()
@@ -996,291 +1032,7 @@ def get_aridity_index( val_dict, REPORT=False ):
     return phi
 
 #   get_aridity_index()
-#---------------------------------------------------------------------
-def get_seasonal_water_balance_class( delta_p, f_s, phi):
-
-    return get_swb_class( delta_p, f_s, phi)
-  
-#   get_seasonal_water_balance_class()
-#---------------------------------------------------------------------
-def get_swb_class( delta_p, f_s, phi, ORIGINAL=False,
-                   USE_B3=True, REPORT=False):
-
-    #-------------------------------------------------------------
-    # Note: Set ORIGINAL=True and USE_B3=False to use the
-    #       original 10 class boundaries of the Seasonal Water
-    #       Balance (SWB) classification system as defined by
-    #       Berghuijs et al. (2014).
-    #       This leaves 1008 of the 1947 basins unclassified.
-    #-------------------------------------------------------------
-    #       Set ORIGINAL=False and USE_B3=False to use expanded
-    #       class boundaries that span a much larger portion of
-    #       the 3-parameter space, without any overlap.
-    #       This results in all 1947 basins being classified.
-    #       The 3D parameter space has the following parameters. 
-    # 
-    #       delta_p = precip_timing_index   in [-1,1]
-    #       f_s     = snow_precip_fraction  in [0,1]
-    #       phi     = aridity_index         in [0, infinity]
-    #-------------------------------------------------------------
-    #       Set ORIGINAL=False and USE_B3=True to use expanded
-    #       class boundaries and to introduce a new class, B3,
-    #       so that classes span the full 3-parameter space,
-    #       without any overlap.  The class B3 "stacks above"
-    #       the classes B1 and B2, just as A3 does for A1 & A2.
-    #       So far, this extra class/region has not been needed.
-    #-------------------------------------------------------------
-    #       A Mathematica program has been written to visualize
-    #       the set of "cuboid" regions in the parameter space.
-    #-------------------------------------------------------------   
-    d_p = delta_p  # synonym
-    swb_class = 'None'
-
-    #-------------------------------------------------------------
-    # All A classes have -0.4 as the same max value of delta_p.
-    # All C classes have 0.0 as the same min value of delta_p.
-    # Classes D2 and D3 have -0.1 as the same min value of
-    # delta_p, while the min value for D1 is -0.4.
-    #-------------------------------------------------------------
-    # This leaves a big void region in the 3D parameter space of
-    # (delta_p, f_s, phi) that can be closed if we set these 5
-    # delta_p values to be the same value in [-0.4, -0.1].
-    #-------------------------------------------------------------
-    if (ORIGINAL):
-        A_dp_max  = -0.4
-        # C_dp_min = 0.3   # (from fig. 7) 
-        C_dp_min  = 0.0    # (from table 3)
-        D1_dp_min = -0.4
-        D2_dp_min = -0.1
-        D3_dp_min = -0.1
-    else:
-        #---------------------------------------------
-        # Helps: 1008 goes down to 953 unclassified.
-        #---------------------------------------------
-        mid_delta_p = -0.2
-        A_dp_max    = mid_delta_p 
-        C_dp_min    = mid_delta_p
-        D1_dp_min   = -0.4
-        # D1_dp_min   = mid_delta_p
-        D2_dp_min   = mid_delta_p
-        D3_dp_min   = mid_delta_p    
-    
-    #----------------------------------------------------------
-    # The max value of delta_p for all B classes is the same.
-    # In Berghuijs et al. (2014) figure 7, it is -0.4.
-    # In Berghuijs et al. (2014) table 3, it is 0.0.       
-    # This max value could be raised further to any value
-    # <= 1.0 without intersecting any other classes.
-    #-----------------------------------------------------------
-    if (ORIGINAL):     
-        # B_dp_max = -0.4   # (figure 7)
-        B_dp_max = 0.0      # (table 3)
-    else:
-        #--------------------------------------------
-        # Helps: 953 goes down to 951 unclassified.
-        #-------------------------------------------- 
-        B_dp_max = 1.0    # (max allowed value)
-    
-    #----------------------------------------------------------
-    # The max value of delta_p for all the D classes could be
-    # raised to 1.0 without intersecting any other classes.
-    #----------------------------------------------------------
-    if (ORIGINAL):
-        D1_dp_max = 0.3
-        D2_dp_max = 0.3
-        D3_dp_max = 0.4
-    else:
-        #--------------------------------------------
-        # Helps: 951 goes down to 333 unclassified.
-        #-------------------------------------------- 
-        D1_dp_max = 1.0
-        D2_dp_max = 1.0
-        D3_dp_max = 1.0
-    
-    #--------------------------------------------------------------
-    # The min value of phi for classes A1, B1, D1, D2, & D3 could
-    # all be lowered to 0 without intersecting any other classes.
-    #--------------------------------------------------------------
-    # A1_phi_min = 0.35   # Berghuijs et al. (2014), table 3
-    #--------------------------------------------------------------
-    if (ORIGINAL):
-        A1_phi_min = 0.0   # Berghuijs et al. (2014), figure 7.
-        B1_phi_min = 0.4
-        D1_phi_min = 0.5
-        D2_phi_min = 0.5
-        D3_phi_min = 0.4
-    else:
-        #-------------------------------------------
-        # Helps: 333 goes down to 18 unclassified.
-        #------------------------------------------- 
-        A1_phi_min = 0.0
-        B1_phi_min = 0.0
-        D1_phi_min = 0.0
-        D2_phi_min = 0.0
-        D3_phi_min = 0.0
-    
-    #-------------------------------------------------------------
-    # In Berghuijs et al. (2014), the min value of phi for class
-    # C1 is 0.9, in both figure 6 or table 3, and the max value
-    # of phi for all D classes is 0.9.  There is a void in the
-    # parameter space for phi values < 0.9 below the C1 box.
-    # But if we were to lower C1_phi_min, the box for class C1
-    # would overlap all the D-class boxes.
-    #-------------------------------------------------------------
-    # A better alternative to filling this void seems to be to
-    # increase the maximum value of delta_p for all of the D
-    # classes to the max possible value of 1.0.   
-    #-------------------------------------------------------------
-    C1_phi_min = 0.9
-    D1_phi_max = 0.9
-    D2_phi_max = 0.9
-    D3_phi_max = 0.9
-  
-    #-----------------------------------------------------------     
-    # In Berghuijs, the max value of f_s for class A3 is 0.45.
-    # The max value of f_s for classes C1 and C2 is 0.25.
-    # All of these max values of f_s could be raised to 1.0
-    # without intersecting any other class boxes.
-    #-----------------------------------------------------------
-    # However, if we introduce a class B3 analogous to A3,
-    # as done now, then we cannot raise A3_fs_max.
-    # If we USE_B3 and don't raise A3_fs_max, previously
-    #   unclassified points will be assigned to class B3.
-    # If we don't USE_B3 and raise A3_fs_max, previously
-    #   unclassified points wil be assigned to class A3. 
-    #-----------------------------------------------------------
-    # As classification code is written now, we assume that
-    # C1 and C2 both use the same C_fs_max.
-    #-----------------------------------------------------------
-    if (ORIGINAL or USE_B3):
-        A3_fs_max = 0.45
-    else:
-        A3_fs_max = 1.0
-    #-----------------------
-    if (ORIGINAL):
-        C_fs_max = 0.25
-    else:
-        #-----------------------------------------
-        # Helps: 
-        #--------------------------------------------------
-        # Can't set this higher than 0.45 or we intersect
-        # the new bounds of B1, B2, etc.
-        #--------------------------------------------------
-        C_fs_max = 0.45
-
-    #----------------------------------------------------------------    
-    # In Berghuijs et al. (2014), the maximum value of phi for the
-    # classes A3 and C2 are slightly different, namely, 5 and 5.3.
-    # They can be safely raised to any higher value without
-    # intersecting any other class box.  The max value of phi for
-    # class B2 is 1.75, but it could also be raised to any higher
-    # value.  Alternately, we could introduce a class B3 that has
-    # phi values ranging from 1.75 to 5.3 (or some other phi_max),
-    # and that is done here when USE_B3=True.
-    #----------------------------------------------------------------
-    if (ORIGINAL):
-        # There is no B3 in original SWB method.
-        A3_phi_max = 5.0
-        C2_phi_max = 5.3
-        B3_phi_max = 5.3
-    else:    
-        #----------------------------------------------------------
-        # In the GAGES-II Selected Basins (SB3), after converting
-        # units from mm to cm, the max value of phi is 5.5314.
-        # The theoretical range is 0 to Infinity.
-        # In the Berghuijs (2014) paper, phi max is 5.3, so here
-        # we increase the max allowed to 5.6.
-        #---------------------------------------------------------
-        # Helps: 1 goes down to 0 unclassified.
-        #----------------------------------------
-        A3_phi_max = 5.6
-        C2_phi_max = 5.6
-        B3_phi_max = 5.6
-   
-    #--------------------------------
-    # Check "A" classes for a match
-    # "Precipitation out of phase"
-    #--------------------------------
-    if ((-1 < d_p) and (d_p <= A_dp_max)):
-        if ((A1_phi_min < phi) and (phi <= 0.75)):
-            if ((0 < f_s) and (f_s <= 0.45)):
-                swb_class = 'A1'   
-        elif ((0.75 < phi) and (phi <= 1.75)):
-            if ((0 < f_s) and (f_s <= 0.45)):
-                swb_class = 'A2' 
-        elif ((1.75 < phi) and (phi <= A3_phi_max)):
-            #-------------------------------------------
-            # We can either introduce a class B3, or
-            # we can raise A3_fs_max from 0.45 to 1.0
-            #-------------------------------------------
-            if ((0 < f_s) and (f_s <= A3_fs_max)):                
-                swb_class = 'A3'
-
-    #--------------------------------
-    # Check "B" classes for a match
-    # These are snow-dominated.
-    #--------------------------------
-    if ((-1 < d_p) and (d_p <= B_dp_max)):    # (from table 3)
-        if ((0.45 < f_s) and (f_s <= 1)):
-           if ((B1_phi_min < phi) and (phi <= 0.75)):
-               swb_class = 'B1'
-           elif ((0.75 < phi) and (phi <= 1.75)):
-               swb_class = 'B2'
-           elif ((1.75 < phi) and (phi <= B3_phi_max)):
-               #-------------------------------------------
-               # B3 is not one of the original 10 classes
-               # but it is analogous to A3.
-               #-------------------------------------------
-               if (USE_B3):
-                   swb_class = 'B3'
-                
-    #--------------------------------
-    # Check "C" classes for a match
-    # "Precipitation in phase"
-    #--------------------------------
-    if ((C_dp_min < d_p) and (d_p <= 1)):
-        if ((0 <= f_s) and (f_s <= C_fs_max)):
-            if ((C1_phi_min < phi) and (phi <= 1.5)):
-                swb_class = 'C1'
-            elif ((1.5 < phi) and (phi <= C2_phi_max)):
-                swb_class = 'C2'
-
-    #--------------------------------
-    # Check "D" classes for a match
-    # "Mild seasonality and humid"
-    #--------------------------------
-    if ((D1_dp_min < d_p) and (d_p <= D1_dp_max)):
-        if (f_s <= 0):
-            if ((D1_phi_min < phi) and (phi <= 0.9)):
-                swb_class = 'D1'
-    #--------------------------------------------------
-    if ((D2_dp_min < d_p) and (d_p <= D2_dp_max)):
-        if ((0 < f_s) and (f_s <= 0.2)):
-            if ((D2_phi_min < phi) and (phi <= 0.9)):
-                swb_class = 'D2'
-    #--------------------------------------------------
-    if ((D3_dp_min < d_p) and (d_p <= D3_dp_max)):
-        if ((0.2 < f_s) and (f_s <= 0.45)):
-            if ((D3_phi_min < phi) and (phi <= 0.9)):
-                swb_class = 'D3'
-    
-    if (REPORT):
-        if (swb_class == 'None'):
-            print('### SORRY, No matching SWB class for:')
-            print('    d_p =', d_p)
-            print('    f_s =', f_s)
-            print('    phi =', phi)
-            print()
-        else:
-            print('SWB class =', swb_class)
-            print()
-
-    return swb_class
-
-#   get_swb_class() 
-#---------------------------------------------------------------------
-
-   
+#---------------------------------------------------------------------  
     
 
 

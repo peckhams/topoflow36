@@ -1,11 +1,22 @@
 
+# Next Steps:
+#
+# * GAGES-II Selected Basins (there are 1947 of them):
+#    - Can be assigned an HLR code using basin centroid lat/lon.
+#    - Can be assigned an SWB/SWB2 class.
+#    - Have basin shapefiles and have geographic bounding box.
+#    - Have lots of additional metadata.
+#    - Probably include many CAMELS, FPS, MOPEX, and RFC basins.
+#    - Some of the included RFC basins likely have hydrograph type.
+#
+#---------------------------------------------------------------------
 # Copyright (c) 2023, Scott D. Peckham
 #
 # Oct 2023. Modified collate() to get HLR code for any lon/lat
 #           using new routines in hlr_tools.py.
 #           Added get_lon_col, get_lat_col.
-#           Moved to usgs_utils.py:  haversine, distance_on_sphere,
-#           get_closest_station.
+#           Moved some functions to usgs_utils.py:  haversine,
+#           distance_on_sphere, get_closest_station.
 #           Added RFC basins to collate() function.
 # Sep 2023. Finished add_hlr_basins (new tools in usgs_utils.py).
 #           Updated get_closest_station() for nodata lon or lat.
@@ -122,6 +133,8 @@ def get_data_directory( db_str='USGS_gauged' ):
         data_dir = repo_dir + 'GAGES-II/'
     elif (db_str == 'GAGES2_ref'):
         data_dir = repo_dir + 'GAGES-II/'
+    elif (db_str == 'GAGES2_SB3'):
+        data_dir = repo_dir + 'GAGES-II/Selected_Basins/'        
     elif (db_str == 'HLR'):
         data_dir = repo_dir + 'HLR/hlrshape/'
     elif (db_str == 'LTER'):
@@ -164,6 +177,8 @@ def get_data_filepath( db_str='USGS_gauged' ):
         file_path = data_dir + 'new_gages2_all.tsv'
     elif (db_str == 'GAGES2_ref'):
         file_path = data_dir + 'new_gages2_ref.tsv'
+    elif (db_str == 'GAGES2_SB3'):
+        file_path = data_dir + 'SB3_all_regions_untransfBCs_sorted_SWB.csv'   #####
     elif (db_str == 'HLR'):
         file_path = data_dir + 'new_hlr_na_all.tsv'  ##########
     elif (db_str == 'LTER'):
@@ -200,6 +215,8 @@ def get_n_records( db_str ):
         n_records = 9322
     elif (db_str == 'GAGES2_ref'):
         n_records = 2057
+    elif (db_str == 'GAGES2_SB3'):
+        n_records = 1947
     elif (db_str == 'HLR'):
         n_records = 43391    # Total, correct number
         # n_records = 47479  # w/ repeated VALUEs
@@ -233,6 +250,7 @@ def get_id_column( db_str ):
     # FPS           = "SiteNumber" (prepend 0 if 7 digits)
     # GAGES2_all    = "STAID"
     # GAGES2_ref    = "STAID"
+    # GAGES2_SB3    = "StnID"
     # HLR           = "VALUE"
     # LTER          = "Site Acronym" (e.g. "AND")
     # MOPEX         = "SiteCode"
@@ -242,8 +260,8 @@ def get_id_column( db_str ):
     # USGS_NWIS_all = "MonitoringLocationIdentifier"
     #--------------------------------------------------------
     id_col = None
-    list1 = ['ARS', 'CAMELS', 'FPS', 'GAGES2_all',
-             'GAGES2_ref', 'HLR', 'LTER', 'MOPEX', 'RFC']
+    list1 = ['ARS', 'CAMELS', 'FPS', 'GAGES2_all', 'GAGES2_ref',
+             'GAGES2_SB3', 'HLR', 'LTER', 'MOPEX', 'RFC']
     list2 = ['NEON', 'USGS_gauged']
     list3 = ['USGS_NWIS_all']
 
@@ -272,6 +290,7 @@ def get_name_column( db_str ):
     # FPS           = "SiteName"
     # GAGES2_all    = "STANAME"
     # GAGES2_ref    = "STANAME"
+    # GAGES2_SB3    =  No name given #####################
     # HLR           =  No name given
     # LTER          = "Site Name" (but not a basin name)
     # MOPEX         = "SiteName"
@@ -306,7 +325,7 @@ def get_name_column( db_str ):
 #---------------------------------------------------------------------
 def get_lon_column( db_str ):
 
-    #--------------------------------------------------------
+    #-------------------------------------------------------
     # Name Longitude Heading for each dataset:
     # ARS           = 
     # CAMELS        = 
@@ -320,7 +339,11 @@ def get_lon_column( db_str ):
     # RFC           = 
     # USGS_gauged   = "dec_long_va" 5
     # USGS_NWIS_all = "LongitudeMeasure" 12
-    #--------------------------------------------------------
+    #-------------------------------------------------------
+    # NOTE:  For GAGES2_SB3, outlet lat/lon are not given,
+    #        but we can find them using station ID.
+    #        However, the centroid lat/lon are provided.
+    #-------------------------------------------------------    
     if (db_str == 'GAGES2_all'):
         lon_col = 7
     elif (db_str == 'GAGES2_ref'):
@@ -339,7 +362,7 @@ def get_lon_column( db_str ):
 #---------------------------------------------------------------------
 def get_lat_column( db_str ):
 
-    #--------------------------------------------------------
+    #-------------------------------------------------------
     # Name Longitude Heading for each dataset:
     # ARS           = 
     # CAMELS        = 
@@ -353,7 +376,11 @@ def get_lat_column( db_str ):
     # RFC           = 
     # USGS_gauged   = "dec_lat_va" 4
     # USGS_NWIS_all = "LatitudeMeasure" 11
-    #--------------------------------------------------------
+    #-------------------------------------------------------
+    # NOTE:  For GAGES2_SB3, outlet lat/lon are not given,
+    #        but we can find them using station ID.
+    #        However, the centroid lat/lon are provided.
+    #------------------------------------------------------- 
     if (db_str == 'GAGES2_all'):
         lat_col = 6
     elif (db_str == 'GAGES2_ref'):
