@@ -7,13 +7,18 @@ functions.  It inherits from the glacier "base class" in
 #
 #  Copyright (c) 2001-2023, Scott D. Peckham
 #
+#  Oct 2023. Updated the original snow cold content routine
+#            so that new cold content is added with new snow in 
+#            update_snowfall_cold_content(), and still accounts
+#            for land surface energy fluxes in update_snowpack_cold_content(), 
+#            and there is no cold content if there is no snow.
 #  Sep 2023. Checked sign in initialize_cold_content().
 #            Separate function: update_cold_content().
 #            Moved initialize_cold_content() back to base class.
 #            Renamed T0 to avoid conflict w/ degree-day method.
 #            Removed separate version of initialize_computed_vars().
-#  Aug 2023. Removed trailing space in 'J kg-1 K-1 '.
-#            Added missing "vol_swe" in initialize_computed_vars.
+#  Aug 2023. Renamed snow functions to have 'snow' in the name
+#            Duplicated existing snow functions for 'ice'
 #
 #-----------------------------------------------------------------------
 #

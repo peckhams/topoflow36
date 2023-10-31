@@ -13,14 +13,19 @@ See glacier_degree_day.py and glacier_energy_balance.py.
 #
 #  Copyright (c) 2001-2023, Scott D. Peckham
 #
-#  Sep 2023.  Added update_density_ratio().
-#             Fixed bug in enforce_max_meltrate().
-#             Moved initialize_cold_content() from snow_energy_balance.py
-#               back to this base class.  Note that T0 plays 2 roles in
-#               the degree-day component, in meltrate and cold_content.
-#               Degree-day comp now has option to set T0_cc in its CFG.
-#  Aug 2023,  Renamed snow functions to have 'snow' in the name
-#             Duplicated existing snow functions for 'ice'
+# Oct 2023.  Updated the original snow cold content routine
+#            so that new cold content is added with new snow in 
+#            update_snowfall_cold_content(), and still accounts
+#            for land surface energy fluxes in update_snowpack_cold_content(), 
+#            and there is no cold content if there is no snow.
+#  Sep 2023. Added update_density_ratio().
+#            Fixed bug in enforce_max_meltrate().
+#            Moved initialize_cold_content() from snow_energy_balance.py
+#            back to this base class.  Note that T0 plays 2 roles in
+#            the degree-day component, in meltrate and cold_content.
+#            Degree-day comp now has option to set T0_cc in its CFG.
+#  Aug 202., Renamed snow functions to have 'snow' in the name
+#            Duplicated existing snow functions for 'ice'
 #
 #-----------------------------------------------------------------------
 #  NOTES:  update_snow_vars() in precip.py sets values here. # LB: is this outdated? Is met_base.py meant here? 
@@ -35,10 +40,10 @@ See glacier_degree_day.py and glacier_energy_balance.py.
 #      finalize()
 #      set_computed_input_vars()
 #      --------------------------
-#      set_missing_cfg_options()   # 2023-09-25 (placeholder)
+#      set_missing_cfg_options()   
 #      check_input_types()
 #      initialize_computed_vars()
-#      initialize_snow_cold_content()   # NEED TO RENAME T0 for CC
+#      initialize_snow_cold_content()   
 #      initialize_ice_cold_content() 
 #      ----------------------------
 #      update_snow_meltrate()
@@ -395,6 +400,7 @@ class glacier_component( BMI_base.BMI_component ):
             self.SM = np.zeros([self.ny, self.nx], dtype='float64')
             self.IM = np.zeros([self.ny, self.nx], dtype='float64')
             self.M_total = np.zeros([self.ny, self.nx], dtype='float64')
+            self.T_surf = np.full((self.ny, self.nx), self.T_surf)
             #-----------------------------------------
             # Convert h_snow, h_swe, h_ice, and h_iwe 
             # to grids if not already grids.
