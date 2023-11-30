@@ -945,7 +945,9 @@ def replace_abbreviations( name ):
     name = name.replace(' ALT ',  ' ALTITUDE ') # e.g. ALT 250 FT
     #--------------------------------------------
     name = name.replace(' BL ',   ' BELOW ')
-    # name = name.replace(' BLO ',  ' BELOW ')  # no matches    
+    ## No match for 'BLO' in NWIS, but many in RFC lists.
+    ## e.g. "St. Vrain Ck. blo Longmont"
+    name = name.replace(' BLO ',  ' BELOW ')   
     name = name.replace(' BLW ',  ' BELOW ')
     name = name.replace(' DS ',   ' DOWNSTREAM ')  ## CHECK ALL
     # name = name.replace(' MI ',   ' MILES ')  # Or Michigan ???
@@ -1051,6 +1053,7 @@ def replace_abbreviations( name ):
     name = name.replace(' R ',     ' RIVER ')
     name = name.replace(' RV ',    ' RIVER ')
     name = name.replace(' RIV ',   ' RIVER ')
+    name = name.replace(' RVR ',   ' RIVER ')   # In RFC names
     #---------------------------------------------
     name = name.replace(' RES ',   ' RESERVOIR ')
     name = name.replace(' RESV ',  ' RESERVOIR ')
@@ -1736,7 +1739,7 @@ def get_hlr_outlet_info():
     #----------------------------------------------------
     # Note: Use the set of USGS HLR basins for which
     # we have been able to determine basin outlet info.
-    # This is 9539 of the 43391 basins in HLR set.
+    # This is 9539 of the 43931 basins in HLR set.
     #----------------------------------------------------
     print('Getting HLR basin outlet info...')
     hlr_dir  = hlr.get_hlr_data_dir()

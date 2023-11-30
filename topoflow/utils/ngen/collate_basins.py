@@ -36,6 +36,7 @@
 #  >>> cb.compare_basin_ids( db_str2='CAMELS' )
 #  >>> cb.compare_basin_ids( db_str2='MOPEX' )
 #  >>> cb.compare_basin_ids( db_str2='GAGES2_ref' )
+#  >>> cb.compare_basin_ids( db_str2='GAGES2_SB3' )
 #  >>> cb.compare_basin_names( db_str2='CAMELS ')
 #  >>> cb.compare_basin_names( db_str2='MOPEX ')
 #  >>> cb.compare_basin_names( db_str2='GAGES2_ref ')
@@ -88,7 +89,7 @@
 #  add_hlr_basins()
 #  add_lter_basins()
 #  add_neon_basins()
-#  add_gages3_basins()
+#  add_gages3_basins()    ### May not be needed.
 #  export_csv_to_tsv()
 #
 #---------------------------------------------------------------------
@@ -149,6 +150,8 @@ def get_data_directory( db_str='USGS_gauged' ):
         data_dir = repo_dir + 'NOAA_RFCs/USGS-HADS_basins/'
     elif (db_str == 'USGS_gauged'):
         data_dir = repo_dir + 'USGS_Gauged_Basins/'
+    elif (db_str == 'USGS_HCDN'):
+        data_dir = repo_dir + 'USGS_HCDN/Data_from_CD/hcdn/'
     elif (db_str == 'USGS_NWIS_all'):
         data_dir = repo_dir + 'USGS_NWIS/'
     else:
@@ -191,6 +194,8 @@ def get_data_filepath( db_str='USGS_gauged' ):
         file_path = data_dir + 'new_rfc_hads_sorted.tsv'
     elif (db_str == 'USGS_gauged'):
         file_path = data_dir + 'USGS_stream_gauge_data.tsv'
+    elif (db_str == 'USGS_HCDN'):
+        file_path = data_dir + 'hcdn_stations.tsv'        
     elif (db_str == 'USGS_NWIS_all'):
         file_path = data_dir + 'USGS_NWIS_stream_stations_usgs.tsv'
     else:
@@ -208,7 +213,7 @@ def get_n_records( db_str ):
     elif (db_str == 'CAMELS'):
         n_records = 671
     elif (db_str == 'CZO'):
-        n_records = 15  ### w/ currently available data
+        n_records = 15  ### w/ currently available data. 19 in TSV file.
     elif (db_str == 'FPS'):
         n_records = 4756
     elif (db_str == 'GAGES2_all'):
@@ -228,9 +233,15 @@ def get_n_records( db_str ):
     elif (db_str == 'NEON'):
         n_records = 81
     elif (db_str == 'RFC'):
-        n_records = 10512
+        n_records = 10512   # not just streams
     elif (db_str == 'USGS_gauged'):
         n_records = 25420
+    elif (db_str == 'USGS_HCDN'):
+        n_records = 1703    ### should be 1639 ??
+    elif (db_str == 'USGS_NHDplus_v1'):   # Mostly EPA
+        n_records = 19031
+    elif (db_str == 'USGS_NHDplus_v2'):   # Mostly EPA
+        n_records = 28163
     elif (db_str == 'USGS_NWIS_all'):
         n_records = 145375
     else:
@@ -261,7 +272,7 @@ def get_id_column( db_str ):
     #--------------------------------------------------------
     id_col = None
     list1 = ['ARS', 'CAMELS', 'FPS', 'GAGES2_all', 'GAGES2_ref',
-             'GAGES2_SB3', 'HLR', 'LTER', 'MOPEX', 'RFC']
+             'GAGES2_SB3', 'HLR', 'LTER', 'MOPEX', 'RFC', 'USGS_HCDN']
     list2 = ['NEON', 'USGS_gauged']
     list3 = ['USGS_NWIS_all']
 
@@ -297,10 +308,11 @@ def get_name_column( db_str ):
     # NEON          = "field_site_name"
     # RFC           = "description"
     # USGS_gauged   = "station_nm"
+    # USGS_HCDN     = Name given in separate file
     # USGS_NWIS_all = "MonitoringLocationName"
     #--------------------------------------------------------
     name_col = None
-    list1 = ['FPS', 'GAGES2_all', 'GAGES2_ref', 'LTER', 'RFC'  ]
+    list1 = ['FPS', 'GAGES2_all', 'GAGES2_ref', 'LTER', 'RFC', 'USGS_HCDN'  ]
     list2 = ['CAMELS', 'MOPEX', 'NEON', 'USGS_gauged']
     list3 = ['USGS_NWIS_all']
     list4 = ['ARS']
@@ -350,6 +362,8 @@ def get_lon_column( db_str ):
         lon_col = 7
     elif (db_str == 'USGS_gauged'):
         lon_col = 5
+    elif (db_str == 'USGS_HCDN'):
+        lon_col = 10
     elif (db_str == 'USGS_NWIS_all'):
         lon_col = 12
     else:
@@ -387,6 +401,8 @@ def get_lat_column( db_str ):
         lat_col = 6
     elif (db_str == 'USGS_gauged'):
         lat_col = 4
+    elif (db_str == 'USGS_HCDN'):
+        lat_col = 9
     elif (db_str == 'USGS_NWIS_all'):
         lat_col = 11
     else:
@@ -465,6 +481,8 @@ def get_basin_ids( db_str='USGS_gauged' ):
         id = values[ id_col ].strip()
         if (db_str == 'USGS_NWIS_all'):
             id = id.replace('USGS-', '')
+        if (len(id) == 7):
+            id = '0' + id   ########## 2023-11-22. Is this ever needed?
         id_list.append( id )     
 
     file_unit.close()
@@ -472,29 +490,56 @@ def get_basin_ids( db_str='USGS_gauged' ):
       
 #   get_basin_ids()
 #---------------------------------------------------------------------
-def compare_basin_ids( db_str1='USGS_gauged', db_str2='GAGES2_all'):
+def compare_basin_ids( db_str1='USGS_gauged', db_str2='GAGES2_all',
+                       PRINT_DIFF1_IDs=False, PRINT_DIFF2_IDs=False):
 
+    #------------------------------------------------------------
+    # Notes:
+    # db_str1='GAGES2_SB3', db_str2='MOPEX' shows that:
+    # 343 MOPEX basins are not in GAGES2_SB3.
+    #------------------------------------------------------------
+    # db_str1='GAGES2_ref', db_str2='MOPEX' shows that:
+    # 343 MOPEX basins are not in GAGES2_ref.
+    #------------------------------------------------------------
+    # db_str1='GAGES2_all', db_str2='MOPEX' shows that:
+    # only 7 MOPEX basins are not in GAGES2_all.
+    #------------------------------------------------------------
+    # db_str1='GAGES2_ref', db_str2='CAMELS' shows that:
+    # 0 CAMELS basins are not in GAGES2_ref.
+    #------------------------------------------------------------
+    # db_str1='USGS_NWIS_all', db_str2='GAGES2_all' shows that:
+    # 18 GAGES2_all basins are not in USGS_NWIS_all.
+    #------------------------------------------------------------      
     id_list1 = get_basin_ids( db_str1 )
     id_list2 = get_basin_ids( db_str2 )
-    print('Dataset 1 =', db_str1)
-    print('Dataset 2 =', db_str2)
+    # Apply "set()" here removes possible duplicates (ARS has them)
+    print(db_str1 + ' basins: n =', len(set(id_list1)))
+    print(db_str2 + ' basins: n =', len(set(id_list2)))
+    id_list3 = list( set(id_list1) & set(id_list2) )
+    print('Basins in both', db_str1, 'and', db_str2 + ': ', 'n =', len(id_list3))
+    #print()
+#     print('Dataset 1 =', db_str1, '(', len(id_list1), 'basins)' )
+#     print('Dataset 2 =', db_str2, '(', len(id_list2), 'basins)' )
         
     #-----------------------------
     # Compare the two name lists
-    #-----------------------------
-#     print()   
-#     diff1 = list( set(id_list1) - set(id_list2))
-#     diff1.sort()
-#     print('Basin IDs in dataset 1 not in dataset 2:')
-#     print(diff1)
-#     print()
+    #----------------------------- 
+    diff1 = list( set(id_list1) - set(id_list2))
+    diff1.sort()
+    print('Basins in', db_str1, 'but not', db_str2 + ': ', 'n =', len(diff1))
+    if (PRINT_DIFF1_IDs):
+        print('Basin IDs in dataset 1 not in dataset 2:')
+        print(diff1)
+        print()
 
     diff2 = list( set(id_list2) - set(id_list1))
     diff2.sort()
-    print('Basin IDs in dataset 2 not in dataset 1:')
-    print(diff2)
-    print('len(diff2) =', len(diff2))
-    print()
+    print('Basins in', db_str2, 'but not', db_str1 + ': ', 'n =', len(diff2))
+    if (PRINT_DIFF2_IDs):
+        print('Basin IDs in dataset 2 not in dataset 1:')
+        print(diff2)
+        print('len(diff2) =', len(diff2))
+        print()
     ## return diff2
 
 #   compare_basin_ids()
@@ -976,7 +1021,7 @@ def collate( out_tsv_file='all_basins.tsv',
     # newer and contains both "ref" and "non-ref" basins.
     #-----------------------------------------------------------
     start_time = time.time()
-    # base_key = 'USGS_NWIS_ALL'  # 145375 data rows
+    # base_key = 'USGS_NWIS_all'  # 145375 data rows
     base_key = 'USGS_gauged'      # 25420 data rows
     # base_key = 'GAGES2_all'     # 9322 data rows
  

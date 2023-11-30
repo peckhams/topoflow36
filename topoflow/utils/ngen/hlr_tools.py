@@ -160,6 +160,7 @@
 #  get_hlr_code_for_point()
 #
 #  point_in_rectangle()
+#  save_hlr_code_grid_to_rtg()
 #
 #---------------------------------------------------------------------
 import numpy as np
@@ -171,7 +172,9 @@ import json, time
 from osgeo import gdal
 from topoflow.utils.ngen import shape_utils as su
 from topoflow.utils.ngen import usgs_utils as usgs
-from topoflow.utils import regrid  # to create grid of HLR codes
+from topoflow.utils import regrid     # to create grid of HLR codes
+from topoflow.utils import rtg_files  # to save HLR grid to RTG
+from topoflow.utils import rti_files  # to create RTI file for RTG
 
 # For convert_vat_adf_to_csv()
 import csv, sys, gdal
@@ -1524,7 +1527,9 @@ def get_hlr_grid_info():
     #------------------------------------
     # bounds = [ulx, lry, lrx, uly]
     #        = [xmin, ymin, xmax, ymax]
-    #------------------------------------
+    #--------------------------------------------------------
+    # data type may be LONG in GeoTIFF, but only need BYTE.
+    #--------------------------------------------------------
     grid_info = dict()
     grid_info['ncols'] = 9106
     grid_info['nrows'] = 6855
@@ -1534,7 +1539,12 @@ def get_hlr_grid_info():
     grid_info['xmax']  =  2930983.4
     grid_info['ymin']  = -2530809.6
     grid_info['ymax']  =  4324190.4
+    grid_info['pixel_geom'] = 1   # Code used in RT files (fixed-length)
+    grid_info['zres']     = 1
+    grid_info['z_units']  = 'none'
+    grid_info['xy_units'] = 'meters'
     #------------------------------------------------------------
+    grid_info['source']     = 'Wolock et al. (2004)'
     grid_info['code_file']  = 'HLR_code_grid_9106x6855_1K.tif'
     grid_info['value_file'] = 'HLR_value_grid_9106x6855_1K.tif'
     
@@ -1754,6 +1764,166 @@ def point_in_rectangle(xP,yP, xA,yA, xC,yC):
 
 #   point_in_rectangle()
 #--------------------------------------------------------------------- 
+def save_hlr_code_grid_to_rtg( REPORT=True ):
+
+    hlr_grid_info = get_hlr_grid_info()
+    hlr_dir = get_hlr_data_dir()
+    hlr_raster_dir = hlr_dir + 'arctar00000/hlrus/'
+    hlr_code_tif_file = hlr_grid_info['code_file']
+    hlr_code_tif_path = hlr_raster_dir + hlr_code_tif_file
+    rtg_path = hlr_code_tif_path.replace('.tif', '.rtg')
+
+    #---------------------------------------     
+    # Read HLR code grid from GeoTIFF file
+    #---------------------------------------     
+    hlr_code_grid = regrid.read_geotiff( in_file=hlr_code_tif_path, GEO=False)
+    if (REPORT):
+        print('Before conversion to BYTE type:')
+        print('   min(hlr_code_grid) =', hlr_code_grid.min())
+        print('   max(hlr_code_grid) =', hlr_code_grid.max())
+    #--------------------------------------------------------    
+    # This makes several incorrect assumptions re: RTI file
+    #--------------------------------------------------------
+#   hlr_code_grid = regrid.read_geotiff( in_file=hlr_code_tif_path, GEO=False,     
+#                           MAKE_RTG=True, rtg_file=rtg_path )
+
+    #------------------------------------------------
+    # Convert grid to BYTE type (values in 1 to 20)
+    # Use value "0" for anything out of range.
+    #------------------------------------------------
+    w = np.logical_or(hlr_code_grid > 20, hlr_code_grid < 1)
+    hlr_code_grid[w] = 0 
+    code_grid = np.int8( hlr_code_grid )
+    data_type = 'BYTE'
+    if (REPORT):
+        print('After conversion to BYTE type:')
+        print('   min(code_grid) =', code_grid.min())
+        print('   max(code_grid) =', code_grid.max())
+        print()
+
+    #----------------------------------------
+    # Extract grid info needed for RTI file
+    #----------------------------------------
+    ncols        = hlr_grid_info['ncols']
+    nrows        = hlr_grid_info['nrows']
+    xres         = hlr_grid_info['dx']
+    yres         = hlr_grid_info['dy']
+    zres         = hlr_grid_info['zres']
+    x_west_edge  = hlr_grid_info['xmin']
+    x_east_edge  = hlr_grid_info['xmax']
+    y_south_edge = hlr_grid_info['ymin']
+    y_north_edge = hlr_grid_info['ymax'] 
+    pixel_geom   = hlr_grid_info['pixel_geom']
+    z_units      = hlr_grid_info['z_units']
+    xy_units     = hlr_grid_info['xy_units']
+    data_source  = hlr_grid_info['source']
+  
+    #--------------------------------------
+    # Create an RTI file for new RTG file
+    #--------------------------------------
+    rti = rti_files.make_info(grid_file=rtg_path,
+              ncols=ncols, nrows=nrows,
+              xres=xres, yres=yres,
+              #--------------------------------------
+              data_source=data_source,
+              data_type=data_type,  ## Must agree with dtype  #######
+              byte_order=rti_files.get_rti_byte_order(),
+              pixel_geom=pixel_geom,
+              zres=zres, z_units=z_units,
+              y_south_edge=y_south_edge,
+              y_north_edge=y_north_edge,
+              x_west_edge=x_west_edge,
+              x_east_edge=x_east_edge,
+              box_units=xy_units, gmin=0, gmax=20)
+    rti_files.write_info( rtg_path, rti )    
+    rtg = rtg_files.rtg_file() 
+    OK  = rtg.open_new_file( rtg_path, rti )
+    if not(OK):
+        print('ERROR during open_new_file().')
+        return       
+    rtg.write_grid( code_grid, VERBOSE=True )
+    rtg.close_file()
+              
+#   save_hlr_code_grid_to_rtg()
+#---------------------------------------------------------------------
+def create_hlr_conus_grids( REPORT=True ):
+
+    #---------------------------------------------------------------
+    # Note: All of the grids here have the same projection:
+    #       Lambert Azimuthal Equal Area, with same parameters.
+    #       See na_dem.prj.  They also have 1000 meter resolution.
+    #---------------------------------------------------------------
+    # This function clips larger grids to the CONUS bounding box
+    # without changing the 1k spatial resolution (HYDRO1K).
+    #---------------------------------------------------------------
+        
+    #----------------------------------
+    # CONUS bounding box coordinates
+    # (Lambert Azimuthal Equal Area)
+    #----------------------------------
+    # With xres = yres = 1000 meters,
+    # ncols = 5020, nrows = 3230
+    #----------------------------------
+    xmin = -2285016.599999999627
+    xmax = 2734983.400000000373
+    ymin = -2260809.600000000093
+    ymax = 969190.399999999907
+    conus_bounds = [xmin, ymin, xmax, ymax]
+    
+    in_dir    = '/Users/peckhams/Downloads/HLR_CONUS_DEM/'  ## temporary ####
+    #----------------------------------------------
+    dem_file  = 'na_dem.tif'
+    dem_path  = in_dir + dem_file    
+    #----------------------------------------------
+    code_file = 'HLR_code_grid_9106x6855_1k.tif'
+    code_path = in_dir + code_file
+    #----------------------------------------------
+    conus_dem_file  = 'HLR_DEM_CONUS_1k.tif'
+    conus_dem_path  = in_dir + conus_dem_file
+    #----------------------------------------------
+    conus_code_file = 'HLR_Code_CONUS_1k.tif'
+    conus_code_path = in_dir + conus_code_file
+       
+    #------------------------------ 
+    # Create DEM clipped to CONUS
+    #------------------------------
+    regrid.regrid_geotiff(in_file=dem_path, out_file=conus_dem_path,
+                   out_bounds=conus_bounds, GEO=False,
+                   out_xres_m=None, out_yres_m=None,
+                   RESAMPLE_ALGO='bilinear', REPORT=REPORT)
+
+    #-----------------------------------------------------   
+    # Also save new TIF file in RTG format with RTI file
+    #-----------------------------------------------------
+    conus_dem_rtg_path = conus_dem_path.replace('.tif', '.rtg')               
+    regrid.read_geotiff(in_file=conus_dem_path, REPORT=True,
+                 MAKE_RTG=True, rtg_file=conus_dem_rtg_path, GEO=False,
+                 zres=1, z_units='METERS', box_units='METERS',
+                 data_source='HYDRO1K North America' )
+                                    
+    #----------------------------------------   
+    # Create HLR Code grid clipped to CONUS
+    #---------------------------------------- 
+    regrid.regrid_geotiff(in_file=code_path, out_file=conus_code_path,
+                   out_bounds=conus_bounds, GEO=False,
+                   out_xres_m=None, out_yres_m=None,
+                   RESAMPLE_ALGO='bilinear', REPORT=REPORT)
+                   
+    #-----------------------------------------------------   
+    # Also save new TIF file in RTG format with RTI file
+    #-----------------------------------------------------
+    conus_code_rtg_path = conus_code_path.replace('.tif', '.rtg')               
+    regrid.read_geotiff(in_file=conus_code_path, REPORT=True,
+                 MAKE_RTG=True, rtg_file=conus_code_rtg_path, GEO=False,
+                 zres=1, z_units='NONE', box_units='METERS',
+                 data_source='Wolock et al. (2004)' )
+                 
+    print('Finished.')
+    print()
+                      
+#   create_hlr_conus_grids()
+#---------------------------------------------------------------------
+
 
 
 

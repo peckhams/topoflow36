@@ -1,10 +1,11 @@
 
 # Copyright (c) 2023, Scott D. Peckham
 #
+# Nov 2023. Wrote get_swb_points to plot points on a map.
 # Oct 2023. Moved get_swb_class_names() and get_swb_class() to
 #           swb_tools.py.      
 #           Added merge_SB_info_for_regions(),
-#           get_sb_region_headings(), compute_swb_classes(),
+#           get_csv_headings(), compute_swb_classes(),
 #           get_snow_precip_fraction(), get_precip_timing_index(),
 #           get_aridity_index(), get_swb_class_names(),
 #           get_swb_class().      
@@ -47,11 +48,12 @@
 #  which are a subset of the Reference basins.
 #
 #  merge_SB_info_for_regions()
-#  get_sb_region_headings()
+#  get_csv_headings()
 #  compute_swb_classes()
 #     get_snow_precip_fraction()
 #     get_precip_timing_index()
 #     get_aridity_index()
+#  get_swb_points()
 #
 #---------------------------------------------------------------------
 
@@ -656,7 +658,7 @@ def merge_SB_info_for_regions( out_csv_file=None, SORT_BY_ID=True,
         # For missing columns, see the file:
         #    SB3_BCs_byRegion.xlsx.
         #-----------------------------------------------       
-        headings = get_sb_region_headings( csv_unit )
+        headings = get_csv_headings( csv_unit )
         headings.insert(2, 'REGION')
         #-----------------------------------------------
         # Create header for new file w/ extra headings
@@ -741,18 +743,25 @@ def merge_SB_info_for_regions( out_csv_file=None, SORT_BY_ID=True,
          
 #   merge_SB_info_for_regions()
 #---------------------------------------------------------------------
-def get_sb_region_headings( csv_unit, delim=',' ):
+def get_csv_headings( csv_unit, delim=',' ):
 
+    #------------------------------------------------------------
+    # Note: Info for "selected basins" (sb) is saved in 19
+    #       CSV files, one for each of 19 "regions".
+    #       Region numbers are 1 to 9, 10L, 10U, & 11 to 18.
+    #       However, not all files have the same col. headings.
+    #       See: SB3_BCs_byRegion.xlsx. for missing columns.  
+    #------------------------------------------------------------ 
     header   = csv_unit.readline()
     headings = header.split( delim )
     for k in range( len(headings) ):
         headings[k] = headings[k].strip()
     return headings
    
-#   get_sb_region_headings()
+#   get_csv_headings()
 #---------------------------------------------------------------------
 def compute_swb_classes( in_csv_file=None, ORIGINAL=False,
-                         USE_B3=False, REPORT=False ):
+                         NEW_TSV=False, USE_B3=False, REPORT=False ):
 
     #---------------------------------------------------------------
     # Note: In GAGES-II, extra information is provided for a set
@@ -769,49 +778,61 @@ def compute_swb_classes( in_csv_file=None, ORIGINAL=False,
     #  In filenames, "SB" stands for "Selected Basins", and
     #  "untransf" is short for "untransformed" values of vars.
     #--------------------------------------------------------------
-    #  If USE_B3, a new class is used so that B1, B2, and B3
-    #  "stack up" along phi-axis just as A1, A2, and A3 do.
+    #  If USE_B3, a new class, B3, is used so that B1, B2, and
+    #  B3 "stack up" along phi-axis just as A1, A2, and A3 do.
     #--------------------------------------------------------------  
     if (in_csv_file is None):
         in_csv_file = 'SB3_all_regions_untransfBCs_sorted.csv'
-    out_tsv_file = in_csv_file.replace('.csv', '_SWB.tsv')
-    ### out_tsv_file = 'new_SB3_info_all_regions_sorted.tsv'
-    
-    delim  = ','   # CSV file
-    delim2 = '/t'  # TSV file
+    delim         = ','   # CSV file
     gages2_SB_dir = get_gages2_data_dir( gtype='SB3' )
     in_csv_path   = gages2_SB_dir + in_csv_file
     in_csv_unit   = open( in_csv_path, 'r' )
-    #----------------------------------------------
-#     out_tsv_path  = gages2_SB_dir + out_tsv_file
-#     out_tsv_unit  = open( out_tsv_path, 'w' )
-    
-    headings = get_sb_region_headings( in_csv_unit, delim=',' )
-    #------------------------------------------------------------------
-    # Headings to keep or rename (remove others for now):
-    # StnID, REGION, DRAIN_SQKM, LAT_CENT, LONG_CENT, PPTAVG_BASIN,
-    # T_AVG_BASIN, RH_BASIN, PET (mm), SNOW_PCT_PRECIP, 
-    # PRECIP_SEAS_IND ????, JUL_JAN_TMP_DIFF_DEGC, ELEV_RANGE_M_BASIN
-    #------------------------------------------------------------------
-    # Headings to add:
-    # PRECIP_TIMING_INDEX, ARIDITY_INDEX, SWB_CLASS, SWB2_CLASS
-    #------------------------------------------------------------------
-#     headings2 = subset_list + ['PRECIP_TIMING_INDEX', 'ARIDITY_INDEX', 
-#                     'SWB_CLASS', 'SWB2_CLASS']
-    
+    headings      = get_csv_headings( in_csv_unit, delim=delim )
+            
+    if (NEW_TSV):
+        delim2 = '\t'  # TSV file
+        out_tsv_file = in_csv_file.replace('.csv', '_SWB.tsv')
+        out_tsv_path  = gages2_SB_dir + out_tsv_file
+        out_tsv_unit  = open( out_tsv_path, 'w' )
+        #------------------------------------------------------------------
+        # Headings to keep or rename (could remove others for now):
+        # StnID, REGION, DRAIN_SQKM, LAT_CENT, LONG_CENT, PPTAVG_BASIN,
+        # T_AVG_BASIN, RH_BASIN, PET (mm), SNOW_PCT_PRECIP, 
+        # PRECIP_SEAS_IND ????, JUL_JAN_TMP_DIFF_DEGC, ELEV_RANGE_M_BASIN
+        #------------------------------------------------------------------
+        # Headings to add:
+        # PRECIP_TIMING_INDEX, ARIDITY_INDEX, SWB_CLASS, SWB2_CLASS
+        #------------------------------------------------------------------
+        headings2 = headings + ['PRECIP_TIMING_INDEX', 'ARIDITY_INDEX',
+                        'SNOW_PRECIP_FRACTION', 'SWB1_CLASS', 'SWB2_CLASS']
+        #---------------------------------
+        # Write header for new TSV file
+        #---------------------------------
+        tsv_header = ''
+        for heading in headings2:
+            tsv_header += (heading + delim2)
+        tsv_header = tsv_header[:-1] + '\n' # remove delim, add newline
+        out_tsv_unit.write( tsv_header )
+        
     fs_min  = 1000.0
     fs_max  = -1000.0
     phi_min = 1000.0
     phi_max = -1000.0
     dp_min  = 1000.0
     dp_max  = -1000.0
-    #---------------------
-    n_basins   = 0
-    class_count = dict()
+    #-------------------
+    n_basins = 0
+    count1 = 0
+    count2 = 0
+    count3 = 0
+    count4 = 0
 
+    class_count1 = dict()
+    class_count2 = dict()    
     names = swb.get_swb_class_names( USE_B3=USE_B3 )
     for name in names:
-        class_count[ name ] = 0
+        class_count1[ name ] = 0
+        class_count2[ name ] = 0
 
     while (True):
         line = in_csv_unit.readline()
@@ -835,22 +856,32 @@ def compute_swb_classes( in_csv_file=None, ORIGINAL=False,
         #       f_s     = snow_precip_fraction
         #       phi     = aridity_index
         #---------------------------------------------------
-        f_s     = get_snow_precip_fraction( val_dict, PERCENT=True,
+        f_s     = get_snow_precip_fraction( val_dict, UNITS='none',
                                             REPORT=REPORT )
         delta_p = get_precip_timing_index( val_dict, f_s, REPORT=REPORT )
         phi     = get_aridity_index( val_dict, REPORT=REPORT )
-        #--------------------------------------------------------------        
-        swb_class = swb.get_swb_class( delta_p, f_s, phi,
-                                   ORIGINAL=ORIGINAL, USE_B3=USE_B3)
-        class_count[ swb_class ] += 1  # (swb_class may be 'None')
-        
-        #------------------------------------------------
-        # Later, save both of these in the new CSV file
-        #------------------------------------------------       
-#         swb1_class = swb.get_swb_class( delta_p, f_s, phi,
-#                                    ORIGINAL=True, USE_B3=USE_B3)                                   
-#         swb2_class = swb.get_swb_class( delta_p, f_s, phi,
-#                                    ORIGINAL=False, USE_B3=USE_B3)
+ 
+        #---------------------------------  
+        # Count extreme cases of delta_p
+        #---------------------------------
+        if (delta_p == -0.999):
+            count1 += 1
+        if (delta_p == 0.999):
+            count2 += 1
+        if (delta_p == -1.0):
+            count3 += 1
+        if (delta_p == 1.0):
+            count4 += 1
+                        
+        #---------------------------------------------
+        # Save both SWB versions in the new TSV file
+        #---------------------------------------------       
+        swb1_class = swb.get_swb_class( delta_p, f_s, phi,
+                                   ORIGINAL=True, USE_B3=USE_B3)                                   
+        swb2_class = swb.get_swb_class( delta_p, f_s, phi,
+                                   ORIGINAL=False, USE_B3=USE_B3)
+        class_count1[ swb1_class ] += 1   # (swb_class may be 'None')
+        class_count2[ swb2_class ] += 1   # (swb_class should never be 'None')               
         n_basins += 1
         
         dp_min  = np.minimum( dp_min, delta_p )
@@ -862,45 +893,70 @@ def compute_swb_classes( in_csv_file=None, ORIGINAL=False,
 
         #--------------------------------------------
         # Add new heading/value pairs to dictionary
-        #--------------------------------------------
-#         val_dict['PRECIP_TIMING_INDEX'] = delta_p
-#         # val_dict['SNOW_PRECIP_FRACTION'] = f_s    # (vs. PCT or %)
-#         val_dict['ARIDITY_INDEX']       = phi
-#         val_dict['SWB_CLASS']           = swb_class
-#         val_dict['SWB2_CLASS']          = swb2_class
+        #---------------------------------------------------
+        # f_s now has units = "none" vs. "percent".
+        # Use: "SNOW_PRECIP_FRACTION" vs "SNOW_PCT_PRECIP"
+        #---------------------------------------------------
+        if (NEW_TSV):
+            dp_str  = '{x:.6f}'.format(x=delta_p)  # 6 decimal accuracy
+            fs_str  = '{x:.6f}'.format(x=f_s)
+            phi_str = '{x:.6f}'.format(x=phi)
+            #----------------------------------------------       
+            val_dict['PRECIP_TIMING_INDEX']  = dp_str
+            val_dict['SNOW_PRECIP_FRACTION'] = fs_str
+            val_dict['ARIDITY_INDEX']        = phi_str
+            val_dict['SWB1_CLASS']           = swb1_class
+            val_dict['SWB2_CLASS']           = swb2_class
         
-        #----------------------------------------
-        # For each heading in headings2,
-        # write corresponding value to new file
-        #----------------------------------------
-#         out_line = ''
-#         for h in headings2:
-#             value = val_dict[h]
-#             out_line += value + delim2
-#         out_line = out_line[:-1] + '\n'
-#         out_tsv_unit.write( out_line )
+            #----------------------------------------
+            # For each heading in headings2,
+            # write corresponding value to new file
+            #----------------------------------------
+            out_line = ''
+            for h in headings2:
+                value = val_dict[h]
+                out_line += value + delim2
+            out_line = out_line[:-1] + '\n'
+            out_tsv_unit.write( out_line )
 
     #-------------------
     # Close both files
     #-------------------
     in_csv_unit.close()
-#     out_tsv_unit.close()
+    if (NEW_TSV):
+        out_tsv_unit.close()
     #---------------------------
     print('del_p_min, del_p_max =', dp_min, ',', dp_max)
     print('fs_min, fs_max       =', fs_min, ',', fs_max)
     print('phi_min, phi_max     =', phi_min, ',', phi_max)
     print()
     print('Number of basins     =', n_basins)
-    print('Number unclassified  =', class_count['None'] )
+    c1_str = '{x:5d}'.format(x=class_count1['None'])
+    c2_str = '{x:5d}'.format(x=class_count2['None'])
+    print('Number unclassified  = ' + c1_str + ' (SWB1)' )
+    print('Number unclassified  = ' + c2_str + ' (SWB2)' )
+    print()
+    print('Limiting values of delta_p:')
+    print('# basins with delta_p = -0.999 =', count1)
+    print('# basins with delta_p = +0.999 =', count2)
+    print('# basins with delta_p = -1.000 =', count3, ' (T_bs <= 1)')
+    print('# basins with delta_p = +1.000 =', count4, ' (T_bs >= 1)')
     print()
     for name in names:
-        print('   count[ ' + name + ' ] =', class_count[name] )
+        cc1_str = '{x:4d}'.format(x=class_count1[name])
+        cc2_str = '{x:4d}'.format(x=class_count2[name])
+        if (len(name) == 2):
+            name = ' ' + name + ' '      
+        print('   count[ ' + name + ' ] = v1:' + cc1_str + ',   v2:' + cc2_str)
+    if (NEW_TSV):
+        print('Wrote extra info to new TSV file: ')
+        print('   ' + out_tsv_file)
     print('Finished.')
     print()
 
 #   compute_swb_classes()
 #---------------------------------------------------------------------
-def get_snow_precip_fraction( val_dict, PERCENT=True, REPORT=False ):
+def get_snow_precip_fraction( val_dict, UNITS='none', REPORT=False ):
 
     #----------------------------------------
     # If f_s = 0, all precip falls as rain.
@@ -919,7 +975,12 @@ def get_snow_precip_fraction( val_dict, PERCENT=True, REPORT=False ):
             print('### WARNING: No data for f_s; setting to 0.')
             print()
         val = 0.0
-    if (PERCENT):
+    #--------------------------------------------
+    # Initial units are "percent", in [0,100].
+    # Set UNITS keyword to anything else to
+    # convert to unitless values in [0,1].
+    #--------------------------------------------
+    if not(UNITS.lower() == 'percent'):
         f_s = (val / 100.0)  # convert percent to [0,1]
     return f_s
 
@@ -939,9 +1000,10 @@ def get_precip_timing_index( val_dict, f_s, REPORT=False ):
     #-----------------------------------------------------
     # T_amp is "seasonal amplitude, degrees C", under
     # the assumption that temp. varies as sine function.
-    # This code block assumes July is hottest month and
+    # This code block ASSUMES July is hottest month and
     # January is coldest month, everywhere in the USA,
     # so that difference can be used to get amplitude.
+    # Need to check this assumption.  ###########
     #-----------------------------------------------------
     # From Woods (2009), near equation (5):
     # T_bs >  1 => climate is above freezing all year.
@@ -964,6 +1026,7 @@ def get_precip_timing_index( val_dict, f_s, REPORT=False ):
     # sqrt().  The correct equation is in Woods (2009),
     # equation (13). The plot of f_s for T_bs in [-1,1] makes
     # more sense for the correct equation.
+    # See Mathematica notebook: Seasonal_Water_Balance.nb.
     #----------------------------------------------------------
     # Arcsin function requires argument in [-1,1].
     #----------------------------------------------------------    
@@ -972,19 +1035,66 @@ def get_precip_timing_index( val_dict, f_s, REPORT=False ):
         ## denom = 2 * np.sqrt(1 - T_bs)     # Berghuis et al. (2014)
         denom = 2 * np.sqrt(1 - T_bs**2)  # Woods (2009)
         delta_p = (numer / denom)
+        #---------------------------------------------
+        # The range of the delta_p function
+        # Using -0.999 and 0.999 here to distinguish
+        # from -1 and 1 used in the "else" part.
+        #---------------------------------------------
         delta_p = np.maximum(delta_p, -0.999)   #############
-        delta_p = np.minimum(delta_p, 1.0)      # max now is 1.029
+        # This gets used twice for GAGES-II.
+        delta_p = np.minimum(delta_p, 0.999)      # max now is 1.029
+        ### delta_p = np.minimum(delta_p, 1.0)      # max now is 1.029
     else:
-        #---------------------------------------------------------
-        # If (T_bs = 1), then eq (12) in Woods (2009) simplifies
-        # to f_s = 0.0.  If (T_bs = -1), then it simplifies to
-        # f_s = 1.0.  In both cases, the delta_p term drops out
-        # and can't solve for delta_p.  But see comments near
-        # equation (5) in Berghuijs et al. (2014).
-        #---------------------------------------------------------
+        #----------------------------------------------------------
+        # When f_s = 0, all precip falls as rain.
+        # When f_s = 1, all precip falls as snow.
+        #
+        # If (T_bs = 1), then for ANY delta_p:
+        #   (1) Eq (12) in Woods (2009) simplifies to  f_s = 0.0. 
+        #   (2) Eq (6a) in Berghuijs (2014) also gives f_s = 0.0.
+        # If (T_bs = -1), then:
+        #   (1) Eq (12) in Woods (2009) simplifies to f_s = 1.0.
+        #   (2) Eq (6a) in Berghuijs (2014) simplifies to:
+        #          f_s = 1 - delta_p*sqrt(2)/pi
+        # In both cases for Woods (2009, eq 12), the delta_p term
+        # drops out and we can't solve for delta_p.
+        #------------------------------------------------------------
+        # However, when we can solve for delta_p, we find that
+        # for any fixed value of f_s in (0,1):
+        # (1)  There is a range of T-values, [T1,T2],
+        #      with T1(f_s) > -1, and T2(f_s) < 1,
+        #      so that delta_p is a monotonically decreasing fcn.
+        #      of T, with delta_p(T1(f_s), f_s) = 1 and
+        #      delta_p(T2(f_s), f_s) = -1.
+        # (2)  As f_s approaches 0, both T1(f_s) and T2(f_s) ->  1.
+        # (3)  As f_s approaches 1, both T1(f_s) and T2(f_s) -> -1.
+        # (4)  For continuity, we need delta_p = 1 for T < T1, and
+        #       delta_p = -1 for T > T2.
+        # (5)  We can't analytically solve Woods eq 12 for
+        #      T(f_s, delta_p) - it is transcendental.
+        # (6)  If T=0, delta_p = (pi/2)[1 - 2*f_s], and then
+        #      delta_p(f_s=0) = pi/2, and delta_p(f_s=1) = -pi/2.
+        # (7)  delta_p(0, T) = arccos(T)/sqrt(1 - T^2)
+        # (8)  delta_p(1, T) = [arcos(T) - pi]/sqrt(1 - T^2)
+        # (9)  Limit[ delta_p(0, T), T ->  1 ] =  1.
+        # (10) Limit[ delta_p(1, T), T -> -1 ] = -1.
+        #
+        # In comments near eqn (5) in Berghuijs (2014): 
+        # (1) T is a dimensionless measure of mean temperature.
+        # (2) delta_p = +1, for strongly summer-dominant precip;
+        #     this also seems to match up with f_s = 0.
+        # (3) delta_p = -1, for strongly winter-dominant precip
+        #     this also seems to match up with f_s = 1.
+        #------------------------------------------------------------
         if (T_bs <= -1):
+            # Woods (2009, eq 12) implies f_s(-1, delta_p) = 1.
+            # Limit[ delta_p(f_s=1, T), T -> -1 ] = -1.
             delta_p = -1.0
         if (T_bs >= 1):
+            # Woods (2009, eq 12) implies f_s(1, delta_p) = 0.
+            # Limit[ delta_p(f_s=0, T), T -> 1 ] =  1.
+            #---------------------------------------------------
+            # This gets used a lot for GAGES-II.
             delta_p = 1.0
  
     if (REPORT):
@@ -1032,7 +1142,67 @@ def get_aridity_index( val_dict, REPORT=False ):
     return phi
 
 #   get_aridity_index()
-#---------------------------------------------------------------------  
+#---------------------------------------------------------------------
+def get_swb_points( in_tsv_file=None, ORIGINAL=False ):
+
+    #--------------------------------------------------------
+    # Note: This is used to plot points on a CONUS map as
+    #       circles where color is determined by SWB class.
+    #--------------------------------------------------------
+    if (in_tsv_file is None):
+        in_tsv_file = 'SB3_all_regions_untransfBCs_sorted_SWB.tsv'
+
+    delim = '\t'  # TSV file
+    gages2_SB_dir = get_gages2_data_dir( gtype='SB3' )
+    in_tsv_path   = gages2_SB_dir + in_tsv_file
+    in_tsv_unit   = open( in_tsv_path, 'r' )
+
+    #--------------------------------------------------
+    # Get headings & column numbers for some headings
+    #--------------------------------------------------
+    headings  = get_csv_headings( in_tsv_unit, delim='\t' )
+    x_index   = headings.index('LONG_CENT')
+    y_index   = headings.index('LAT_CENT')
+    if (ORIGINAL):
+        swb_index = headings.index('SWB1_CLASS')  # Can be "None"
+    else:
+        swb_index = headings.index('SWB2_CLASS')
+
+    #------------------------------------  
+    # Numpy arrays to store values into
+    #------------------------------------
+    n_basins = 1947  # (number of G2 Selected Basins)
+    x_g2 = np.zeros(n_basins, dtype='float32') 
+    y_g2 = np.zeros(n_basins, dtype='float32')
+    c_g2 = np.zeros(n_basins, dtype='<U4')
+    
+    k = 0            
+    while (True):
+        line = in_tsv_unit.readline()
+        if (line == ''):
+            break   # (reached end of file)
+        #----------------------------------------
+        # Need to remove the newline char first
+        #----------------------------------------
+        line = line[:-1]
+        values = line.split( delim )
+
+        #-----------------------------------------
+        # Save values for some columns to arrays
+        #-----------------------------------------
+        x_g2[k] = np.float32( values[ x_index ])
+        y_g2[k] = np.float32( values[ y_index ])
+        c_g2[k] = values[ swb_index ]
+        k += 1
+  
+    in_tsv_unit.close()
+    # print('Finished.') 
+    return x_g2, y_g2, c_g2
+
+#   get_swb_points()
+#---------------------------------------------------------------------
+
+
     
 
 

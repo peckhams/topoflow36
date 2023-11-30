@@ -27,7 +27,8 @@ def get_swb_class_names( USE_B3=False ):
         names = ['A1','A2','A3','B1','B2','B3',
                    'C1','C2','D1','D2','D3','None']
     else:
-        names = ['A1','A2','A3','B1','B2','C1','C2','D1','D2','D3','None']
+        names = ['A1','A2','A3','B1','B2',
+                   'C1','C2','D1','D2','D3','None']
     return names
     
 #   get_swb_class_names()
@@ -75,13 +76,17 @@ def get_swb_class( delta_p, f_s, phi, ORIGINAL=False,
     # (delta_p, f_s, phi) that can be closed if we set these 5
     # delta_p values to be the same value in [-0.4, -0.1].
     #-------------------------------------------------------------
+    A_dp_min  = -1.0   # (Berghuijs figure 7 & table 3)
+    B_dp_min  = -1.0   # (Berghuijs figure 7 & table 3)
+    C_dp_max  = 1.0    # (Berghuijs figure 7 & table 3)
+    
     if (ORIGINAL):
-        A_dp_max  = -0.4
-        # C_dp_min = 0.3   # (from fig. 7) 
-        C_dp_min  = 0.0    # (from table 3)
-        D1_dp_min = -0.4
-        D2_dp_min = -0.1
-        D3_dp_min = -0.1
+        A_dp_max  = -0.4   # (Berghuijs figure 7 & table 3)
+        C_dp_min  = 0.0    # (Berghuijs table 3)
+        # C_dp_min = 0.3   # (Berghuijs figure 7)
+        D1_dp_min = -0.4   # (Berghuijs figure 7 & table 3)
+        D2_dp_min = -0.1   # (Berghuijs figure 7 & table 3)
+        D3_dp_min = -0.1   # (Berghuijs figure 7 & table 3)
     else:
         #---------------------------------------------
         # Helps: 1008 goes down to 953 unclassified.
@@ -96,18 +101,17 @@ def get_swb_class( delta_p, f_s, phi, ORIGINAL=False,
     
     #----------------------------------------------------------
     # The max value of delta_p for all B classes is the same.
-    # In Berghuijs et al. (2014) figure 7, it is -0.4.
+    # In Berghuijs et al. (2014) figure 7, it is 1.0.
     # In Berghuijs et al. (2014) table 3, it is 0.0.       
     # This max value could be raised further to any value
     # <= 1.0 without intersecting any other classes.
     #-----------------------------------------------------------
-    if (ORIGINAL):     
-        # B_dp_max = -0.4   # (figure 7)
-        B_dp_max = 0.0      # (table 3)
+    #  Fixed bug with B_dp_max = 0.4 on 2023-11-29  ######
+    #-----------------------------------------------------------    
+    if (ORIGINAL):   
+        B_dp_max = 1.0     # (Berghuijs figure 7)
+        ## B_dp_max = 0.0  # (Berghuijs table 3)
     else:
-        #--------------------------------------------
-        # Helps: 953 goes down to 951 unclassified.
-        #-------------------------------------------- 
         B_dp_max = 1.0    # (max allowed value)
     
     #----------------------------------------------------------
@@ -115,14 +119,19 @@ def get_swb_class( delta_p, f_s, phi, ORIGINAL=False,
     # raised to 1.0 without intersecting any other classes.
     #----------------------------------------------------------
     if (ORIGINAL):
-        D1_dp_max = 0.3
-        D2_dp_max = 0.3
-        D3_dp_max = 0.4
+        ##############################################
+        ## Currently, d_p = 1.0 whenever f_s = 0.0,
+        ## so D1 is not getting any basins.
+        ##############################################
+        D1_dp_max = 0.3      # (Berghuijs table 3)
+        ## D1_dp_max = 0.25  # (Berghuijs figure 7)
+        D2_dp_max = 0.3      # (Berghuijs figure 7 & table 3)
+        D3_dp_max = 0.4      # (Berghuijs figure 7 & table 3)
     else:
         #--------------------------------------------
-        # Helps: 951 goes down to 333 unclassified.
+        # Helps: 951 goes down to 333 unclassified.  RECHECK ##########
         #-------------------------------------------- 
-        D1_dp_max = 1.0
+        D1_dp_max = 1.0   # (max allowed value)
         D2_dp_max = 1.0
         D3_dp_max = 1.0
     
@@ -130,14 +139,14 @@ def get_swb_class( delta_p, f_s, phi, ORIGINAL=False,
     # The min value of phi for classes A1, B1, D1, D2, & D3 could
     # all be lowered to 0 without intersecting any other classes.
     #--------------------------------------------------------------
-    # A1_phi_min = 0.35   # Berghuijs et al. (2014), table 3
-    #--------------------------------------------------------------
     if (ORIGINAL):
-        A1_phi_min = 0.0   # Berghuijs et al. (2014), figure 7.
-        B1_phi_min = 0.4
-        D1_phi_min = 0.5
-        D2_phi_min = 0.5
-        D3_phi_min = 0.4
+        A1_phi_min = 0.0      # (Berghuijs figure 7)
+        ## A1_phi_min = 0.35  # (Berghuijs table 3)
+        B1_phi_min = 0.0      # (Berghuijs figure 7)  #### BUG FIX 2023-11-29
+        ## B1_phi_min = 0.4   # (Berghuijs table 3)
+        D1_phi_min = 0.5      # (Berghuijs figure 7 & table 3)
+        D2_phi_min = 0.5      # (Berghuijs figure 7 & table 3)
+        D3_phi_min = 0.4      # (Berghuijs figure 7 & table 3)
     else:
         #-------------------------------------------
         # Helps: 333 goes down to 18 unclassified.
@@ -150,7 +159,7 @@ def get_swb_class( delta_p, f_s, phi, ORIGINAL=False,
     
     #-------------------------------------------------------------
     # In Berghuijs et al. (2014), the min value of phi for class
-    # C1 is 0.9, in both figure 6 or table 3, and the max value
+    # C1 is 0.9, in both figure 7 or table 3, and the max value
     # of phi for all D classes is 0.9.  There is a void in the
     # parameter space for phi values < 0.9 below the C1 box.
     # But if we were to lower C1_phi_min, the box for class C1
@@ -160,10 +169,10 @@ def get_swb_class( delta_p, f_s, phi, ORIGINAL=False,
     # increase the maximum value of delta_p for all of the D
     # classes to the max possible value of 1.0.   
     #-------------------------------------------------------------
-    C1_phi_min = 0.9
-    D1_phi_max = 0.9
-    D2_phi_max = 0.9
-    D3_phi_max = 0.9
+    C1_phi_min = 0.9    # (Berghuijs figure 7 & table 3)
+    D1_phi_max = 0.9    # (Berghuijs figure 7 & table 3)
+    D2_phi_max = 0.9    # (Berghuijs figure 7 & table 3)
+    D3_phi_max = 0.9    # (Berghuijs figure 7 & table 3)
   
     #-----------------------------------------------------------     
     # In Berghuijs, the max value of f_s for class A3 is 0.45.
@@ -181,13 +190,28 @@ def get_swb_class( delta_p, f_s, phi, ORIGINAL=False,
     # As classification code is written now, we assume that
     # C1 and C2 both use the same C_fs_max.
     #-----------------------------------------------------------
+    A_fs_min  = 0.0      # (Berghuijs figure 7 & table 3)
+    A1_fs_max = 0.45     # (Berghuijs figure 7 & table 3)
+    A2_fs_max = 0.45     # (Berghuijs figure 7 & table 3)
+    #----------------
+    B_fs_min  = 0.45     # (Berghuijs figure 7 & table 3)
+    B_fs_max  = 1.0      # (Berghuijs figure 7 & table 3)
+    #----------------
+    C_fs_min  = 0.0      # (Berghuijs figure 7 & table 3)
+    #----------------
+    D1_fs_val  = 0.0     # (Berghuijs figure 7 & table 3)
+    D2_fs_min  = 0.0     # (Berghuijs figure 7 & table 3)
+    D2_fs_max  = 0.2     # (Berghuijs figure 7 & table 3)
+    D3_fs_min  = D2_fs_max
+    D3_fs_max  = 0.45    # (Berghuijs figure 7 & table 3)
+     
     if (ORIGINAL or USE_B3):
-        A3_fs_max = 0.45
+        A3_fs_max = 0.45   # (Berghuijs figure 7 & table 3)
     else:
         A3_fs_max = 1.0
-    #-----------------------
+    #---------------------
     if (ORIGINAL):
-        C_fs_max = 0.25
+        C_fs_max = 0.25    # (Berghuijs figure 7 & table 3)
     else:
         #-----------------------------------------
         # Helps: 
@@ -207,12 +231,26 @@ def get_swb_class( delta_p, f_s, phi, ORIGINAL=False,
     # phi values ranging from 1.75 to 5.3 (or some other phi_max),
     # and that is done here when USE_B3=True.
     #----------------------------------------------------------------
+    A1_phi_max = 0.75        # (Berghuijs figure 7 & table 3)
+    A2_phi_min = A1_phi_max
+    A2_phi_max = 1.75        # (Berghuijs figure 7 & table 3)
+    A3_phi_min = A2_phi_max
+    #-----------------------
+    B1_phi_max = 0.75        # (Berghuijs figure 7 & table 3)
+    B2_phi_min = B1_phi_max
+    B2_phi_max = 1.75        # (Berghuijs figure 7 & table 3)
+    B3_phi_min = B2_phi_max  # (no B3 in Berghuijs)
+    #-----------------------
+    C1_phi_max = 1.5         # (Berghuijs figure 7 & table 3)
+    C2_phi_min = C1_phi_max
+
     if (ORIGINAL):
-        # There is no B3 in original SWB method.
-        A3_phi_max = 5.0
-        C2_phi_max = 5.3
-        B3_phi_max = 5.3
-    else:    
+        A3_phi_max = 5.0     # (Berghuijs figure 7 & table 3)
+        #------------------------------------------------------
+        C2_phi_max = 5.3     # (Berghuijs table 3)
+        ## C2_phi_max = 5.0  # (Berghuijs figure 7)
+        B3_phi_max = 5.3     # (No B3 in original SWB method)
+    else:  
         #----------------------------------------------------------
         # In the GAGES-II Selected Basins (SB3), after converting
         # units from mm to cm, the max value of phi is 5.5314.
@@ -225,37 +263,37 @@ def get_swb_class( delta_p, f_s, phi, ORIGINAL=False,
         A3_phi_max = 5.6
         C2_phi_max = 5.6
         B3_phi_max = 5.6
-   
+
     #--------------------------------
     # Check "A" classes for a match
     # "Precipitation out of phase"
     #--------------------------------
-    if ((-1 < d_p) and (d_p <= A_dp_max)):
-        if ((A1_phi_min < phi) and (phi <= 0.75)):
-            if ((0 < f_s) and (f_s <= 0.45)):
+    if ((A_dp_min < d_p) and (d_p <= A_dp_max)):
+        if ((A1_phi_min < phi) and (phi <= A1_phi_max)):
+            if ((A_fs_min < f_s) and (f_s <= A1_fs_max)):
                 swb_class = 'A1'   
-        elif ((0.75 < phi) and (phi <= 1.75)):
-            if ((0 < f_s) and (f_s <= 0.45)):
+        elif ((A2_phi_min < phi) and (phi <= A2_phi_max)):
+            if ((A_fs_min < f_s) and (f_s <= A2_fs_max)):
                 swb_class = 'A2' 
-        elif ((1.75 < phi) and (phi <= A3_phi_max)):
+        elif ((A3_phi_min < phi) and (phi <= A3_phi_max)):
             #-------------------------------------------
             # We can either introduce a class B3, or
             # we can raise A3_fs_max from 0.45 to 1.0
             #-------------------------------------------
-            if ((0 < f_s) and (f_s <= A3_fs_max)):                
+            if ((A_fs_min < f_s) and (f_s <= A3_fs_max)):                
                 swb_class = 'A3'
 
     #--------------------------------
     # Check "B" classes for a match
     # These are snow-dominated.
     #--------------------------------
-    if ((-1 < d_p) and (d_p <= B_dp_max)):    # (from table 3)
-        if ((0.45 < f_s) and (f_s <= 1)):
-           if ((B1_phi_min < phi) and (phi <= 0.75)):
+    if ((B_dp_min < d_p) and (d_p <= B_dp_max)):
+        if ((B_fs_min < f_s) and (f_s <= B_fs_max)):
+           if ((B1_phi_min < phi) and (phi <= B1_phi_max)):
                swb_class = 'B1'
-           elif ((0.75 < phi) and (phi <= 1.75)):
+           elif ((B2_phi_min < phi) and (phi <= B2_phi_max)):
                swb_class = 'B2'
-           elif ((1.75 < phi) and (phi <= B3_phi_max)):
+           elif ((B3_phi_min < phi) and (phi <= B3_phi_max)):
                #-------------------------------------------
                # B3 is not one of the original 10 classes
                # but it is analogous to A3.
@@ -267,31 +305,48 @@ def get_swb_class( delta_p, f_s, phi, ORIGINAL=False,
     # Check "C" classes for a match
     # "Precipitation in phase"
     #--------------------------------
-    if ((C_dp_min < d_p) and (d_p <= 1)):
-        if ((0 <= f_s) and (f_s <= C_fs_max)):
-            if ((C1_phi_min < phi) and (phi <= 1.5)):
+    if ((C_dp_min < d_p) and (d_p <= C_dp_max)):
+        if ((C_fs_min <= f_s) and (f_s <= C_fs_max)):
+            if ((C1_phi_min < phi) and (phi <= C1_phi_max)):
                 swb_class = 'C1'
-            elif ((1.5 < phi) and (phi <= C2_phi_max)):
+            elif ((C2_phi_min < phi) and (phi <= C2_phi_max)):
                 swb_class = 'C2'
 
-    #--------------------------------
+    #------------------------------------------------
     # Check "D" classes for a match
     # "Mild seasonality and humid"
-    #--------------------------------
-    if ((D1_dp_min < d_p) and (d_p <= D1_dp_max)):
-        if (f_s <= 0):
-            if ((D1_phi_min < phi) and (phi <= 0.9)):
+    # Higher number indicates higher snow fraction.
+    #------------------------------------------------
+    if (f_s == D1_fs_val):
+        if ((D1_dp_min < d_p) and (d_p <= D1_dp_max)):
+            if ((D1_phi_min < phi) and (phi <= D1_phi_max)):
                 swb_class = 'D1'
     #--------------------------------------------------
-    if ((D2_dp_min < d_p) and (d_p <= D2_dp_max)):
-        if ((0 < f_s) and (f_s <= 0.2)):
-            if ((D2_phi_min < phi) and (phi <= 0.9)):
+    elif ((D2_fs_min < f_s) and (f_s <= D2_fs_max)):
+        if ((D2_dp_min < d_p) and (d_p <= D2_dp_max)):
+            if ((D2_phi_min < phi) and (phi <= D2_phi_max)):
                 swb_class = 'D2'
     #--------------------------------------------------
-    if ((D3_dp_min < d_p) and (d_p <= D3_dp_max)):
-        if ((0.2 < f_s) and (f_s <= 0.45)):
-            if ((D3_phi_min < phi) and (phi <= 0.9)):
+    elif ((D3_fs_min < f_s) and (f_s <= D3_fs_max)):
+        if ((D3_dp_min < d_p) and (d_p <= D3_dp_max)):
+            if ((D3_phi_min < phi) and (phi <= D3_phi_max)):
                 swb_class = 'D3'
+
+#     #--------------------------------------------------                
+#     if ((D1_dp_min < d_p) and (d_p <= D1_dp_max)):
+#         if (f_s <= 0):
+#             if ((D1_phi_min < phi) and (phi <= D1_phi_max)):
+#                 swb_class = 'D1'
+#     #--------------------------------------------------
+#     if ((D2_dp_min < d_p) and (d_p <= D2_dp_max)):
+#         if ((0 < f_s) and (f_s <= 0.2)):
+#             if ((D2_phi_min < phi) and (phi <= D1_phi_max)):
+#                 swb_class = 'D2'
+#     #--------------------------------------------------
+#     if ((D3_dp_min < d_p) and (d_p <= D3_dp_max)):
+#         if ((0.2 < f_s) and (f_s <= 0.45)):
+#             if ((D3_phi_min < phi) and (phi <= D1_phi_max)):
+#                 swb_class = 'D3'
     
     if (REPORT):
         if (swb_class == 'None'):
@@ -314,5 +369,4 @@ def get_seasonal_water_balance_class( delta_p, f_s, phi):
   
 #   get_seasonal_water_balance_class()
 #---------------------------------------------------------------------
-
 
