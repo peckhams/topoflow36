@@ -1087,7 +1087,7 @@ class glacier_component( BMI_base.BMI_component ):
                                            long_name='snow_cold_content',
                                            units_name='J/m^2')
         
-        if (self.SAVE_IMR_GRIDS):
+        if (self.SAVE_IMR_PIXELS):
             model_output.open_new_ts_file( self, self.imr_ts_file, IDs,
                                           var_name='imr',
                                           long_name='ice_meltrate',
