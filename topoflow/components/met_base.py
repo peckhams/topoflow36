@@ -1419,8 +1419,7 @@ class met_component( BMI_base.BMI_component ):
             print('Calling update_bulk_richardson_number()...')
 
         #---------------------------------------------------------------
-        # (9/6/14)  Found a typo in the Zhang et al. (2000) paper,
-        # in the definition of Ri.  Also see Price and Dunne (1976).
+        # (9/6/14) 
         # We should have (Ri > 0) and (T_surf > T_air) when STABLE.
         # This also removes problems/singularities in the corrections
         # for the stable and unstable cases in the next function.      
@@ -1430,8 +1429,7 @@ class met_component( BMI_base.BMI_component ):
         #        one given by Zhang et al. (2000) and is meant for use
         #        with the stability criterion also given there.
         #---------------------------------------------------------------
-        #### top     = self.g * self.z * (self.T_air - self.T_surf)  # BUG.
-        top     = self.g * self.z * (self.T_surf - self.T_air)
+        top     = self.g * self.z * (self.T_air - self.T_surf)  
         bot     = (self.uz)**2.0 * (self.T_air + np.float64(273.15))
         self.Ri = (top / bot)
 
