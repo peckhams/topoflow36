@@ -92,6 +92,25 @@ def get_svo_name_map():
     svo_name_map['iw']  = svo_name_map['h_iwe']
     svo_name_map['cci']  = svo_name_map['Ecci']
     svo_name_map['tmr'] = svo_name_map['M_total']
+    svo_name_map['qsum'] = svo_name_map['Q_sum']
+    svo_name_map['qnsw'] = svo_name_map['Qn_SW']
+    svo_name_map['qnlw'] = svo_name_map['Qn_LW']
+    # svo_name_map['qa'] = svo_name_map['Qa']
+    svo_name_map['qe'] = svo_name_map['Qe']
+    svo_name_map['qc'] = svo_name_map['Qc']
+    svo_name_map['qh'] = svo_name_map['Qh']
+    svo_name_map['tair'] = svo_name_map['T_air']
+    svo_name_map['tsurf'] = svo_name_map['T_surf']
+    svo_name_map['rh'] = svo_name_map['RH']
+    svo_name_map['prain'] = svo_name_map['P_rain']
+    svo_name_map['psnow'] = svo_name_map['P_snow']
+    svo_name_map['uz'] = svo_name_map['uz']
+    svo_name_map['ri'] = svo_name_map['Ri']
+    svo_name_map['dn'] = svo_name_map['Dn']
+    svo_name_map['dh'] = svo_name_map['Dh']
+    svo_name_map['esatair'] = svo_name_map['e_sat_air']
+    svo_name_map['esatsurf'] = svo_name_map['e_sat_surf']
+
 
     return svo_name_map
     
