@@ -1,8 +1,11 @@
 
-# Copyright (c) 2023, Scott D. Peckham
+# Copyright (c) 2023-2024, Scott D. Peckham
 #
+# Jan 2024. Renamed all "ngen/utils" files to end in "_utils.py"
+#           instead of "_tools.py"
+#           Modified to use new data_utils.py.
 # Nov 2023. Added: get_basin_repo_dir, plot_shapefile.
-# Jun 2023. Started from hlr_tools.py to write shape_utils.py.
+# Jun 2023. Started from hlr_utils.py to write shape_utils.py.
 #           Wrote create_tsv_from_shapefile,
 #           write_tsv_header, write_tsv_line, print_attributes,
 #           get_polygon_points, convert_coords, get_bounding_box.
@@ -11,12 +14,11 @@
 #
 #  % conda activate tf36  (has gdal package)
 #  % python
-#  >>> from topoflow.utils.ngen import gages2_tools as g2
-#  >>> g2.create_tsv_from_shapefile()
+#  >>> from topoflow.utils.ngen import shape_utils as su
+#  >>> su.create_tsv_from_shapefile()
 #
 #---------------------------------------------------------------------
 #
-#  get_basin_repo_dir()
 #  open_shapefile()
 #  plot_shapefile()   ## 2023-11-28
 #
@@ -36,26 +38,16 @@ from osgeo import ogr, osr
 import json, time
 
 from topoflow.utils import projections as proj
-from topoflow.utils.ngen import gages2_tools as g2
+from topoflow.utils.ngen import data_utils as dtu
+from topoflow.utils.ngen import gages2_utils as g2
+
 from matplotlib import pyplot as plt   # for plot_shapefile()
 from matplotlib import patches
 
-# import matplotlib.patches as patches
 # from mpl_toolkits.basemap import Basemap  ## not installed
 
 # from osgeo import gdal
 
-#---------------------------------------------------------------------
-def get_basin_repo_dir():
-
-    #-----------------------------------
-    # Modify this directory as needed.
-    #-----------------------------------
-    repo_dir  = '/Users/peckhams/Dropbox/NOAA_NextGen/'
-    repo_dir += '__NextGen_Example_Basin_Repo/'
-    return repo_dir
-
-#   get_basin_repo_dir()
 #---------------------------------------------------------------------
 def open_shapefile( shape_path ):
 
@@ -71,6 +63,10 @@ def plot_shapefile( data_dir=None, shape_file=None,
                     TIGER_2012=True, CENSUS_2014=False,
                     CONVERT=False, SAVE_PNG=False ):
 
+    #-----------------------------------------------------------
+    # Note: This function currently plots US state boundaries
+    #       and then plots points using SWB classes.
+    #       A more general version will be given later.
     #-----------------------------------------------------------
     # Note: This function uses only Python packages that are
     #       already used by TopoFlow and that are available
@@ -93,23 +89,12 @@ def plot_shapefile( data_dir=None, shape_file=None,
     #-----------------------------------------------------------        
     start_time = time.time()   
     print('Running...')
-    #--------------------------------------------
-    # You will need to modify these directories
-    # and get all the necessary files.
-    #--------------------------------------------
-    if (data_dir is None):
-        # data_dir = get_basin_repo_dir()
-        # data_dir += 'GAGES-II/gagesII_9322_point_shapefile/'
-        ## data_dir += 'GAGES-II/boundaries-shapefiles-by-aggeco/'
-        #----------------------------------------------------------
-        base_dir = '/Users/peckhams/Data/US_State_Boundaries/'
-        data_dir = base_dir
     #----------------------------------------------
     if (shape_file is None):
         TIGER_2012 = True
     #----------------------------------------------  
     if (TIGER_2012):
-        data_dir = base_dir + 'TIGER_2012/'
+        data_dir = dtu.get_data_dir( 'TIGER_2012' )
         shape_file = 'tl_2012_us_state.shp'
         #------------------------------------------
         # Use these bounds to plot x1,y1 directly
@@ -127,7 +112,7 @@ def plot_shapefile( data_dir=None, shape_file=None,
             # ymax = 6947666.110    
     #----------------------------------------------
     if (CENSUS_2014):
-        data_dir = base_dir + 'CENSUS_2014/'
+        data_dir = dtu.get_data_dir( 'CENSUS_2014' )
         shape_file = 'usa-states-census-2014.shp'
         if not(CONVERT):
             xmin = -126.0  # -124.736342
@@ -399,16 +384,16 @@ def plot_shapefile( data_dir=None, shape_file=None,
     
 #   plot_shapefile()
 #---------------------------------------------------------------------
-def create_tsv_from_shapefile( data_dir=None, dem_dir=None,
+def create_tsv_from_shapefile( data_dir=None, new_dir=None,
+                    dem_dir=None,
                     shape_file='gagesII_9322_sept30_2011.shp',                    
                     prj_file  ='gagesII_9322_sept30_2011.prj',
-#                     shape_file='bas_ref_all.shp',                    
-#                     prj_file  ='bas_ref_all.prj',
                     tsv_file='new_gages2_all.tsv',
-#                     tsv_file='new_gages2_conus.tsv',
                     nf_max=50, REPORT=True, insert_key=None,
                     ADD_BOUNDING_BOX=True, SWAP_XY=True,
-                    filter_key=None, filter_value=None ):
+                    filter_key=None, filter_value=None,
+                    out_lon_heading='Longitude',
+                    out_lat_heading='Latitude'):
 
     start_time = time.time()
     print('Running...')
@@ -417,10 +402,9 @@ def create_tsv_from_shapefile( data_dir=None, dem_dir=None,
     # and get all the necessary files.
     #--------------------------------------------
     if (data_dir is None):
-        data_dir  = '/Users/peckhams/Dropbox/NOAA_NextGen/'
-        data_dir += '__NextGen_Example_Basin_Repo/'
-        data_dir += 'GAGES-II/gagesII_9322_point_shapefile/'
-        # data_dir += 'GAGES-II/boundaries-shapefiles-by-aggeco/'
+        data_dir = dtu.get_data_dir( 'USGS_GAGES2_all' )
+    if (new_dir is None):
+        data_dir = dtu.get_new_data_dir( 'USGS_GAGES2_all' )
         
     shape_path = data_dir + shape_file
     prj_path   = data_dir + prj_file
@@ -428,7 +412,7 @@ def create_tsv_from_shapefile( data_dir=None, dem_dir=None,
     layer      = shape_unit.GetLayer()
     n_features = np.int32(0)
     
-    tsv_path   = data_dir + tsv_file 
+    tsv_path   = new_dir + tsv_file 
     tsv_unit   = open( tsv_path, 'w') 
     if (ADD_BOUNDING_BOX):
         new_headings=['MINLON','MAXLON','MINLAT','MAXLAT']
@@ -485,9 +469,9 @@ def create_tsv_from_shapefile( data_dir=None, dem_dir=None,
         #-------------------------------------
         IN_BOX = check_bounding_box(attributes,
                        minlon, maxlon, minlat, maxlat,
-                       NOTIFY=REPORT)
-                   ## out_lon_heading='Longitude',
-                   ## out_lat_heading='Latitude')
+                       NOTIFY=REPORT,
+                       out_lon_heading=out_lon_heading,
+                       out_lat_heading=out_lat_heading)
 
         #--------------------------------------------              
         # Apply some test or filter to this feature
