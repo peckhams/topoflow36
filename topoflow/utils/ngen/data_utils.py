@@ -248,7 +248,7 @@ def get_new_tsv_filepath( db_str='USGS_NWIS_Web' ):
     elif (db_str == 'USDA_ARS'):
         file_path = new_dir + 'ars_basin_info.tsv'
     elif (db_str == 'US_EPA'):
-        file_path = data_dir + 'EPA_WQX_stations.tsv'      ######### data_dir   
+        file_path = data_dir + 'EPA_WQX_sites.tsv'      ######### data_dir   
     #-----------------------------------------------------------------
     elif (db_str == 'USGS_FPS'):
         file_path = new_dir + 'FPS_basin_info.tsv'
@@ -270,30 +270,20 @@ def get_new_tsv_filepath( db_str='USGS_NWIS_Web' ):
     # These currently use "data_dir" vs. "new_dir".
     # but apparently most don't measure discharge.
     #----------------------------------------------------------------- 
-    # The one for 'USGS_NWIS3' has 145375 "stream-type" records
-    # but apparently most don't measure discharge.
-    #-----------------------------------------------------------------
     elif (db_str == 'USGS_NWIS_Web'):
         file_path = data_dir + 'NWIS_Stream_Site_Daily_Data.tsv'
     elif (db_str == 'USGS_NWIS_Web_Old'):
-        file_path = data_dir + 'USGS_stream_gauge_data.tsv'     ############          
-    elif (db_str == 'USGS_NWIS_WQP1'):
-        file_path = data_dir + 'NWIS_Stream_Site_Daily_Q_Data.tsv'       
-    elif (db_str == 'USGS_NWIS_WQP2'):
-        file_path = data_dir + 'NWIS_Stream_Site_Inst_Q_Data.tsv'
-    elif (db_str == 'USGS_NWIS_WQP3'):
-        file_path = data_dir + 'NWIS_Stream_Site_Any_Data.tsv'
+        file_path = data_dir + 'USGS_stream_gauge_data.tsv'     ############
     #-----------------------------------------------------------------
-    # Check all files in these "new directories".
-    #-----------------------------------------------------------------            
-#     elif (db_str == 'USGS_NWIS_Web'):
-#         file_path = new_dir + 'USGS_stream_gauge_data.tsv'
-#     elif (db_str == 'USGS_NWIS_WQP1'):
-#         file_path = new_dir + 'USGS_NWIS_stream_stations_usgs.tsv'       
-#     elif (db_str == 'USGS_NWIS_WQP2'):
-#         file_path = new_dir + 'USGS_NWIS_stream_stations_usgs.tsv'
-#     elif (db_str == 'USGS_NWIS_WQP3'):
-#         file_path = new_dir + 'USGS_NWIS_stream_stations_usgs.tsv'
+    # The one for 'USGS_NWIS3' has 145375 "stream-type" records
+    # but apparently most don't measure discharge.
+    #-----------------------------------------------------------------          
+    elif (db_str == 'USGS_NWIS_WQP1'):
+        file_path = data_dir + 'WQP_USGS_Stream_Site_Daily_Q_Info.tsv'       
+    elif (db_str == 'USGS_NWIS_WQP2'):
+        file_path = data_dir + 'WQP_USGS_Stream_Site_Inst_Q_Info.tsv'
+    elif (db_str == 'USGS_NWIS_WQP3'):
+        file_path = data_dir + 'WQP_USGS_Stream_Site_Info.tsv'
     else:
         print('SORRY: No match for:', db_str)
         file_path = None
@@ -626,7 +616,7 @@ def get_lon_column( db_str ):
     # USGS_NWIS_WQP3  = "LongitudeMeasure" 12
     #-------------------------------------------------------
     # NOTE:  For GAGES2_SB3, outlet lat/lon are not given,
-    #        but we can find them using station ID.
+    #        but we can find them using site ID.
     #        However, the centroid lat/lon are provided.
     #-------------------------------------------------------
     list1 = ['USGS_GAGES2_all', 'USGS_GAGES2_ref']
@@ -679,7 +669,7 @@ def get_lat_column( db_str ):
     # USGS_NWIS_WQP3  = "LatitudeMeasure" 11
     #-------------------------------------------------------
     # NOTE:  For GAGES2_SB3, outlet lat/lon are not given,
-    #        but we can find them using station ID.
+    #        but we can find them using site ID.
     #        However, the centroid lat/lon are provided.
     #-------------------------------------------------------
     list1 = ['USGS_GAGES2_all', 'USGS_GAGES2_ref']
@@ -1218,7 +1208,7 @@ def get_state_code( usgs_id, long_name ):
 #             state_name, state_code = usgs.get_usgs_missing_state( usgs_id, state_code_map)
 #         except:
 #             print('WARNING: Could not fix state code for:')
-#             print('         station_id =', usgs_id)
+#             print('         site_id =', usgs_id)
 #             print()
                 
     return state_code

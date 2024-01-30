@@ -21,13 +21,13 @@
 #           using new routines in hlr_utils.py.
 #           Added get_lon_col, get_lat_col.
 #           Moved some functions to usgs_utils.py:  haversine,
-#           distance_on_sphere, get_closest_station.
+#           distance_on_sphere, get_closest_site.
 #           Added RFC basins to collate() function.
 # Sep 2023. Finished add_hlr_basins (new tools in usgs_utils.py).
-#           Updated get_closest_station() for nodata lon or lat.
+#           Updated get_closest_site() for nodata lon or lat.
 #           Started work on adding NOAA RFC basins.
 # Jul 2023. Added haversine, distance_on_sphere,
-#           get_closest_station, add_ars_basins, add_czo_basins,
+#           get_closest_site, add_ars_basins, add_czo_basins,
 #           add_hlr_basins, add_lter_basins, add_neon_basins,
 #           and their subfunctions.
 #           Moved all USGS-specific utils to usgs_utils.py.
@@ -220,7 +220,7 @@ def write_new_header_OLD( out_tsv_unit, delim ):
  
     new_headings  = [
     'LongName', 'State', 'SiteURL',
-    'Closest_Station_ID', 'Closest_Station_Dist',
+    'Closest_Site_ID', 'Closest_Site_Dist',
     'StartDate', 'EndDate',
     'MinLon', 'MaxLon', 'MinLat', 'MaxLat',
     #-------------------------------------------------------------
@@ -854,9 +854,9 @@ def collate( out_tsv_file=None, max_count=1000, DEBUG=False ):
                     hlr_grid=hlr_code_grid, grid_info=hlr_grid_info )
                 att_dict[ 'hlr_code' ] = hlr_code  # as a string
 
-        #--------------------------------------------------
-        # Try to get the hydrograph type for this station
-        #--------------------------------------------------
+        #-----------------------------------------------
+        # Try to get the hydrograph type for this site
+        #-----------------------------------------------
         if (site_id in hydrograph_type_dict):
             hgraph_info = hydrograph_type_dict[ site_id ]
             att_dict[ 'hgraph_type' ] = hgraph_info[ 'htype' ]
@@ -875,10 +875,10 @@ def collate( out_tsv_file=None, max_count=1000, DEBUG=False ):
         # This is used for non-USGS site IDs
         #-------------------------------------
 #         closest_id, clon, clat, dmin = \
-#             usgs.get_closest_station(usgs_station_coords, 
+#             usgs.get_closest_site(usgs_site_coords, 
 #                 lon_str, lat_str, REPORT=False)
-#         closest_station_id   = closest_id
-#         closest_station_dist = '{x:.2f}'.format(x=dmin)  # string
+#         closest_site_id   = closest_id
+#         closest_site_dist = '{x:.2f}'.format(x=dmin)  # string
          
         #--------------------------------------------
         # Build ordered att_list from att_dict here
@@ -903,10 +903,10 @@ def collate( out_tsv_file=None, max_count=1000, DEBUG=False ):
             
     #---------------------------------------------
     # Get coords of all USGS gauged basins so we
-    # can find the closest station and distance
+    # can find the closest site and distance
     #---------------------------------------------
-    ## usgs_station_coords = usgs.get_usgs_station_coords( NWIS_ALL=False )
-    usgs_station_coords = usgs.get_usgs_station_coords( NWIS_ALL=True )
+    ## usgs_site_coords = usgs.get_usgs_site_coords( NWIS_ALL=False )
+    usgs_site_coords = usgs.get_usgs_site_coords( NWIS_ALL=True )
         
     #-----------------------------------    
     # Add rows for the USDA ARS basins
@@ -916,7 +916,7 @@ def collate( out_tsv_file=None, max_count=1000, DEBUG=False ):
     file_unit = open(file_path, 'r')
     dtu.skip_header_lines( file_unit, key=key)
     add_ars_basins( file_unit, out_tsv_unit,
-                    usgs_station_coords,
+                    usgs_site_coords,
                     hlr_grid_info, hlr_code_grid,
                     att_key_list, delim )
     file_unit.close()
@@ -929,7 +929,7 @@ def collate( out_tsv_file=None, max_count=1000, DEBUG=False ):
     file_unit = open(file_path, 'r')
     dtu.skip_header_lines( file_unit, key=key)
     add_czo_basins( file_unit, out_tsv_unit,
-                    usgs_station_coords,
+                    usgs_site_coords,
                     hlr_grid_info, hlr_code_grid,
                     att_key_list, delim )
     file_unit.close()
@@ -942,7 +942,7 @@ def collate( out_tsv_file=None, max_count=1000, DEBUG=False ):
 #     file_unit = open(file_path, 'r')
 #     dtu.skip_header_lines( file_unit, key=key)
 #     add_hlr_basins( file_unit, out_tsv_unit,
-#                     usgs_station_coords,
+#                     usgs_site_coords,
 #                     hlr_grid_info, hlr_code_grid,
 #                     att_key_list, delim )
 #     file_unit.close()
@@ -955,7 +955,7 @@ def collate( out_tsv_file=None, max_count=1000, DEBUG=False ):
     file_unit = open(file_path, 'r')
     dtu.skip_header_lines( file_unit, key=key)
     add_lter_basins( file_unit, out_tsv_unit,
-                    usgs_station_coords,
+                    usgs_site_coords,
                     hlr_grid_info, hlr_code_grid,
                     att_key_list, delim )
     file_unit.close()
@@ -968,7 +968,7 @@ def collate( out_tsv_file=None, max_count=1000, DEBUG=False ):
     file_unit = open(file_path, 'r')
     dtu.skip_header_lines( file_unit, key=key)
     add_neon_basins( file_unit, out_tsv_unit,
-                    usgs_station_coords,
+                    usgs_site_coords,
                     hlr_grid_info, hlr_code_grid,
                     att_key_list, delim )
     file_unit.close()
@@ -1247,7 +1247,7 @@ def get_new_usgs_line( usgs_line, base_key_headings, delim,
 #   get_new_usgs_line()
 #---------------------------------------------------------------------
 def add_ars_basins( ars_unit, out_tsv_unit,
-                    usgs_station_coords,
+                    usgs_site_coords,
                     hlr_grid_info, hlr_code_grid,
                     att_key_list, delim ):
 
@@ -1294,7 +1294,7 @@ def add_ars_basins( ars_unit, out_tsv_unit,
         lon = att_dict['lon']
         lat = att_dict['lat']           
         closest_id, clon, clat, dmin = \
-            usgs.get_closest_station(usgs_station_coords, 
+            usgs.get_closest_site(usgs_site_coords, 
                 lon, lat, REPORT=False)
         att_dict['closest_site_id']   = closest_id
         att_dict['closest_site_dist'] = '{x:.2f}'.format(x=dmin) 
@@ -1340,7 +1340,7 @@ def add_ars_basins( ars_unit, out_tsv_unit,
 #   add_ars_basins()
 #---------------------------------------------------------------------
 def add_czo_basins( czo_unit, out_tsv_unit,
-                    usgs_station_coords,
+                    usgs_site_coords,
                     hlr_grid_info, hlr_code_grid,
                     att_key_list, delim ):
 
@@ -1411,7 +1411,7 @@ def add_czo_basins( czo_unit, out_tsv_unit,
         lon = att_dict['lon']
         lat = att_dict['lat']           
         closest_id, clon, clat, dmin = \
-            usgs.get_closest_station(usgs_station_coords, 
+            usgs.get_closest_site(usgs_site_coords, 
                 lon, lat, REPORT=False)
         att_dict['closest_site_id']   = closest_id
         att_dict['closest_site_dist'] = '{x:.2f}'.format(x=dmin) 
@@ -1476,13 +1476,13 @@ def add_czo_basins( czo_unit, out_tsv_unit,
 #   add_czo_basins()
 #---------------------------------------------------------------------
 def add_hlr_basins( hlr_unit, out_tsv_unit,
-                    usgs_station_coords,
+                    usgs_site_coords,
                     hlr_grid_info, hlr_code_grid,
                     att_key_list, delim ):
                     
     hlr_id_col   = get_id_column( 'USGS_HLR' )
     ## hlr_name_col = get_name_column( 'USGS_HLR' )
-    site_info = usgs.get_usgs_station_info_dict()
+    site_info = usgs.get_usgs_site_info_dict()
     mapped_to_gauge_count = 0
 
     print('Working on USGS HLR basins...')
@@ -1534,7 +1534,7 @@ def add_hlr_basins( hlr_unit, out_tsv_unit,
         lon = att_dict['lon']
         lat = att_dict['lat']           
         closest_id, clon, clat, dmin = \
-            usgs.get_closest_station(usgs_station_coords, 
+            usgs.get_closest_site(usgs_site_coords, 
                 lon, lat, REPORT=False)
         att_dict['closest_site_id']   = closest_id
         att_dict['closest_site_dist'] = '{x:.2f}'.format(x=dmin) 
@@ -1542,9 +1542,9 @@ def add_hlr_basins( hlr_unit, out_tsv_unit,
         # Don't know bounding box, vert_datum, huc, etc. 
         #-------------------------------------------------
 
-        #--------------------------------------------------     
-        # Try to get these from closest USGS station info
-        #--------------------------------------------------
+        #-----------------------------------------------     
+        # Try to get these from closest USGS site info
+        #-----------------------------------------------
         IS_USGS_NWIS_ID = (dmin < 1.0)  # within 1 km (found 1506)
         ## IS_USGS_NWIS_ID = (dmin < 2.0)  # within 2 km (found 3046)
         if (IS_USGS_NWIS_ID):
@@ -1552,7 +1552,7 @@ def add_hlr_basins( hlr_unit, out_tsv_unit,
             # att_dict['site_id'] = usgs_id
             # Use usgs_id to get more attributes.
             try:
-                site_rec  = site_info[ usgs_id ]  # station_info is dict.
+                site_rec  = site_info[ usgs_id ]  # site_info is dict.
                 site_name = site_rec['name']
                 att_dict['site_name']  = site_name
                 att_dict['long_name']  = usgs.get_usgs_long_name( site_name )  
@@ -1608,7 +1608,7 @@ def add_hlr_basins( hlr_unit, out_tsv_unit,
 #   add_hlr_basins()
 #---------------------------------------------------------------------
 def add_lter_basins( lter_unit, out_tsv_unit,
-                     usgs_station_coords,
+                     usgs_site_coords,
                      hlr_grid_info, hlr_code_grid,
                      att_key_list, delim ):
                     
@@ -1690,7 +1690,7 @@ def add_lter_basins( lter_unit, out_tsv_unit,
         lon = att_dict['lon']
         lat = att_dict['lat']          
         closest_id, clon, clat, dmin = \
-            usgs.get_closest_station(usgs_station_coords, 
+            usgs.get_closest_site(usgs_site_coords, 
                 lon, lat, REPORT=False)
         att_dict['closest_site_id']   = closest_id
         att_dict['closest_site_dist'] = '{x:.2f}'.format(x=dmin)
@@ -1742,7 +1742,7 @@ def add_lter_basins( lter_unit, out_tsv_unit,
 #   add_lter_basins()
 #---------------------------------------------------------------------
 def add_neon_basins( neon_unit, out_tsv_unit,
-                     usgs_station_coords,
+                     usgs_site_coords,
                      hlr_grid_info, hlr_code_grid,
                      att_key_list, delim ):
 
@@ -1857,7 +1857,7 @@ def add_neon_basins( neon_unit, out_tsv_unit,
         lon = att_dict['lon']
         lat = att_dict['lat']           
         closest_id, clon, clat, dmin = \
-            usgs.get_closest_station(usgs_station_coords, 
+            usgs.get_closest_site(usgs_site_coords, 
                 lon, lat, REPORT=False)
         att_dict['closest_site_id']   = closest_id
         att_dict['closest_site_dist'] = '{x:.2f}'.format(x=dmin)

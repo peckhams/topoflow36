@@ -257,7 +257,7 @@ def plot_shapefile( data_dir=None, shape_file=None,
     # swb_colors = list(map(color_dict.get, swb_g2))
     
     #-------------------------------------------
-    # Now add a circle for each GAGES2 station
+    # Now add a circle for each GAGES2 site.
     # Convert xy to another CRS, if necessary.
     #-----------------------------------------------------------
     # For matplotlib.pyplot.plot, markersize units are points.
@@ -280,7 +280,7 @@ def plot_shapefile( data_dir=None, shape_file=None,
 #         y0 = 4700000.0
 #     plt.plot(x0,y0, marker='o', markersize=5, color='red')
     #------------------------------------------------------------------
-    # for each in station_list:
+    # for each in site_list:
     #     circle = plt.Circle((x, y), radius, color='r')
     #     ax.add_patch(circle)
     #     OR: plt.plot(x,y, marker='o', markersize=7, color='red')

@@ -61,7 +61,7 @@ import numpy as np
 import os, os.path
 import json, requests, time
 
-import pickle    # to save usgs station info map
+import pickle    # to save usgs site info map
 from topoflow.utils.ngen import data_utils as dtu
 from topoflow.utils.ngen import shape_utils as su
 from topoflow.utils.ngen import usgs_utils as usgs
@@ -606,7 +606,7 @@ def create_combo_tsv( tsv_file='new_combo_rfc_info.tsv',
     #-------------------------------
     rfc_map   = get_usgs_rfc_dict_v0()
     htype_map = get_hydrograph_type_dict()
-    site_type_dict = usgs.get_station_type_dict()   ####
+    site_type_dict = usgs.get_site_type_dict()   ####
 
     alt_id_list1, alt_id_list2 = get_equivalent_nws_ids2()
     
@@ -737,7 +737,7 @@ def create_combo_tsv( tsv_file='new_combo_rfc_info.tsv',
                
         #-------------------------------------
         # Get hydrograph type classification
-        # (not available for all stations)
+        # (not available for all sites)
         #-------------------------------------
         if (usgs_id in htype_map):
             rec4 = htype_map[ usgs_id ]
@@ -997,10 +997,10 @@ def get_hydrograph_type_dict( SAVE_TO_FILE=True ):
     #----------------------------------
     htypes = ['flashy', 'slow', 'regulated', 'snow-dom']
     
-    #------------------------------------------------   
+    #---------------------------------------------   
     # Create a dictionary with hydrograph types
-    # and other info for each USGS station ID found
-    #------------------------------------------------
+    # and other info for each USGS site ID found
+    #---------------------------------------------
     for k in range(len(file_names)):
         htype = htypes[k]
         file_path = new_dir + file_names[k]
@@ -1518,7 +1518,7 @@ def create_hads_tsv( data_dir=None,
     header = ''
     header += 'USGS_ID'      + delim
     header += 'USGS_name'    + delim
-    header += 'Station_type' + delim
+    header += 'Site_type'    + delim
     header += 'Longitude'    + delim
     header += 'Latitude'     + delim
     header += 'RFC_ID'       + delim
@@ -1533,7 +1533,7 @@ def create_hads_tsv( data_dir=None,
     htype_map = get_hydrograph_type_dict()
     null_info = {'rfc_name': 'unknown', 'huc8': 'unknown',
                  'lat':'-999', 'lon':'-999'}
-    station_type_dict = usgs.get_station_type_dict()
+    site_type_dict = usgs.get_site_type_dict()
 
     k = 0
     lat_diff_count = 0
@@ -1607,7 +1607,7 @@ def create_hads_tsv( data_dir=None,
         # 1601 USGS IDs in the HADS file do not occur in the
         # USGS_NWIS_all (streams only), and appear to be other
         # site types like atmosphere, canal, lake, and well.
-        # See: get_station_type_dict() in usgs_utils.py. 
+        # See: get_site_type_dict() in usgs_utils.py. 
         #-----------------------------------------------------------
         # See:  https://en.wikipedia.org/wiki/Decimal_degrees
         #-----------------------------------------------------------
@@ -1624,7 +1624,7 @@ def create_hads_tsv( data_dir=None,
 
         #-------------------------------------
         # Get hydrograph type classification
-        # (not available for all stations)
+        # (not available for all sites)
         #-------------------------------------
         try:
             htype_info = htype_map[ usgs_id ]
@@ -1632,13 +1632,13 @@ def create_hads_tsv( data_dir=None,
         except:
             htype = 'unknown'
 
-        #------------------------------          
-        # Get the station type string
-        #------------------------------
+        #---------------------------          
+        # Get the site type string
+        #---------------------------
         try:
-            station_type = station_type_dict[ usgs_id ] 
+            site_type = site_type_dict[ usgs_id ] 
         except:
-            station_type = 'unknown'
+            site_type = 'unknown'
           
         #-----------------------------
         # Write line to new TSV file
@@ -1646,7 +1646,7 @@ def create_hads_tsv( data_dir=None,
         line = ''
         line += usgs_id      + delim
         line += loc_name     + delim
-        line += station_type + delim
+        line += site_type    + delim
         line += lon_str      + delim
         line += lat_str      + delim
         line += rfc_name     + delim
@@ -1905,9 +1905,9 @@ def create_tsv_via_api( base_key=None, ADD_INFO=False):
             hsa_id   = rfc_info[ 'hsa_id' ]
             goes_id  = rfc_info[ 'goes_id' ]
                  
-        #-----------------------------------------
-        # Write all station data to new TSV file
-        #-----------------------------------------
+        #--------------------------------------
+        # Write all site data to new TSV file
+        #--------------------------------------
         line = ''
         line += new_dict['usgs_id']         + delim
         line += new_dict['nws_loc_id']      + delim

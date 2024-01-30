@@ -12,8 +12,8 @@
 #           Wrote try_to_get_outlet_info() as separate function
 #           that calls several others to clean up code.
 #           Modified create_tsv() to include the closest USGS
-#           station ID and distance, by calling:
-#           usgs.get_closest_station().
+#           site ID and distance, by calling:
+#           usgs.get_closest_site().
 #           Changed string formatting for distance: 2-digit prec.
 # Jul 2023. Modified to use newer shape_utils.py, which
 #           contains many of the original functions from here.
@@ -253,7 +253,7 @@ def get_missing_basin_name( lon, lat ):
 
     #------------------------------------------------------------
     # Note: The HLR data set does not provide basin names.
-    #       Try to match lon/lat to a USGS station to get name.
+    #       Try to match lon/lat to a USGS site to get name.
     #------------------------------------------------------------
     pass
     
@@ -373,13 +373,13 @@ def create_tsv( shape_dir=None, dem_dir=None, new_dir=None,
 
     #---------------------------------------------
     # Get coords of all USGS gauged basins so we
-    # can find the closest station and distance
+    # can find the closest site and distance
     #---------------------------------------------
     if (SAVE_OUTLET_INFO):
         # NWIS_ALL = False  # 27,915 USGS stream gauges (NWIS_Web)
         # NWIS_ALL = False  # 25,420 USGS stream gauges (NWIS_Web_Old)
         NWIS_ALL = True   # 145,375 USGS stream gauges  (NWIS_WQP)
-        usgs_station_coords = usgs.get_usgs_station_coords( NWIS_ALL=NWIS_ALL )
+        usgs_site_coords = usgs.get_usgs_site_coords( NWIS_ALL=NWIS_ALL )
     
     #-----------------------------------------    
     # Iterate over the features in the layer
@@ -563,17 +563,17 @@ def create_tsv( shape_dir=None, dem_dir=None, new_dir=None,
                 print('hlr_perim  =', hlr_perim)  # meters
             print()
 
-        #---------------------------
-        # Get closest USGS station
-        #---------------------------
+        #------------------------
+        # Get closest USGS site
+        #------------------------
         if (SAVE_OUTLET_INFO):
             lon_str = '{x:.4f}'.format(x=lon)  # not accurate to 4 decimals
             lat_str = '{x:.4f}'.format(x=lat)
             closest_id, clon, clat, dmin = \
-                usgs.get_closest_station(usgs_station_coords, 
+                usgs.get_closest_site(usgs_site_coords, 
                      lon_str, lat_str, REPORT=False)
-            closest_station_id   = closest_id
-            closest_station_dist = '{x:.2f}'.format(x=dmin)  # string
+            closest_site_id   = closest_id
+            closest_site_dist = '{x:.2f}'.format(x=dmin)  # string
 
         #-----------------------------------
         # Save info for which HLR basins ?
@@ -601,7 +601,7 @@ def create_tsv( shape_dir=None, dem_dir=None, new_dir=None,
             if (SAVE_OUTLET_INFO):
                 su.write_tsv_line( tsv_unit, attributes,
                    insert_key=insert_key,
-                   new_values=[closest_id,closest_station_dist,
+                   new_values=[closest_id,closest_site_dist,
                                lon,lat,col,row,minlon,maxlon,minlat,maxlat])
             else:
                 su.write_tsv_line( tsv_unit, attributes,
@@ -1973,8 +1973,8 @@ def get_hlr_outlet_info( SAVE_TO_FILE=True ):
     hlr_path = dtu.get_new_tsv_filepath( 'USGS_HLR' )
     hlr_unit = open( hlr_path, 'r' )
     hlr_line = hlr_unit.readline()   # skip one-line header
-    n_stations = dtu.get_n_records( 'USGS_HLR_outlets')
-    ### n_stations = 9539
+    n_sites = dtu.get_n_records( 'USGS_HLR_outlets')
+    ### n_sites = 9539
     
     #--------------------------------------    
     # Construct the hlr_outlet_info array
@@ -1986,7 +1986,7 @@ def get_hlr_outlet_info( SAVE_TO_FILE=True ):
     k = 0
     delim = '\t'  # tab character
 
-    hlr_outlet_info = np.zeros((n_stations,4), dtype='<U16')
+    hlr_outlet_info = np.zeros((n_sites,4), dtype='<U16')
     n_bad_lats = 0
     n_bad_lons = 0
 
@@ -2040,17 +2040,17 @@ def get_hlr_outlet_info( SAVE_TO_FILE=True ):
     
 #   get_hlr_outlet_info()
 #---------------------------------------------------------------------
-def get_closest_hlr_outlet(usgs_id, usgs_station_info,
+def get_closest_hlr_outlet(usgs_id, usgs_site_info,
                            hlr_outlet_info, REPORT=False):
 
     #------------------------------------------------------------
-    # This function uses usgs_station_info and hlr_outlet_info.
+    # This function uses usgs_site_info and hlr_outlet_info.
     # This function's caller should obtain these via functions:
-    # get_usgs_station_info_dict() & get_hlr_outlet_info().
+    # get_usgs_site_info_dict() & get_hlr_outlet_info().
     #------------------------------------------------------------
-    station_info = usgs_station_info[ usgs_id ]
-    usgs_lon = station_info[ 'lon' ]
-    usgs_lat = station_info[ 'lat' ]
+    site_info = usgs.usgs_site_info[ usgs_id ]
+    usgs_lon = site_info[ 'lon' ]
+    usgs_lat = site_info[ 'lat' ]
     
     hlr_ids   = hlr_outlet_info[:,0]
     hlr_lons  = np.float64( hlr_outlet_info[:,1] )

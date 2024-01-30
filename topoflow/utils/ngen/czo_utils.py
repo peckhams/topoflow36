@@ -68,10 +68,10 @@ def get_usgs_site_ids():
 #---------------------------------------------------------------------
 def get_czo_site_id( values ):
 
-    #-------------------------------------------------
-    # Note:  CZO stations don't have an official ID,
+    #----------------------------------------------
+    # Note:  CZO sites don't have an official ID,
     #        so we make one from other info.
-    #-------------------------------------------------
+    #----------------------------------------------
     obs_name = values[0].strip()
     p1 = obs_name.find('(')
     obs_abbr = obs_name[p1:]
