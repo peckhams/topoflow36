@@ -747,7 +747,7 @@ class glacier_component( glacier_base.glacier_component ):
         if (Cp_ice is not None):
             self.update_var( 'Cp_ice', Cp_ice)
         
-        h0_ice = model_input.read_next(self.h0_ice, self.h0_ice_type, rti)
+        h0_ice = model_input.read_next(self.h0_ice_unit, self.h0_ice_type, rti)
         if (h0_ice is not None):
             self.update_var( 'h0_ice', h0_ice)
 
