@@ -13,6 +13,7 @@
 #     data:          tf_data_his
 #     LEM:           erode_d8_global, erode_d8_local, dem_smoother
 #     D8:            d8_global, d8_local
+#     glacier:       tf_glacier_energy_balance
 
 # NOTE: Needed to move satzone before evap for "h_table". (2/5/13)
 
@@ -28,6 +29,7 @@ satzone         tf_satzone_darcy_layers
 evap            tf_evap_priestley_taylor
 infil           tf_infil_richards_1d
 ice             tf_ice_gc2d
+glacier 	tf_glacier_energy_balance
 hydro_model     topoflow_driver
   
 

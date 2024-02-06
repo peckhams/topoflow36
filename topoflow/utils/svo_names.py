@@ -60,10 +60,10 @@ def get_svo_name_map():
     #-------------------------------------
     # Abbreviations used in snow_base.py
     #-------------------------------------
-    svo_name_map['hs']  = svo_name_map['h_snow']
-    svo_name_map['sw']  = svo_name_map['h_swe']
-    svo_name_map['mr']  = svo_name_map['SM']    ## See 'imr' below.
-    svo_name_map['cc']  = svo_name_map['Ecc']
+    # svo_name_map['hs']  = svo_name_map['h_snow']
+    # svo_name_map['sw']  = svo_name_map['h_swe']
+    # svo_name_map['mr']  = svo_name_map['SM']    ## See 'imr' below.
+    # svo_name_map['cc']  = svo_name_map['Ecc']
     #------------------------------------
     # Abbreviations used in met_base.py
     #------------------------------------
@@ -75,11 +75,43 @@ def get_svo_name_map():
     #------------------------------------
     # Abbreviations used in ice_base.py
     #------------------------------------
-    svo_name_map['hi']  = svo_name_map['H']
-    svo_name_map['zi']  = svo_name_map['Zi']
-    svo_name_map['imr'] = svo_name_map['MR']
+    # svo_name_map['hi']  = svo_name_map['H']
+    # svo_name_map['zi']  = svo_name_map['Zi']
+    # svo_name_map['imr'] = svo_name_map['MR']
     ## svo_name_map['zb']  = svo_name_map['Zb']  # not used yet
-    
+    #------------------------------------
+    # Abbreviations used in glacier_base.py
+    #------------------------------------
+    svo_name_map['smr']  = svo_name_map['SM']
+    svo_name_map['imr'] = svo_name_map['IM']
+    svo_name_map['tmr'] = svo_name_map['M_total']
+    svo_name_map['hs']  = svo_name_map['h_snow']
+    svo_name_map['hi']  = svo_name_map['h_ice']
+    svo_name_map['sw']  = svo_name_map['h_swe']
+    svo_name_map['cc']  = svo_name_map['Eccs']
+    svo_name_map['iw']  = svo_name_map['h_iwe']
+    svo_name_map['cci']  = svo_name_map['Ecci']
+    svo_name_map['tmr'] = svo_name_map['M_total']
+    svo_name_map['qsum'] = svo_name_map['Q_sum']
+    svo_name_map['qnsw'] = svo_name_map['Qn_SW']
+    svo_name_map['qnlw'] = svo_name_map['Qn_LW']
+    # svo_name_map['qa'] = svo_name_map['Qa']
+    svo_name_map['qe'] = svo_name_map['Qe']
+    svo_name_map['qc'] = svo_name_map['Qc']
+    svo_name_map['qh'] = svo_name_map['Qh']
+    svo_name_map['tair'] = svo_name_map['T_air']
+    svo_name_map['tsurf'] = svo_name_map['T_surf']
+    svo_name_map['rh'] = svo_name_map['RH']
+    svo_name_map['prain'] = svo_name_map['P_rain']
+    svo_name_map['psnow'] = svo_name_map['P_snow']
+    svo_name_map['uz'] = svo_name_map['uz']
+    svo_name_map['ri'] = svo_name_map['Ri']
+    svo_name_map['dn'] = svo_name_map['Dn']
+    svo_name_map['dh'] = svo_name_map['Dh']
+    svo_name_map['esatair'] = svo_name_map['e_sat_air']
+    svo_name_map['esatsurf'] = svo_name_map['e_sat_surf']
+
+
     return svo_name_map
     
 #   get_svo_name_map()
@@ -187,10 +219,14 @@ def get_short_name_map():
     'channel_x-section_trapezoid_bottom__width' : 'width',
     'channel_x-section_trapezoid_side__flare_angle' : 'angle',
     'earth__standard_gravity_constant' : 'g',
-    'glacier_ice__domain_time_integral_of_melt_volume_flux' : 'vol_MR',
-    'glacier_ice__melt_volume_flux' : 'MR',
-    'glacier_ice__thickness' : 'H',
+    'glacier_ice__domain_time_integral_of_melt_volume_flux' : 'vol_IM',
+    'glacier_ice__melt_volume_flux' : 'IM',
+    'glacier_ice__thickness' : 'h_ice',
     'glacier_top_surface__elevation' : 'Zi',
+    'glacier__domain_time_integral_of_liquid-equivalent_depth' : 'vol_iwe',
+    'glacier__initial_liquid-equivalent_depth' : 'h0_iwe',
+    'glacier__liquid-equivalent_depth' : 'h_iwe',
+    'glacier__energy-per-area_cold_content': 'Ecci',      
     'land_surface__albedo' : 'albedo',
     'land_surface__aspect_angle' : 'alpha',
     'land_surface__domain_max_of_increment_of_elevation' : 'dz_max',
@@ -253,13 +289,15 @@ def get_short_name_map():
     'snowpack__depth' : 'h_snow',
     'snowpack__domain_time_integral_of_liquid-equivalent_depth' : 'vol_swe',
     'snowpack__domain_time_integral_of_melt_volume_flux' : 'vol_SM',
-    'snowpack__energy-per-area_cold_content' : 'Ecc',
+    'snowpack__energy-per-area_cold_content' : 'Eccs',
     'snowpack__initial_depth' : 'h0_snow',
     'snowpack__initial_liquid-equivalent_depth' : 'h0_swe',
     'snowpack__liquid-equivalent_depth' : 'h_swe',
     'snowpack__melt_volume_flux' : 'SM',
     'snowpack__z_mean_of_mass-per-volume_density' : 'rho_snow',
     'snowpack__z_mean_of_mass-specific_isobaric_heat_capacity' : 'Cp_snow',
+    'cryosphere__domain_time_integral_of_melt_volume_flux' : 'vol_M_total',
+    'cryosphere__melt_volume_flux' : 'M_total',
     'soil__freeze_depth' : 'd_freeze',  ########
     'soil__porosity' : 'phi',
     'soil__reference_depth_temperature' : 'T_soil_x',   # x -> z, more clear?
