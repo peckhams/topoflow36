@@ -11,7 +11,8 @@ in BMI_base.py.
 #-----------------------------------------------------------------------
 #
 #  Copyright (c) 2001-2023, Scott D. Peckham
-#
+#  Feb 2024.  Add surface temperature module based on dew point
+#             temperature
 #  Sep 2023.  Fixed bug where PRECIP_ONLY was No but evaluated
 #               to True when initialize() called read_input_files()
 #               because it wasn't yet mapped to True or False.
@@ -164,7 +165,8 @@ class met_component( BMI_base.BMI_component ):
     # Note that SWE = "snow water equivalent", but it really
     # just means "liquid_equivalent".
     #---------------------------------------------------------   
-    _input_var_names = [ 'snowpack__depth' ]  # h_snow
+    _input_var_names = [ 'snowpack__depth', # h_snow
+                        'glacier_ice__thickness' ]  # h_ice
 #         'snowpack__depth' ]                            # h_snow
 #         'snowpack__z_mean_of_mass-per-volume_density', # rho_snow
 #         'snowpack__liquid-equivalent_depth',           # h_swe
@@ -367,6 +369,7 @@ class met_component( BMI_base.BMI_component ):
     #------------------------------------------------------------------   
     _var_name_map = {
         'snowpack__depth': 'h_snow',
+        'glacier_ice__thickness': 'h_ice',
         # 'snowpack__z_mean_of_mass-per-volume_density': 'rho_snow',
         # 'snowpack__liquid-equivalent_depth': 'h_swe',
         # 'snowpack__melt_volume_flux': 'SM',
@@ -447,6 +450,7 @@ class met_component( BMI_base.BMI_component ):
     #-----------------------------------------------------------------    
     _var_units_map = {
         'snowpack__depth':                   'm',
+        'glacier_ice__thickness':           'm',
 #         'snowpack__z_mean_of_mass-per-volume_density':     'kg m-3',
 #         'snowpack__liquid-equivalent_depth': 'm',
 #         'snowpack__melt_volume_flux':        'm s-1',
@@ -783,13 +787,14 @@ class met_component( BMI_base.BMI_component ):
         # Update computed values
         #-------------------------
         if not(self.PRECIP_ONLY):
+            self.update_saturation_vapor_pressure(MBAR=True)
+            self.update_vapor_pressure()
+            self.update_dew_point(method = 'Raleigh') ###
+            self.update_T_surf()
+            self.update_saturation_vapor_pressure(MBAR=True, SURFACE=True)  ########
             self.update_bulk_richardson_number()
             self.update_bulk_aero_conductance()
             self.update_sensible_heat_flux()
-            self.update_saturation_vapor_pressure(MBAR=True)
-            self.update_saturation_vapor_pressure(MBAR=True, SURFACE=True)  ########
-            self.update_vapor_pressure()
-            self.update_dew_point() ###
             self.update_precipitable_water_content()  ###
             self.update_vapor_pressure(SURFACE=True)   ########
             self.update_latent_heat_flux()      # (uses e_air and e_surf)
@@ -1419,7 +1424,8 @@ class met_component( BMI_base.BMI_component ):
             print('Calling update_bulk_richardson_number()...')
 
         #---------------------------------------------------------------
-        # (9/6/14) 
+        # (9/6/14)  Found a typo in the Zhang et al. (2000) paper,
+        # in the definition of Ri.  Also see Price and Dunne (1976).
         # We should have (Ri > 0) and (T_surf > T_air) when STABLE.
         # This also removes problems/singularities in the corrections
         # for the stable and unstable cases in the next function.      
@@ -1754,7 +1760,7 @@ class met_component( BMI_base.BMI_component ):
                  
     #   update_vapor_pressure()
     #-------------------------------------------------------------------
-    def update_dew_point(self):
+    def update_dew_point(self, method):
 
         if (self.DEBUG):
             print('Calling update_dew_point()...')
@@ -1776,17 +1782,39 @@ class met_component( BMI_base.BMI_component ):
 #         top = log_vp + np.float64(0.4926)
 #         bot = np.float64(0.0708) - (np.float64(0.00421) * log_vp)
 #         self.T_dew = (top / bot)    # [degrees C]
- 
+         #-------------------------------------------         
+        # This formula needs e_air in Pa units.
+        # See: Dingman (2015, 3.2.5, p. 114).
+        #-------------------------------------------        
+#         e_air_Pa = self.e_air * 100 # [mbar -> Pa]
+#         self.T_dew = (top / bot)    # [degrees C]
         #-----------------------------------------------         
         # This formula needs e_air in mbar units.
         # See: https://en.wikipedia.org/wiki/Dew_point
         #-----------------------------------------------
-        a = 6.1121   # [mbar]
-        b = 18.678
-        c = 257.14   # [deg C]
-        # d = 234.5    # [deg C]
-        log_term   = np.log( self.e_air / a)
-        self.T_dew =  c * log_term / (b - log_term)  # [deg C]
+        if method == 'Dingman2002':
+            a = 6.1121   # [mbar]
+            b = 18.678
+            c = 257.14   # [deg C]
+            # d = 234.5    # [deg C]
+            log_term   = np.log( self.e_air / a)
+            self.T_dew =  c * log_term / (b - log_term)  # [deg C]
+        
+        if method == 'Dingman2015':
+            e_air_Pa = self.e_air * 100
+            top = np.log(e_air_Pa)-6.415
+            bot = (0.0999-0.00421)*np.log(e_air_Pa)
+            self.T_dew = top/bot
+        
+        if method == 'Raleigh':
+            # Works whether T_air is a grid/grid_series or scalar/time_series
+            b = np.where(self.T_air > 0, 17.625, 22.587)
+            c = np.where(self.T_air > 0, 243.04, 273.86) # [deg C]
+
+            frac = (b * self.T_air)/(c + self.T_air)
+            top = c * (np.log(self.RH)+frac)
+            bot = b - np.log(self.RH) - frac
+            self.T_dew = top/bot
 
         if (self.DEBUG):
             Td_min = self.T_dew.min()
@@ -1795,6 +1823,24 @@ class met_component( BMI_base.BMI_component ):
             print()
              
     #   update_dew_point()
+    #-------------------------------------------------------------------
+    def update_T_surf(self):
+        # -------------------------------------------------
+        # Estimate T_surf using T_dew (Raleigh et al. 2013).
+        # Only run this function if T_surf is provided 
+        # as a scalar or grid so that it still varies in time
+        # -------------------------------------------------
+        if ((self.T_surf_type.lower() == 'scalar') | (self.T_surf_type.lower() == 'grid')):
+        # -------------------------------------------------
+        # If snow and/or ice are present,  T_surf cannot
+        # exceed 0 deg C
+        # -------------------------------------------------
+            T_surf = np.where(((self.h_snow > 0)|(self.h_ice > 0)), # where snow or ice exists
+                              np.minimum(self.T_dew, np.float64(0)), # T_surf is either T_dew or 0, whichever is lower 
+                              self.T_dew) # everywhere else, T_surf = T_dew
+            self.T_surf = T_surf
+
+    # update_T_surf()
     #-------------------------------------------------------------------
     def update_precipitable_water_content(self):
 
@@ -1837,6 +1883,10 @@ class met_component( BMI_base.BMI_component ):
         if (self.DEBUG):
             Qe_min = self.Qe.min()
             Qe_max = self.Qe.max()
+            print('  T_air, T_surf =', self.T_air, ', ', self.T_surf, ' [deg C]')
+            print('  RH = ', self.RH, '[0-1]')
+            print('  h_snow = ', self.h_snow[34, 46], ' [m]')
+            print('  uz = ', self.uz,'[m/s]')
             print('  Qe_min, Qe_max =', Qe_min, ', ', Qe_max, '[W m-2]')
             print()
             
@@ -2551,12 +2601,14 @@ class met_component( BMI_base.BMI_component ):
         self.Qsw_gs_file = (self.out_directory + self.Qsw_gs_file )
         self.Qlw_gs_file = (self.out_directory + self.Qlw_gs_file )
         self.ema_gs_file = (self.out_directory + self.ema_gs_file )
+        self.tsurf_gs_file = (self.out_directory + self.tsurf_gs_file )
         #------------------------------------------------------------
         self.ea_ts_file  = (self.out_directory + self.ea_ts_file  )
         self.es_ts_file  = (self.out_directory + self.es_ts_file  )
         self.Qsw_ts_file = (self.out_directory + self.Qsw_ts_file )
         self.Qlw_ts_file = (self.out_directory + self.Qlw_ts_file )
         self.ema_ts_file = (self.out_directory + self.ema_ts_file )
+        self.tsurf_ts_file = (self.out_directory + self.tsurf_ts_file)
         
 ##        self.ea_gs_file = (self.case_prefix + '_2D-ea.rts')
 ##        self.es_gs_file = (self.case_prefix + '_2D-es.rts')
@@ -2608,6 +2660,12 @@ class met_component( BMI_base.BMI_component ):
                                            long_name='air_emissivity',
                                            units_name='none')
             
+        if (self.SAVE_TSURF_GRIDS):
+            model_output.open_new_gs_file( self, self.tsurf_gs_file, IDs,
+                                            var_name='tsurf',
+                                            long_name='surface_temperature',
+                                            units_name='C')  
+            
         #--------------------------------------
         # Open new files to write time series
         #--------------------------------------
@@ -2644,6 +2702,11 @@ class met_component( BMI_base.BMI_component ):
                                            long_name='air_emissivity',
                                            units_name='none')
             
+        if (self.SAVE_TSURF_PIXELS):
+            model_output.open_new_ts_file( self, self.tsurf_ts_file, IDs,
+                                            var_name='tsurf',
+                                            long_name='surface_temperature',
+                                            units_name='C')        
     #   open_output_files()
     #-------------------------------------------------------------------
     def write_output_files(self, time_seconds=None):
@@ -2675,12 +2738,14 @@ class met_component( BMI_base.BMI_component ):
         if (self.SAVE_QSW_GRIDS):  model_output.close_gs_file( self, 'Qsw')
         if (self.SAVE_QLW_GRIDS):  model_output.close_gs_file( self, 'Qlw')
         if (self.SAVE_EMA_GRIDS):  model_output.close_gs_file( self, 'ema')
+        if (self.SAVE_TSURF_GRIDS): model_output.close_gs_file(self, 'tsurf')
         #-------------------------------------------------------------------
         if (self.SAVE_EA_PIXELS):  model_output.close_ts_file( self, 'ea') 
         if (self.SAVE_ES_PIXELS):  model_output.close_ts_file( self, 'es') 
         if (self.SAVE_QSW_PIXELS): model_output.close_ts_file( self, 'Qsw') 
         if (self.SAVE_QLW_PIXELS): model_output.close_ts_file( self, 'Qlw')
         if (self.SAVE_EMA_PIXELS): model_output.close_ts_file( self, 'ema')
+        if (self.SAVE_TSURF_PIXELS): model_output.close_ts_file(self, 'tsurf')
         
     #   close_output_files()        
     #-------------------------------------------------------------------  
@@ -2700,6 +2765,9 @@ class met_component( BMI_base.BMI_component ):
 
         if (self.SAVE_EMA_GRIDS):
             model_output.add_grid( self, self.em_air, 'ema', self.time_min )
+        
+        if (self.SAVE_TSURF_GRIDS):
+            model_output.add_grid( self, self.T_surf, 'tsurf', self.time_min )
             
     #   save_grids()            
     #-------------------------------------------------------------------  
@@ -2722,6 +2790,10 @@ class met_component( BMI_base.BMI_component ):
 
         if (self.SAVE_EMA_PIXELS):
             model_output.add_values_at_IDs( self, time, self.em_air, 'ema', IDs )
+
+        if (self.SAVE_TSURF_PIXELS):
+            model_output.add_values_at_IDs( self, time, self.T_surf, 'tsurf', IDs )
+
             
     #   save_pixel_values()
     #-------------------------------------------------------------------
