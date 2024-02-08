@@ -2661,7 +2661,7 @@ class met_component( BMI_base.BMI_component ):
                                            units_name='none')
             
         if (self.SAVE_TSURF_GRIDS):
-            model_output.open_new_gs_file( self, self.tsurf_gs_file, IDs,
+            model_output.open_new_gs_file( self, self.tsurf_gs_file, self.rti,
                                             var_name='tsurf',
                                             long_name='surface_temperature',
                                             units_name='C')  
