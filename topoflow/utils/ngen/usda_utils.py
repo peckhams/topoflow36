@@ -1,8 +1,11 @@
 
 ###### DOUBLE CHECK THE LATS & LONS  #######
 
-# Copyright (c) 2023, Scott D. Peckham
+# Copyright (c) 2023-2024, Scott D. Peckham
 #
+# Jan 2024. Renamed all "ngen/utils" files to end in "_utils.py"
+#           instead of "_tools.py".
+#           Modified to use new data_utils.py.
 # Jul 2023. Added: get_basin_repo_dir, get_ars_data_dir,
 #           get_ars_basin_states, get_ars_url.
 # May 2023. Wrote create_tsv, get_alternate_name,
@@ -10,9 +13,9 @@
 #
 #---------------------------------------------------------------------
 #
-#  get_basin_repo_dir()
-#  get_ars_data_dir()
 #  get_ars_state_codes()
+#  get_ars_name()
+#  get_ars_long_name()
 #  get_ars_url()
 #
 #  write_tsv_header()
@@ -23,34 +26,13 @@
 #---------------------------------------------------------------------
 #
 #  % python
-#  >>> from topoflow.utils.ngen import usda_tools as ut
+#  >>> from topoflow.utils.ngen import usda_utils as ut
 #  >>> ut.create_tsv( tsv_file='TEST.tsv' )
 #
 #---------------------------------------------------------------------
 import numpy as np
+from topoflow.utils.ngen import data_utils as dtu
 
-#---------------------------------------------------------------------
-def get_basin_repo_dir():
-
-    #-----------------------------------
-    # Modify this directory as needed.
-    #-----------------------------------
-    repo_dir  = '/Users/peckhams/Dropbox/NOAA_NextGen/'
-    repo_dir += '__NextGen_Example_Basin_Repo/'
-    return repo_dir
-
-#   get_basin_repo_dir()
-#---------------------------------------------------------------------
-def get_ars_data_dir():
-
-    #-----------------------------------
-    # Modify this directory as needed.
-    #-----------------------------------
-    repo_dir  = get_basin_repo_dir()
-    data_dir  = repo_dir + 'USDA_ARS/'
-    return data_dir
-       
-#   get_ars_data_dir()
 #---------------------------------------------------------------------
 def get_ars_state_codes():
 
@@ -98,6 +80,41 @@ def get_ars_state_codes():
  
 #   get_ars_state_codes()
 #---------------------------------------------------------------------
+def get_ars_name( values ):
+
+    #-----------------------------------------------------
+    # Note:  Alternate name is not given in source data,
+    #        but was found by other means in some cases.
+    #-----------------------------------------------------
+    location   = values[1].strip()  # often city name
+    state_code = values[2].strip()  # 2-letter state code
+    # alt_name   = values[3].strip()  # alternate river name
+    wshed_name = values[4].strip()  # watershed name
+    
+    ars_name = wshed_name + ', ' + location + ', ' + state_code
+
+    return ars_name
+       
+#   get_ars_name()
+#---------------------------------------------------------------------
+def get_ars_long_name( values ):
+
+    location   = values[1].strip()  # often city name
+    state_code = values[2].strip()  # 2-letter state code
+    alt_name   = values[3].strip()  # alternate river name
+    wshed_name = values[4].strip()  # watershed name
+    
+    if (alt_name != 'Alternate_Name'):
+        long_name = alt_name + ', '
+    else:
+        long_name = ''
+    long_name += wshed_name + ', '
+    long_name += location + ', ' + state_code
+
+    return long_name
+       
+#   get_ars_long_name()
+#---------------------------------------------------------------------
 def get_ars_url( state_code ):
 
     # Note that null string is also excluded.
@@ -122,25 +139,37 @@ def get_ars_url( state_code ):
 #---------------------------------------------------------------------
 def write_tsv_header( out_unit, delim='\t' ):
 
-    out_unit.write('Watershed ID'    + delim)
-    out_unit.write('Location'        + delim)
-    out_unit.write('State Code'      + delim)
-    out_unit.write('Alternate Name'  + delim)
-    out_unit.write('Watershed Name'  + delim)
-    out_unit.write('Latitude (DMS)'  + delim)
-    out_unit.write('Longitude (DMS)' + delim)
-    out_unit.write('Latitude (dec deg)'  + delim)
-    out_unit.write('Longitude (dec deg)' + delim)
-    out_unit.write('Acres'        + delim)
-    out_unit.write('Area (km2)'   + delim)
-    out_unit.write('Start Date'   + delim)
-    out_unit.write('End Date'     + delim)
-    out_unit.write('ARS DB Years' + delim)
-    out_unit.write('Data URL'     + delim)
-    out_unit.write('Notes')
-    out_unit.write('\n')
- 
-   
+    headings = [
+    'Watershed ID', 'Location', 'State Code',
+    'Alternate_Name, Watershed Name',
+    'Latitude (DMS)',     'Longitude (DMS)',
+    'Latitude (dec deg)', 'Longitude (dec deg)',
+    'Acres', 'Area (km2)',
+    'Start Date', 'End Date', 'ARS DB Years',
+    'Data URL', 'Notes']
+    header = ''
+    for h in headings:
+        header += (h + delim)
+    out_unit.write( header[:-1] + '\n' )
+    
+#     out_unit.write('Watershed ID'    + delim)
+#     out_unit.write('Location'        + delim)
+#     out_unit.write('State Code'      + delim)
+#     out_unit.write('Alternate Name'  + delim)
+#     out_unit.write('Watershed Name'  + delim)
+#     out_unit.write('Latitude (DMS)'  + delim)
+#     out_unit.write('Longitude (DMS)' + delim)
+#     out_unit.write('Latitude (dec deg)'  + delim)
+#     out_unit.write('Longitude (dec deg)' + delim)
+#     out_unit.write('Acres'        + delim)
+#     out_unit.write('Area (km2)'   + delim)
+#     out_unit.write('Start Date'   + delim)
+#     out_unit.write('End Date'     + delim)
+#     out_unit.write('ARS DB Years' + delim)
+#     out_unit.write('Data URL'     + delim)
+#     out_unit.write('Notes')
+#     out_unit.write('\n')
+
 #   write_tsv_header()
 #---------------------------------------------------------------------
 def create_tsv( data_dir=None, tsv_file='ARS_db.tsv', delim='\t' ):
@@ -150,11 +179,12 @@ def create_tsv( data_dir=None, tsv_file='ARS_db.tsv', delim='\t' ):
     # a given Watershed ID.  Sometimes the lat/lon values
     # are different.  How best to handle this?
     #------------------------------------------------------
+    new_dir = dtu.get_new_data_dir( 'USDA_ARS' )
     if (data_dir is None):
-        data_dir = get_ars_data_dir()   
+        data_dir = dtu.get_data_dir( 'USDA_ARS')  
 
     index_path = data_dir + 'INDEX.TXT'
-    tsv_path   = data_dir + tsv_file
+    tsv_path   = new_dir + tsv_file
       
     in_unit  = open(index_path, 'r')
     out_unit = open(tsv_path,   'w')
@@ -207,7 +237,7 @@ def create_tsv( data_dir=None, tsv_file='ARS_db.tsv', delim='\t' ):
         #------------------------------------------                  
         out_unit.write( watershed_ID + delim)   # Watershed ID
         out_unit.write( location     + delim)   # Location
-        out_unit.write( state_code   + delim)    # State Code
+        out_unit.write( state_code   + delim)   # State Code
         #--------------------------------------------
         # Add the "Alt. Name" or specific location
         #--------------------------------------------
@@ -379,7 +409,7 @@ def create_tsv( data_dir=None, tsv_file='ARS_db.tsv', delim='\t' ):
     in_unit.close()
     out_unit.close()
                                        
-#   make_new_csv()
+#   create_tsv()
 #---------------------------------------------------------------------
 def get_alternate_name( wn ):
 

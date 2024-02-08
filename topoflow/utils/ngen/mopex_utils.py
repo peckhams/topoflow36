@@ -1,19 +1,20 @@
 
-# Copyright (c) 2023, Scott D. Peckham
+# Copyright (c) 2023-2024, Scott D. Peckham
 #
-# Jun 2023. Started from gages2_tools.py.
+# Jan 2024. Renamed all "ngen/utils" files to end in "_utils.py"
+#           instead of "_tools.py"
+#           Modified to use new data_utils.py.
+# Jun 2023. Started from gages2_utils.py.
 #
 #---------------------------------------------------------------------
 #
 #  % conda activate tf36  (has gdal package)
 #  % python
-#  >>> from topoflow.utils.ngen import mopex_tools as mt
-#  >>> mt.create_tsv( nf_max=500, SWAP_XY=False )
+#  >>> from topoflow.utils.ngen import mopex_utils as mt
+#  >>> mt.create_tsv( nf_max=500 )
 #
 #---------------------------------------------------------------------
 #
-#  get_basin_repo_dir()
-#  get_mopex_data_dir()
 #  create_tsv()
 #  sort_by_site_code()
 #
@@ -23,34 +24,11 @@ import numpy as np
 from osgeo import ogr, osr
 import json, sys, time
 
+from topoflow.utils.ngen import data_utils as dtu
 from topoflow.utils.ngen import shape_utils as su
 
 #---------------------------------------------------------------------
-def get_basin_repo_dir():
-
-    #-----------------------------------
-    # Modify this directory as needed.
-    #-----------------------------------
-    repo_dir  = '/Users/peckhams/Dropbox/NOAA_NextGen/'
-    repo_dir += '__NextGen_Example_Basin_Repo/'
-    return repo_dir
-
-#   get_basin_repo_dir()
-#---------------------------------------------------------------------
-def get_mopex_data_dir():
-
-    #-----------------------------------
-    # Modify this directory as needed.
-    #-----------------------------------
-    repo_dir  = get_basin_repo_dir()
-    data_dir  = repo_dir + 'MOPEX/'
-    data_dir += 'Hydrologic Synthesis Project 2009_18GB/'
-    data_dir += 'spatialdata/MOPEX431_basins/'
-    return data_dir
-       
-#   get_mopex_data_dir()
-#---------------------------------------------------------------------
-def create_tsv( data_dir=None, nf_max=50,
+def create_tsv( data_dir=None, new_dir=None, nf_max=50,
                 shape_file='MOPEX431_basins.shp',                    
                 prj_file  ='MOPEX431_basins.prj',
                 tsv_file='new_mopex431.tsv',
@@ -58,11 +36,12 @@ def create_tsv( data_dir=None, nf_max=50,
                 REPORT=True):
 
     if (data_dir is None):
-        data_dir = get_mopex_data_dir()
-
+        data_dir = dtu.get_data_dir( 'MOPEX' )
+    if (new_dir is None):
+        new_dir  = dtu.get_new_data_dir( 'MOPEX' )
     insert_key = 'Longitude'
 
-    su.create_tsv_from_shapefile(data_dir=data_dir,
+    su.create_tsv_from_shapefile(data_dir=data_dir, new_dir=new_dir,
                       shape_file=shape_file, prj_file=prj_file,
                       tsv_file=tsv_file, nf_max=nf_max,
                       SWAP_XY=SWAP_XY, REPORT=REPORT,
@@ -74,9 +53,9 @@ def create_tsv( data_dir=None, nf_max=50,
 def sort_by_site_code(tsv_file1='new_mopex431.tsv',
                       tsv_file2='new_mopex431_sorted.tsv'):
 
-    mopex_dir = get_mopex_data_dir()
-    tsv_path1 = mopex_dir + tsv_file1
-    tsv_path2 = mopex_dir + tsv_file2
+    new_dir   = dtu.get_new_data_dir( 'MOPEX' )
+    tsv_path1 = new_dir + tsv_file1
+    tsv_path2 = new_dir + tsv_file2
     
     tsv_unit1 = open(tsv_path1, 'r')
     lines = tsv_unit1.readlines()

@@ -1,9 +1,20 @@
 
-# Copyright (c) 2023, Scott D. Peckham
+# Copyright (c) 2023-2024, Scott D. Peckham
 #
-# Sep 2023. Added get_usgs_station_info_by_id() and
-#           usgs_state_code_map() to map HLR basins to stations.
-# Jul 2023. Utils to work with USGS station info.
+# Jan 2024. Renamed get_station_subset() to get_wqp_site_subset()
+#           and rewrote to be more general.
+#           Moved get_hlr_outlet_info(), get_closest_hlr_outlet()
+#           to hlr_utils.py.
+#           Renamed all "ngen/utils" files to end in "_utils.py"
+#           instead of "_tools.py".
+#           Modified to use new data_utils.py.
+# Oct 2023. Added get_site_type_dict().
+#           Moved more functions here from collate_basins.py:
+#           haversine, distance_on_sphere, get_closest_site.
+#           Added get_hlr_outlet_info & get_closest_hlr_outlet.
+# Sep 2023. Added get_usgs_site_info_dict() and
+#           get_state_fips_code_map() to map HLR basins to sites.
+# Jul 2023. Utils to work with USGS site info.
 #           Moved several functions here from collate_basins.py.
 #           These are now called from collate_basins.py.
 #
@@ -12,25 +23,23 @@
 #  % conda activate tf36  (has gdal package)
 #  % python
 #  >>> from topoflow.utils.ngen import usgs_utils as ut
-#  >>> ut.get_station_subset()
-#  >>> coords = ut.get_usgs_station_coords( NWIS_ALL=False )
-#  >>> coords = ut.get_usgs_station_coords( NWIS_ALL=True )
-#  >>> coords = ut.compare_usgs_station_coords( tol=1e-6 )
+#  >>> ut.get_wqp_site_subset()
+#  >>> coords = ut.get_usgs_site_coords( NWIS_ALL=False )
+#  >>> coords = ut.get_usgs_site_coords( NWIS_ALL=True )
+#  >>> coords = ut.compare_usgs_site_coords( tol=1e-6 )
 #
 #---------------------------------------------------------------------
 #
-#  get_repo_dir()
-#  get_usgs_dir()
-#  get_usgs_filepath()
-#  get_usgs_header_lines()
 #  get_n_records()
-#  get_station_subset()
 #
-#  get_usgs_station_coords()
-#  compare_usgs_station_coords()
+#  get_wqp_site_subset()
+#  get_site_type_dict()    ###
 #
-#  usgs_state_code_map()
-#  get_usgs_station_info_dict()
+#  get_usgs_site_coords()
+#  compare_usgs_site_coords()
+#
+#  get_state_fips_code_map()
+#  get_usgs_site_info_dict()
 #
 #  replace_periods()
 #  replace_punctuation()
@@ -40,7 +49,7 @@
 #  replace_state_letters()
 #  fix_spellings()
 #  replace_city_letters()
-#  expand_usgs_site_name()   ######## or use "station_name" ??
+#  expand_usgs_site_name()
 #  get_usgs_long_name()
 #
 #  get_usgs_site_url()
@@ -49,11 +58,19 @@
 #  get_usgs_missing_lat_lon()
 #  get_usgs_missing_state()
 #
+#  haversine()            # moved here from collate_basins.py
+#  distance_on_sphere()
+#  get_closest_site()
+#
 #---------------------------------------------------------------------
 
 import numpy as np
 import os, os.path
 
+from topoflow.utils.ngen import data_utils as dtu
+from topoflow.utils.ngen import hlr_utils as hlr
+
+import pickle    # to save usgs site info map
 import requests  # for get_usgs_missing_lat_lon, get_usgs_missing_state
 import time
 
@@ -63,53 +80,12 @@ import time
 # import json, sys, time
 
 #---------------------------------------------------------------------
-def get_repo_dir():
-
-    repo_dir = '/Users/peckhams/Dropbox/NOAA_NextGen/'
-    repo_dir += '__NextGen_Example_Basin_Repo/'
-    return repo_dir
-
-#   get_repo_dir()
-#---------------------------------------------------------------------
-def get_usgs_dir( NWIS_ALL=False ):
-
-    repo_dir = get_repo_dir()
-    if (NWIS_ALL):
-        usgs_dir = repo_dir + 'USGS_NWIS/'
-    else:
-        usgs_dir = repo_dir + 'USGS_Gauged_Basins/'   
-    return usgs_dir
-
-#   get_usgs_dir()
-#---------------------------------------------------------------------
-def get_usgs_filepath( NWIS_ALL=False ):
-
-    usgs_dir = get_usgs_dir( NWIS_ALL=NWIS_ALL)
-    if (NWIS_ALL):
-        usgs_file = 'USGS_NWIS_stream_stations_usgs.tsv'
-        ## usgs_file = 'USGS_NWIS_stream_stations_all.tsv'
-    else:
-        usgs_file = 'USGS_stream_gauge_data.tsv'
-    return (usgs_dir + usgs_file)
-
-#   get_usgs_filepath()
-#---------------------------------------------------------------------
-def get_usgs_header_lines( NWIS_ALL=False ):
-
-    if (NWIS_ALL):
-        nh_lines = 1
-    else:
-        nh_lines = 37
-    return nh_lines
-
-#   get_usgs_header_lines()
-#---------------------------------------------------------------------
 def get_n_records(type='usgs_streams'):
 
     if (type == 'usgs_streams'):
         #-------------------------------------------------
         # Any w/ monitoring location type of 'stream'
-        # & station_id starts with 'USGS-'
+        # & site_id starts with 'USGS-'
         #-------------------------------------------------
         # Others in Alaska start with 'CAX' or 'USFWS'.
         # Some start with USAID (e.g. Afghanistan, Iraq)
@@ -129,21 +105,62 @@ def get_n_records(type='usgs_streams'):
     
 #   get_n_records()
 #---------------------------------------------------------------------
-def get_station_subset(loc_type='usgs_stream',
-                       in_tsv_file='USGS_NWIS_stations.tsv', 
-                       out_tsv_file='USGS_NWIS_stream_stations.tsv'):
+def get_wqp_site_subset(agency='USGS', site_type='stream',
+                    in_tsv_file='WQP_All_Site_Info.tsv', 
+                    out_tsv_file=None):
 
-    delim = '\t'  # tab character
+    #-----------------------------------------------------------------
+    # Note: If you go to the Water Quality Portal (WQP) and download
+    #       all available info as a TSV file, the resulting file has
+    #       info or 1,739,528 sites/basins.  Here, this file is 
+    #       called "WQP_All_Site_Info.tsv" and filesize is 520 MB.
+    #       This file includes many different "site types", such as
+    #       Stream, Atmosphere, Lake and Well from many different
+    #       responsible agencies (USGS, EPA, USDA, etc.).
+    #       This function creates subsets from this TSV file.
+    #
+    #       It assumes this large file exists in the directory:
+    #       USGS_NWIS_WQP/Data, but this file is not included in
+    #       the repo due to its size.
+    #
+    #       The "agency" argument can be set to any of these:
+    #         ANY, USAID, USARS, USBIA, USBLM, USBR, USCE,
+    #         USEPA, USFS, USFWS, USGS, USSCS,
+    #       or codes for state USGS Water Science Centers that
+    #       start with a 2-letter state code and a number,
+    #       such as:
+    #         AL012, AR008, AZ014, CAX01, GA009, IA021, IL003,
+    #         IN002, IN033, LA014, MA035, MN040, MO005, WA013.
+    #       If appears that ""-USN " is also used for Indiana.    
+    #       Each "site_id" starts with an agency code.
+    #
+    #       The "site_type" argument can be set to any of these:
+    #          Any, Stream, Atmosphere, Well, Spring, Lake, etc.   
+    #-----------------------------------------------------------------
+    #       The file "WQP_Stream_Site_Info.tsv" contains info
+    #       for 152,926 USGS sites of type "Stream".  Many of
+    #       these sites are inactive, and they make different types
+    #       of measurements.  Many focus on water quality.
+    #-----------------------------------------------------------------
+    #       The file "WQP_USGS_Stream_Site_Info.tsv" contains info
+    #       for 145,375 USGS sites of type "Stream".  Again,
+    #       many focus on water quality vs. vars like discharge.
+    #-----------------------------------------------------------------    
+    delim = '\t'   # tab character
     print('Working...')
     in_count  = 0
     out_count = 0
-    
+
+    if (out_tsv_file is None):
+        out_tsv_file  = 'WQP_' + agency.upper() + '_'
+        out_tsv_file += site_type.title() + '_Site_Info.tsv'
+                  
     #------------------------------
     # Open input and output files
     #------------------------------
-    usgs_dir     = get_usgs_dir( NWIS_ALL=True )
-    in_tsv_path  = usgs_dir + in_tsv_file
-    out_tsv_path = usgs_dir + out_tsv_file
+    wqp_dir      = dtu.get_data_dir( 'USGS_NWIS_WQP1' )
+    in_tsv_path  = wqp_dir + in_tsv_file
+    out_tsv_path = wqp_dir + out_tsv_file
     in_tsv_unit  = open(in_tsv_path,  'r')
     out_tsv_unit = open(out_tsv_path, 'w')
 
@@ -152,44 +169,31 @@ def get_station_subset(loc_type='usgs_stream',
     #--------------------------
     header = in_tsv_unit.readline()
     out_tsv_unit.write( header )
-    
+ 
+    agency_str = agency.upper() + '-'   
     while (True):
         line = in_tsv_unit.readline()
         if (line == ''):
             break  # (reached end of file)
         values = line.split( delim )
-        in_count  += 1
+        in_count += 1
 
-        station_id   = values[2].strip()
-        station_type = values[4].strip()
+        site_id_str   = values[2].strip()
+        site_type_str = values[4].strip().lower()
         
-        #---------------------------------------        
-        # Subset by "monitoring location type"
-        # See notes in get_n_records().
-        #---------------------------------------
-        if (loc_type == 'usgs_stream'):
-            if (station_type.lower() == 'stream'):
-                if (station_id.startswith('USGS-')):
-                    out_tsv_unit.write( line )
-                    out_count += 1        
-        elif (loc_type == 'any_stream'):
-            if (station_type.lower() == 'stream'):
-                out_tsv_unit.write( line )
-                out_count += 1
-        elif (loc_type == 'usaid_stream'):
-            if (station_type.lower() == 'stream'):
-                if (station_id.startswith('USAID-')):
-                    out_tsv_unit.write( line )
-                    out_count += 1         
-#         elif (loc_type == 'any_well'):
-#             if (station_type.lower() == 'well'):
-#                 out_tsv_unit.write( line )
-#                 out_count += 1
-#         elif (loc_type == 'any_spring'):
-#             if (station_type.lower() == 'spring'):
-#                 out_tsv_unit.write( line )
-#                 out_count += 1
-                                
+        #---------------------------------------------------------        
+        # Subset full list by federal agency and/or site type.
+        # "Site type" is also called "monitoring location type".
+        # See notes for get_n_records().
+        #---------------------------------------------------------
+        AGENCY_MATCH    = (site_id_str.startswith( agency_str ) or
+                          (agency_str == 'ANY-'))
+        SITE_TYPE_MATCH = ((site_type_str == site_type.lower()) or
+                          (site_type.lower() == 'any'))
+        if (AGENCY_MATCH and SITE_TYPE_MATCH):
+            out_tsv_unit.write( line )
+            out_count += 1         
+                               
         if ((in_count % 10000) == 0):
             print('  in_count =', in_count)
 
@@ -202,48 +206,169 @@ def get_station_subset(loc_type='usgs_stream',
     print('Total out count =', out_count)
     print('Finished.')
     
-#   get_station_subset()
+#   get_wqp_site_subset()
 #---------------------------------------------------------------------
-def get_usgs_station_coords( delim='\t', NWIS_ALL=False,
-                             SAVE_TO_FILE=False):
+def get_site_type_dict( in_tsv_file='WQP_All_Site_Info.tsv',
+                        SAVE_TO_FILE=True ): 
 
-    usgs_dir  = get_usgs_dir( NWIS_ALL=NWIS_ALL )
-    file_path = usgs_dir + 'USGS_station_coords.npy'
-    if (os.path.exists( file_path )):
-        print('Reading saved USGS station coords...')
-        station_coords = np.load( file_path )
+    #------------------------------------------------------------
+    # Note: WQP_All_Site_Info.tsv contains info for 1,739,528
+    #       basins, which have different "site types", such
+    #       as Stream, Atmosphere, Lake and Well and different
+    #       responsible agencies.
+    #------------------------------------------------------------
+    wqp_dir = dtu.get_data_dir( 'USGS_NWIS_WQP1')
+    new_dir = dtu.get_new_data_dir( 'USGS_NWIS_WQP1' )
+    
+    dict_file = 'USGS_NWIS_site_type_dict.pkl'
+    dict_path = new_dir + dict_file
+    if (os.path.exists( dict_path )):
+        print('Reading saved USGS-NWIS site type dictionary...')
+        dict_unit = open( dict_path, 'rb')
+        site_type_dict = pickle.load( dict_unit )
+        dict_unit.close()
         print('Finished.')
         print()
-        return station_coords
+        return site_type_dict
+
+    delim = '\t'  # tab character
+    print('Working...')
+    in_count = 0
+    usgs_site_count = 0
+ 
+    #------------------
+    # Open input file
+    #------------------
+    in_tsv_path = wqp_dir + in_tsv_file
+    in_tsv_unit = open(in_tsv_path,  'r')
+
+    #-----------------------    
+    # Skip the header line
+    #-----------------------
+    header = in_tsv_unit.readline()
+    site_type_dict = dict()
+    site_type_list = list()
+
+    while (True):
+        line = in_tsv_unit.readline()
+        if (line == ''):
+            break  # (reached end of file)
+        values = line.split( delim )
+        in_count  += 1
+
+        site_id   = values[2].strip()
+        site_type = values[4].strip()
+        
+        if (site_id.startswith('USGS-')):
+            sid = site_id.replace('USGS-', '')
+            site_type_dict[ sid ] = site_type
+            usgs_site_count += 1
+
+        #----------------------------------------------------         
+        # E.g. atmosphere, canal, lake, spring stream, well
+        #---------------------------------------------------- 
+        if (site_type not in site_type_list):
+            site_type_list.append( site_type )
+                                
+        if ((in_count % 10000) == 0):
+            print('  in_count =', in_count)
+
+    print('Unique site types =')
+    print( site_type_list )
+
+    if (SAVE_TO_FILE):
+        dict_unit = open( dict_path, 'wb' )
+        pickle.dump( site_type_dict, dict_unit, protocol=pickle.HIGHEST_PROTOCOL)
+        dict_unit.close()
+        print('Saved USGS site type dictionary to file:')
+        print('  ' + dict_path)
+        print()
+        
+    #-------------------  
+    # Close input file
+    #-------------------
+    in_tsv_unit.close()
+    print('Total in count =', in_count)
+    print('Number of USGS sites =', usgs_site_count )
+    print('Finished.')
+    
+    return site_type_dict
+
+#   get_site_type_dict()
+#---------------------------------------------------------------------
+def get_usgs_site_coords( delim='\t', NWIS_ALL=False,
+                          SAVE_TO_FILE=False):
+
+    #--------------------------------------------------------------
+    # Note: Even though the "USGS_NWIS_WQP3" spreadsheet has
+    #       many more sites, the "USGS_NWIS_Web" spreadsheet
+    #       contains 16 site IDs that are not in the
+    #       USGS_NWIS_WQP3 spreadsheet for site type "Stream"
+    #       because they have some other site type.
+    #       These IDs are:
+    # 02203536, 04095090, 06146500, 06647000, 06780500, 08366400,
+    # 08385503, 09196960, 09442958, 09527660, 10010500, 11204680,
+    # 12485500, 13080000, 14246900, 14313600
+    #--------------------------------------------------------------
+    # These "missing" site IDs all seem to have valid URLs:
+    # https://waterdata.usgs.gov/nwis/inventory/?site_no=02203536
+    #    Tidal stream site
+    # https://waterdata.usgs.gov/nwis/inventory/?site_no=04095090
+    #    Ditch site
+    # https://waterdata.usgs.gov/nwis/inventory/?site_no=06146500
+    #    Ditch site
+    # https://waterdata.usgs.gov/nwis/inventory/?site_no=06647000
+    #    Canal site
+    # https://waterdata.usgs.gov/nwis/inventory/?site_no=06780500
+    #    Canal site
+    # https://waterdata.usgs.gov/nwis/inventory/?site_no=08366400
+    #    Canal site
+    # https://waterdata.usgs.gov/nwis/inventory/?site_no=08385503
+    #    Canal site
+    #--------------------------------------------------------------
+    if (NWIS_ALL):
+        key = 'USGS_NWIS_WQP3'
+    else:
+        key = 'USGS_NWIS_Web'
+        ### key = 'USGS_NWIS_Web_Old'
+    new_dir   = dtu.get_new_data_dir( key )
+    usgs_path = dtu.get_new_tsv_filepath( key )
+    n_sites   = dtu.get_n_records( key )
+    nh_lines  = dtu.get_header_lines( key )
+
+    # Note: file_name is same, but directories are different.
+    file_path = new_dir + 'USGS_site_coords.npy'
+    if (os.path.exists( file_path )):
+        print('Reading saved USGS site coords...')
+        site_coords = np.load( file_path )
+        print('Finished.')
+        print()
+        return site_coords
       
-    #----------------------------------------------------
-    # Note: Use set of all USGS gauged basins for this.
-    #----------------------------------------------------
-    print('Getting USGS station coords...')
-    usgs_path = get_usgs_filepath( NWIS_ALL=NWIS_ALL )
+    #--------------------------------------------
+    # Note: Use set of all USGS sites for this.
+    #--------------------------------------------
+    print('Getting USGS site coords...')
     usgs_unit = open( usgs_path, 'r' )
 
     #-----------------------
     # Skip over the header
     #-----------------------
-    nh_lines = get_usgs_header_lines( NWIS_ALL=NWIS_ALL )
     for j in range( nh_lines ):
         line = usgs_unit.readline()
 
-    #-------------------------------------    
-    # Construct the station_coords array
+    #----------------------------------    
+    # Construct the site_coords array
     #-----------------------------------------------
     # Numpy Unicode string array w/ up to 16 chars
     # Every element is initialized as null string
-    # station_id, lon, lat, huc_id (for NWIS_ALL)
+    # site_id, lon, lat, huc_id (for NWIS_ALL)
     #-----------------------------------------------
     k = 0
     if (NWIS_ALL):
-        n_stations = 145375
-        station_coords = np.zeros((n_stations,4), dtype='<U16')
+        site_coords = np.zeros((n_sites,4), dtype='<U16')
     else:
-        n_stations = 24520
-        station_coords = np.zeros((n_stations,3), dtype='<U16')
+        site_coords = np.zeros((n_sites,3), dtype='<U16')
     n_bad_lats = 0
     n_bad_lons = 0
 
@@ -253,77 +378,75 @@ def get_usgs_station_coords( delim='\t', NWIS_ALL=False,
             break  # (reached end of file)
         vals = usgs_line.split( delim )
         if (NWIS_ALL):
-            station_id  = vals[2].strip()
-            station_id  = station_id.replace('USGS-', '')
-            station_huc = vals[6].strip()
-            station_lat = vals[11].strip()  # lat, then lon in file
-            station_lon = vals[12].strip()        
+            site_id  = vals[2].strip()
+            site_id  = site_id.replace('USGS-', '')
+            site_huc = vals[6].strip()
+            site_lat = vals[11].strip()  # lat, then lon in file
+            site_lon = vals[12].strip()        
         else:
-            station_id  = vals[1].strip()
-            station_lat = vals[4].strip()  # lat, then lon in file
-            station_lon = vals[5].strip()
+            site_id  = vals[1].strip()
+            site_lat = vals[4].strip()  # lat, then lon in file
+            site_lon = vals[5].strip()
 
-        #------------------------------------------------
-        # This was triggered 236 times for NWIS_ALL and
-        # 58 times for the other "USGS_gauged" option.
-        #------------------------------------------------        
-        if (station_lat == '') or (station_lon == ''):
+        #--------------------------------------------
+        # This was triggered 236 times for NWIS_ALL
+        # and 58 times for the other option.
+        #--------------------------------------------        
+        if (site_lat == '') or (site_lon == ''):
             # This occurs for Okinawa, Guam, Palau, FSM, etc.
             ########## datum is not used yet ##########
-            lon, lat, datum = get_usgs_missing_lat_lon( station_id )
-            station_lat = lat
-            station_lon = lon
+            lon, lat, datum = get_usgs_missing_lat_lon( site_id )
+            site_lat = lat
+            site_lon = lon
             n_bad_lats += 1
             n_bad_lons += 1
 
-        station_coords[k,0] = station_id
-        station_coords[k,1] = station_lon
-        station_coords[k,2] = station_lat
+        site_coords[k,0] = site_id
+        site_coords[k,1] = site_lon
+        site_coords[k,2] = site_lat
         if (NWIS_ALL):
-            station_coords[k,3] = station_huc
+            site_coords[k,3] = site_huc
         k += 1
 
     if (n_bad_lats > 0) or (n_bad_lons > 0):
         print('Number of missing latitudes  =', n_bad_lats)
         print('Number of missing longitudes =', n_bad_lons)
         print('These were fixed by scraping values from the')
-        print('USGS station URL.  This occurs for:')
+        print('USGS site URL.  This occurs for:')
         print('  Federal States of Micronesia (FSM), Guam,')
         print('  Okinawa, Palau, etc.')
         print()
    
     if (NWIS_ALL):
-        #-----------------------------
-        # Need to sort by station id
-        #-----------------------------
-        station_ids = station_coords[:,0]
-        w = np.argsort( station_ids )
-        station_coords = station_coords[w,:]
+        #--------------------------
+        # Need to sort by site id
+        #--------------------------
+        site_ids = site_coords[:,0]
+        w = np.argsort( site_ids )
+        site_coords = site_coords[w,:]
  
     if (SAVE_TO_FILE):
-        usgs_dir  = get_usgs_dir( NWIS_ALL=NWIS_ALL )
-        file_path = usgs_dir + 'USGS_station_coords.npy'
-        np.save( file_path, station_coords)
-        print('Saved USGS station coords to file:')
+        np.save( file_path, site_coords)
+        print('Saved USGS site coords to file:')
         print('  ' + file_path)
         print()
 
     TEST_IF_NUMERIC = False
     if (TEST_IF_NUMERIC):
         try:
-            lons = np.float64( station_coords[:,1] )
+            lons = np.float64( site_coords[:,1] )
         except:
             print('ERROR: Non-numeric longitudes found.')
         try:
-            lats = np.float64( station_coords[:,2] )
+            lats = np.float64( site_coords[:,2] )
         except:
             print('ERROR: Non-numeric latitudes found.')
          
-    return station_coords
+    return site_coords
 
-#   get_usgs_station_coords()
+#   get_usgs_site_coords()
 #---------------------------------------------------------------------
-def compare_usgs_station_coords( tol=0.001 ):
+def compare_usgs_site_coords( tol=0.001 ):
 
     #-------------------------------------------------
     # Note: tol=0.01 corresponds to 1111 m or less
@@ -341,28 +464,29 @@ def compare_usgs_station_coords( tol=0.001 ):
     #-------------------------------------------------
     # See:  Wikipedia: Decimal degrees
     #-------------------------------------------------
-    coords1 = get_usgs_station_coords( NWIS_ALL=True )
+    coords1 = get_usgs_site_coords( NWIS_ALL=True )
     ids1 = coords1[:,0]
     w1 = np.argsort( ids1 )
-    coords1 = coords1[w1,:]  # sort coord1 by station id string
+    coords1 = coords1[w1,:]  # sort coord1 by site id string
     #----------------------------------------    
-    coords2 = get_usgs_station_coords( NWIS_ALL=False )
+    coords2 = get_usgs_site_coords( NWIS_ALL=False )
     ids2 = coords2[:,0]
     w2 = np.argsort( ids2 )
-    coords2 = coords2[w2,:]  # sort coord2 by station id string 
+    coords2 = coords2[w2,:]  # sort coord2 by site id string 
     #-----------------------------------------
     print('Comparing lons & lats for 2 USGS datasets...')
     print('   coords1.shape =', coords1.shape)  
     print('   coords2.shape =', coords2.shape)
-    n_stations1 = 145375  # for NWIS_ALL option
-    n_stations2 = 24520
+    n_sites1 = dtu.get_n_records( 'USGS_NWIS_WQP3' )  # NWIS_ALL
+    n_sites2 = dtu.get_n_records( 'USGS_NWIS_Web' )
+    ## n_sites2 = dtu.get_n_records( 'USGS_NWIS_Web_Old' )
     k = 0
     j = 0
     n_id_matches = 0
     n_lon_diffs  = 0
     n_lat_diffs  = 0
 
-    while ((k < n_stations1) and (j < n_stations2)):
+    while ((k < n_sites1) and (j < n_sites2)):
         usgs_id1 = coords1[k,0]
         usgs_id2 = coords2[j,0]
 #         print('usgs_id1 =', usgs_id1)
@@ -397,9 +521,9 @@ def compare_usgs_station_coords( tol=0.001 ):
     print('Finished.')
     print()
 
-#   compare_usgs_station_coords()
+#   compare_usgs_site_coords()
 #---------------------------------------------------------------------
-def usgs_state_code_map():
+def get_state_fips_code_map():
 
     #-------------------------------------------------------    
     # Note: These are FIPS codes.
@@ -497,43 +621,51 @@ def usgs_state_code_map():
     
     return map
 
-#   usgs_state_code_map()
+#   get_state_fips_code_map()
 #---------------------------------------------------------------------
-def get_usgs_station_info_dict( delim='\t', 
-                             SAVE_TO_FILE=False):
+def get_usgs_site_info_dict( NWIS_ALL=True, SAVE_TO_FILE=True ):
 
-    usgs_dir  = get_usgs_dir( NWIS_ALL=True )
-    station_info_file = 'USGS_station_info_dict.npy'
-    file_path = usgs_dir + station_info_file
+    if (NWIS_ALL):
+        key = 'USGS_NWIS_WQP3'
+    else:
+        key = 'USGS_NWIS_Web'
+        # key = 'USGS_NWIS_Web_Old'
+    new_dir   = dtu.get_new_data_dir( key )
+    usgs_path = dtu.get_new_tsv_filepath( key )
+    nh_lines  = dtu.get_header_lines( key )
+        
+    site_info_file = 'USGS_site_info_dict.pkl'
+    file_path = new_dir + site_info_file
     if (os.path.exists( file_path )):
-        print('Reading saved USGS station info dictionary...')
-        station_info = np.load( file_path ).flat[0]  #############
+        print('Reading saved USGS site info dictionary...')
+        file_unit = open( file_path, 'rb')
+        site_info = pickle.load( file_unit )
+        file_unit.close()
         print('Finished.')
         print()
-        return station_info
+        return site_info
       
-    #----------------------------------------------------
-    # Note: Use set of all USGS gauged basins for this.
-    #----------------------------------------------------
-    print('Getting USGS station info as dictionary...')
-    usgs_path = get_usgs_filepath( NWIS_ALL=True )
+    #--------------------------------------------
+    # Note: Use set of all USGS sites for this.
+    #--------------------------------------------
+    print('Getting USGS site info as dictionary...')
     usgs_unit = open( usgs_path, 'r' )
+    delim = '\t'
 
     #-----------------------
     # Skip over the header
     #-----------------------
-    nh_lines = get_usgs_header_lines( NWIS_ALL=True )
     for j in range( nh_lines ):
         line = usgs_unit.readline()
 
     #-------------------------------------------------------------    
-    # Construct the station_info dictionary, where USGS gauge id
+    # Construct the site_info dictionary, where USGS gauge id
     # is the key used to get a dictionary with info for a gauge
     #-------------------------------------------------------------
     # Using NWIS_ALL, so there will be 145,375 basins.
     #-------------------------------------------------------------
-    sc_map = usgs_state_code_map()   
-    station_info = dict()
+    sc_map = get_state_fips_code_map()   
+    site_info = dict()
     k = 0
     n_bad_lats = 0
     n_bad_lons = 0
@@ -544,15 +676,16 @@ def get_usgs_station_info_dict( delim='\t',
             break  # (reached end of file)
         vals = usgs_line.split( delim )
 
-        sid  = vals[2].strip()
-        sid  = sid.replace('USGS-', '')
-        name = vals[3].strip()
-        huc  = vals[6].strip()
-        lat  = vals[11].strip()  # lat, then lon in file
-        lon  = vals[12].strip()
-        fips = vals[25].strip()  # state FIPS code        
-        sc   = sc_map[ int(fips) ][0]  # 2-letter code
-        url  = get_usgs_site_url( sid )
+        sid   = vals[2].strip()
+        sid   = sid.replace('USGS-', '')
+        name  = vals[3].strip()
+        # stype = vals[4].strip()  # always "Stream"
+        huc   = vals[6].strip()
+        lat   = vals[11].strip()  # lat, then lon in file
+        lon   = vals[12].strip()
+        fips  = vals[25].strip()  # state FIPS code        
+        sc    = sc_map[ int(fips) ][0]  # 2-letter code
+        url   = get_usgs_site_url( sid )
 
         #------------------------------------------------
         # This was triggered 236 times for NWIS_ALL and
@@ -565,7 +698,7 @@ def get_usgs_station_info_dict( delim='\t',
             n_bad_lats += 1
             n_bad_lons += 1
 
-        station_info[ sid ] = \
+        site_info[ sid ] = \
             {'name':name, 'huc':huc, 'lat':lat, 'lon':lon,
              'state':sc, 'url':url }
         k += 1
@@ -574,33 +707,33 @@ def get_usgs_station_info_dict( delim='\t',
         print('Number of missing latitudes  =', n_bad_lats)
         print('Number of missing longitudes =', n_bad_lons)
         print('These were fixed by scraping values from the')
-        print('USGS station URL.  This occurs for:')
+        print('USGS site URL.  This occurs for:')
         print('  Federal States of Micronesia (FSM), Guam,')
         print('  Okinawa, Palau, etc.')
         print()
    
     if (SAVE_TO_FILE):
-        usgs_dir  = get_usgs_dir( NWIS_ALL=True )
-        file_path = usgs_dir + station_info_file
-        np.save( file_path, station_info)
-        print('Saved USGS station info dictionary to file:')
+        file_unit = open( file_path, 'wb' )
+        pickle.dump( site_info, file_unit, protocol=pickle.HIGHEST_PROTOCOL)
+        file_unit.close()
+        print('Saved USGS site info dictionary to file:')
         print('  ' + file_path)
         print()
 
 #     TEST_IF_NUMERIC = False
 #     if (TEST_IF_NUMERIC):
 #         try:
-#             lons = np.float64( station_coords[:,1] )
+#             lons = np.float64( site_coords[:,1] )
 #         except:
 #             print('ERROR: Non-numeric longitudes found.')
 #         try:
-#             lats = np.float64( station_coords[:,2] )
+#             lats = np.float64( site_coords[:,2] )
 #         except:
 #             print('ERROR: Non-numeric latitudes found.')
          
-    return station_info
+    return site_info
 
-#   get_usgs_station_info_dict()
+#   get_usgs_site_info_dict()
 #---------------------------------------------------------------------
 #---------------------------------------------------------------------
 def replace_periods( name, new_char='' ):
@@ -803,7 +936,9 @@ def replace_abbreviations( name ):
     name = name.replace(' ALT ',  ' ALTITUDE ') # e.g. ALT 250 FT
     #--------------------------------------------
     name = name.replace(' BL ',   ' BELOW ')
-    # name = name.replace(' BLO ',  ' BELOW ')  # no matches    
+    ## No match for 'BLO' in NWIS, but many in RFC lists.
+    ## e.g. "St. Vrain Ck. blo Longmont"
+    name = name.replace(' BLO ',  ' BELOW ')   
     name = name.replace(' BLW ',  ' BELOW ')
     name = name.replace(' DS ',   ' DOWNSTREAM ')  ## CHECK ALL
     # name = name.replace(' MI ',   ' MILES ')  # Or Michigan ???
@@ -860,6 +995,9 @@ def replace_abbreviations( name ):
     name = name.replace('NB ', 'NORTH BRANCH ')
     name = name.replace('SB ', 'SOUTH BRANCH ')             
     #---------------------------------------------
+    name = name.replace(' BK ',  ' BROOK ')
+    name = name.replace(' BRK ', ' BROOK ')  
+    #---------------------------------------------
     name = name.replace(' BYU ',   ' BAYOU ')      ## CHECK MORE
     #---------------------------------------------    
     name = name.replace(' CANL ',  ' CANAL ')
@@ -909,6 +1047,7 @@ def replace_abbreviations( name ):
     name = name.replace(' R ',     ' RIVER ')
     name = name.replace(' RV ',    ' RIVER ')
     name = name.replace(' RIV ',   ' RIVER ')
+    name = name.replace(' RVR ',   ' RIVER ')   # In RFC names
     #---------------------------------------------
     name = name.replace(' RES ',   ' RESERVOIR ')
     name = name.replace(' RESV ',  ' RESERVOIR ')
@@ -923,6 +1062,8 @@ def replace_abbreviations( name ):
     #---------------------------------------------     
     # 'HAIKU STR NEAR HEEIA OAHU HI'
     name = name.replace(' STR ', ' STREAM ')
+    #--------------------------------------------- 
+    name = name.replace(' TR ',   ' TRIBUTARY ')    
     name = name.replace(' TRIB ', ' TRIBUTARY ')
   
     #-----------------------------
@@ -1084,6 +1225,8 @@ def replace_state_letters( name ):
         name = name[:-5] + ' CO'
     if (name[-5:] == ' CONN'):
         name = name[:-5] + ' CT'
+    if (name[-5:] == ' MASS'):
+        name = name[:-5] + ' MA'
     if (name[-5:] == ' MICH'):
         name = name[:-5] + ' MI'
     if (name[-5:] == ' MINN'):
@@ -1274,7 +1417,7 @@ def expand_usgs_site_name( name, UPPER=True,
                        FIX_DIRECTIONS=True):
 
     #---------------------------------------------------------
-    # Note: USGS station names contain many abbreviations,
+    # Note: USGS site names contain many abbreviations,
     #       some standard and some unusual (e.g. SKNL).
     #       This function (and get_usgs_long_name) expands
     #       most of the abbrevations, corrects misspellings,
@@ -1383,7 +1526,7 @@ def get_usgs_long_name( usgs_name ):
 def get_usgs_site_url( site_no ):
 
     #--------------------------------------------------
-    # Note: site_no is an 8-digit USGS station code.
+    # Note: site_no is an 8-digit USGS site code.
     # e.g., 01206900.  Each has its own web page.
     #--------------------------------------------------
     # Note: The ID: 01095505 occurs in GAGES2_all but
@@ -1435,6 +1578,7 @@ def get_usgs_missing_lat_lon( site_id, REPORT=False ):
     words    = line.split()  # on any whitespace (even 2 spaces)
     #--------------------------------------------
     lat_word = words[1]
+    #### lat = dtu.convert_dms_to_dec_deg( lat_word, REMOVE_SYMBOLS=True )
     lat_word = lat_word.replace('&#176;',' ')  # degree symbol
     lat_word = lat_word.replace("'", ' ')
     lat_word = lat_word.replace('"', '')
@@ -1449,6 +1593,7 @@ def get_usgs_missing_lat_lon( site_id, REPORT=False ):
         lat = D + (M/60.0) + (S/3600.0)    
     #---------------------------------------------
     lon_word = words[4]
+    #### lon = dtu.convert_dms_to_dec_deg( lon_word, REMOVE_SYMBOLS=True )
     lon_word = lon_word.replace('&#176;',' ')
     lon_word = lon_word.replace("'", ' ')
     lon_word = lon_word.replace('"', '')
@@ -1474,7 +1619,7 @@ def get_usgs_missing_state( site_id, code_map, REPORT=False ):
     #--------------------------------------------
     # Scrape state name from the USGS site page
     #--------------------------------------------
-    # Doesn't work for these 6 station ids:
+    # Doesn't work for these 6 site ids:
     # 01011500, 01129300, 06144250,
     # 06144350, 12300000, 12355000
     # These are on "International Boundary" and
@@ -1513,7 +1658,71 @@ def get_usgs_missing_state( site_id, code_map, REPORT=False ):
         
 #   get_usgs_missing_state()
 #---------------------------------------------------------------------
+def haversine( lon1, lat1, lon2, lat2):
 
+    # p = 0.017453292519943295
+    p     = (np.pi / 180)
+    term1 = np.cos((lat2 - lat1)*p)/2
+    term2 = np.cos(lat1*p) * np.cos(lat2*p)
+    term3 = (1-np.cos((lon2 - lon1)*p)) / 2
+    haver = 0.5 - term1 + (term2 * term3) 
+    return haver
+    
+#   haversine()
+#---------------------------------------------------------------------
+def distance_on_sphere(lon1, lat1, lon2, lat2):
+
+    #----------------------------------
+    # 12742 = diameter of Earth in km
+    #--------------------------------------------------
+    # https://stackoverflow.com/questions/41336756/
+    #         find-the-closest-latitude-and-longitude
+    # https://en.wikipedia.org/wiki/Haversine_formula
+    #--------------------------------------------------
+    haver = haversine( lon1, lat1, lon2, lat2)
+    return 12742 * np.arcsin(np.sqrt( haver ))  # [km]
+    
+#   distance_on_sphere()
+#---------------------------------------------------------------------
+def get_closest_site(site_coords, lon, lat, REPORT=False):
+
+    #------------------------------------------------------
+    # Call usgs.get_usgs_site_coords() once to extract
+    # USGS gauging station data from USGS TSV file.
+    # site_data = [[id1,x1,y1],[id2,x2,y2],...]
+    #------------------------------------------------------
+    site_ids  = site_coords[:,0]
+    site_lons = np.float64( site_coords[:,1] )
+    site_lats = np.float64( site_coords[:,2] )
+
+    lon2 = np.float64( lon )  # could be string
+    lat2 = np.float64( lat )
+    if ((lon2 <= -999) or (lat2 < -90.0) or (lat2 > 90.0)):
+        closest_id  = 'unknown'
+        closest_lon = 'unknown'
+        closest_lat = 'unknown'
+        dmin        = -999.0
+        return closest_id, closest_lon, closest_lat, dmin
+        
+    dist_vals = distance_on_sphere(site_lons, site_lats, lon2, lat2)
+    dmin = dist_vals.min()
+    imin = np.argmin( dist_vals )
+    
+    closest_id  = site_ids[ imin ]
+    closest_lon = site_lons[ imin ]
+    closest_lat = site_lats[ imin ]
+
+    if (REPORT):
+        print('Closest USGS site ID =', closest_id)
+        print('   Site longitude    =', closest_lon)
+        print('   Site latitude     =', closest_lat)
+        print('   Site distance     =', dmin, '[km]')
+        print()
+
+    return closest_id, closest_lon, closest_lat, dmin
+
+#   get_closest_site()
+#---------------------------------------------------------------------
 
 
 

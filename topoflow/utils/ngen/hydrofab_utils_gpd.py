@@ -8,12 +8,12 @@ a specified catchment.
 """
 #------------------------------------------------------------------------
 #
-#  Copyright (C) 2022.  Scott D. Peckham
+#  Copyright (C) 2022-2024.  Scott D. Peckham
 #
 #  Example use:
 #
-#  >>> import hydrofab_tools as hft
-#  >>> c = hft.catchment()
+#  >>> import hydrofab_utils_gpd as hfg
+#  >>> c = hfg.catchment()
 #  >>> c.print_info('cat-29')
 #  >>> dem = c.get_dem('cat-29')
 #

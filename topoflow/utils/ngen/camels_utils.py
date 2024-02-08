@@ -1,21 +1,26 @@
 
-# Copyright (c) 2023, Scott D. Peckham
+#  Copyright (c) 2023-2024, Scott D. Peckham
 #
-# Jul 2023.  Original version. 
+#  Jan 2024. Renamed all "ngen/utils" files to end in "_utils.py"
+#            instead of "_tools.py".
+#            Two versions of create_camels_bbox_file to compare.
+#            Wrote get_camels_shapefile() and cleaned up.
+#            Modified to use new data_utils.py.
+#  Jul 2023. Original version. 
 #
 #---------------------------------------------------------------------
 #
 #  % conda activate tf36  (has gdal package)
 #  % python
-#  >>> from topoflow.utils.ngen import camels_tools as ct
-#  >>> ct.create_camels_bbox_file()
-#  >>> ct.create_tsv()
+#  >>> from topoflow.utils.ngen import camels_utils as cu
+#  >>> cu.create_camels_bbox_file2()
+#  >>> cu.create_tsv()
 #
 #---------------------------------------------------------------------
 #
-#  get_basin_repo_dir()
-#  get_camels_data_dir()
-#  create_camels_bbox_file()
+#  get_camels_shapefile()
+#  create_camels_bbox_file1()  # uses full-res shapefile
+#  create_camels_bbox_file2()  # uses shapefile with HRUs
 #  sort_camels_bbox_file()
 #  find_extra_ids()
 #  create_tsv()
@@ -27,36 +32,159 @@ from osgeo import ogr, osr
 # import json, sys
 
 import time
+from topoflow.utils.ngen import data_utils as dtu
 from topoflow.utils.ngen import shape_utils as su
 
 #---------------------------------------------------------------------
-def get_basin_repo_dir():
+def get_camels_shapefile( ftype='full_res' ):
 
-    #-----------------------------------
-    # Modify this directory as needed.
-    #-----------------------------------
-    repo_dir  = '/Users/peckhams/Dropbox/NOAA_NextGen/'
-    repo_dir += '__NextGen_Example_Basin_Repo/'
-    return repo_dir
-
-#   get_basin_repo_dir()
-#---------------------------------------------------------------------
-def get_camels_data_dir(version='1.2'):
-
-    if (version == '1.2'):
-       camels_dir = '/Users/peckhams/Data/CAMELS/2016_v1.2/'
-    elif (version == '2.0'):
-       camels_dir = '/Users/peckhams/Data/CAMELS/2023_v2.0/'
-    else:
-       repo_dir = get_basin_repo_dir()
-       camels_dir = repo_dir + 'CAMELS/'
+    camels_dir = dtu.get_data_dir( 'CAMELS' )
+    
+    if (ftype == 'full_res'):
+        #------------------------------------------------
+        # This contains a high-res version of the basin
+        # boundary for each of the 671 CAMELS basins.
+        #------------------------------------------------
+        camels_dir += 'basin_set_full_res/'
+        camels_file = camels_dir + 'HCDN_nhru_final_671.shp'
+    elif (ftype == 'with_hrus'):
+        #------------------------------------------------------
+        # A given CAMELS basin may contain multiple HRUs.
+        # This is a merged set of simplified basin boundaries
+        # that include boundaries of 7844 individual HRUs.
+        #------------------------------------------------------
+        camels_dir += 'basin_timeseries_v1p2_metForcing_obsFlow/'
+        camels_dir += 'basin_dataset_public_v1p2/'
+        camels_dir += 'shapefiles/merge/'
+        camels_file = camels_dir + 'basinset_gf_nhru.shp'
        
-    return camels_dir
+    return camels_file
 
-#   get_camels_data_dir()
+#   get_camels_shapefile()
 #---------------------------------------------------------------------
-def create_camels_bbox_file( bbox_file='camels_bbox.txt',
-                             nb_max=700):
+def create_camels_bbox_file1( tmp_bbox_file='camels_bbox.tmp',
+                              bbox_file='camels_bbox.txt',
+                              nb_max=700):
+   
+    #-------------------------------------------------------------
+    # This function creates a semicolon-delimited text file,
+    # similar to other camels files (e.g. camels_topo.txt),
+    # that contains gauge_id, minlon, maxlon, minlat, & maxlat.
+    # It reads from a full-res shapefile that has the basin
+    # boundaries for all 671 CAMELS basins.
+    # This is much faster than the similar function:
+    #     create_camels_bbox_file2().
+    #-------------------------------------------------------------
+    # Since all CAMELS basins are included in GAGES2_SB3 and
+    # GAGES2_ref, we could compare the bounding boxes.
+    #-------------------------------------------------------------
+    # Set nb_max to smaller value (e.g. 20) for testing.
+    #-------------------------------------------------------------    
+    shape_path  = get_camels_shapefile( 'full_res' )
+    prj_path    = shape_path.replace('.shp', '.prj') 
+    #---------------------------------------------------
+    out_dir   = dtu.get_new_data_dir( 'CAMELS' )     
+    bbox_unit = open( out_dir + tmp_bbox_file, 'w' )
+ 
+    start_time = time.time()   
+    shape_unit = ogr.Open( shape_path )
+    layer      = shape_unit.GetLayer()
+    n_basins   = np.int32(0)
+    SWAP_XY    = True     #######
+    delim      = ';'  # semi-colon delimiter
+    minlon = 180.0
+    maxlon = -180.0
+    minlat = 90.0
+    maxlat = -90.0
+
+    #---------------------------------
+    # Write header for new bbox_file
+    #---------------------------------
+    ## new_headings=['gauge_id','MINLON','MAXLON','MINLAT','MAXLAT']
+    bbox_unit.write('gauge_id' + delim)
+    bbox_unit.write('MINLON'   + delim)
+    bbox_unit.write('MAXLON'   + delim)
+    bbox_unit.write('MINLAT'   + delim)
+    bbox_unit.write('MAXLAT'   + '\n')
+  
+    #-----------------------------------------    
+    # Iterate over the features in the layer
+    # GeometryType = 3 is POLYGON.
+    #-----------------------------------------
+    print('Working...')
+    for feature in layer:
+        geometry   = feature.GetGeometryRef()
+        attributes = feature.items()  # This is a Python dictionary
+        # n_rings    = geometry.GetGeometryCount()
+
+        #-----------------------------        
+        # Get the USGS site/gauge ID
+        #-----------------------------
+        gauge_id = str( attributes['hru_id'] ).strip()    #########
+        if (len(gauge_id) == 7):
+            gauge_id = '0' + gauge_id       
+        
+        #---------------------------------- 
+        # Get all points in this geometry
+        #----------------------------------
+        x1, y1 = su.get_polygon_points( feature )
+#         print('x1 =', x1)
+#         print('y1 =', y1)
+        # break
+
+        #------------------------------------------       
+        # Convert coords to Geo. lon/lat (WGS-84)
+        #------------------------------------------
+        x2,y2 = su.convert_coords(x1,y1, inPRJfile=prj_path,
+                                  SWAP_XY=SWAP_XY, PRINT=False)
+#         print('x2 =', x2)
+#         print('y2 =', y2)
+#         break        
+
+        #---------------------------------------------------- 
+        # Get geographic bounding box for this CAMELS basin
+        #----------------------------------------------------
+        minlon, maxlon, minlat, maxlat = su.get_bounding_box(x2, y2)
+#         print()
+#         print('minlon, maxlon =', minlon, maxlon)
+#         print('minlat, maxlat =', minlat, maxlat)
+        
+        #-------------------------------------              
+        # Write line of info to new CSV file
+        #---------------------------------------------------------
+        # su.get_bounding_box() rounds to 5 digits after decimal
+        #---------------------------------------------------------   
+        bbox_unit.write( gauge_id    + delim )
+        bbox_unit.write( str(minlon) + delim )
+        bbox_unit.write( str(maxlon) + delim )
+        bbox_unit.write( str(minlat) + delim )
+        bbox_unit.write( str(maxlat) + '\n' )
+        n_basins += 1
+        print('n_basins =', n_basins, 'of 671.')
+        print('   gauge_id =', gauge_id)
+        if (n_basins >= nb_max):
+            break     
+
+    #----------------------------------------
+    # Close bbox file, then reopen and sort
+    #----------------------------------------
+    bbox_unit.close()
+    sort_camels_bbox_file( in_bbox_file='camels_bbox.tmp',
+                           out_bbox_file='camels_bbox.txt')
+             
+    #-------------------
+    # Print final info
+    #-------------------
+    print('Processed', n_basins, 'CAMELS basins.') 
+    run_time = (time.time() - start_time)
+    print('Run time =', run_time, '[sec]')
+    print('Finished.')
+                           
+#   create_camels_bbox_file1()
+#---------------------------------------------------------------------
+def create_camels_bbox_file2( tmp_bbox_file='camels_bbox.tmp',
+                              bbox_file='camels_bbox.txt',
+                              nb_max=700):
 
     #-------------------------------------------------------------
     # This function creates a semicolon-delimited text file,
@@ -64,18 +192,15 @@ def create_camels_bbox_file( bbox_file='camels_bbox.txt',
     # that contains gauge_id, minlon, maxlon, minlat, & maxlat.
     # It reads from a merged shapefile that has the basin
     # boundaries for all HRUs within any given CAMELS basin.
+    # However, it finds 677 vs. 671 basins
     #-------------------------------------------------------------
-    # Change these directories as needed.
     # Set nb_max to smaller value (e.g. 20) for testing.
     #-------------------------------------------------------------    
-    camels1_dir = get_camels_data_dir(version='1.2')
-    camels2_dir = get_camels_data_dir(version='2.0')
-    #------------------------------------------------------------- 
-    shape_dir   = camels1_dir + 'shapefiles/merge/'
-    shape_path  = shape_dir + 'basinset_gf_nhru.shp'
-    prj_path    = shape_dir + 'basinset_gf_nhru.prj'
-    #-------------------------------------------------------------     
-    bbox_unit = open( camels2_dir + bbox_file, 'w' )
+    shape_path  = get_camels_shapefile( 'with_hrus' )
+    prj_path    = shape_path.replace('.shp', '.prj') 
+    #---------------------------------------------------
+    out_dir   = dtu.get_new_data_dir( 'CAMELS')     
+    bbox_unit = open( out_dir + tmp_bbox_file, 'w' )
  
     start_time = time.time()   
     shape_unit = ogr.Open( shape_path )
@@ -141,7 +266,7 @@ def create_camels_bbox_file( bbox_file='camels_bbox.txt',
 #         print('minlon, maxlon =', minlon, maxlon)
 #         print('minlat, maxlat =', minlat, maxlat)
         n_hrus += 1
-
+       
         if ((gauge_id == last_gauge_id) or FIRST_ONE):
             minlon = min(hru_minlon, minlon)
             maxlon = max(hru_maxlon, maxlon)
@@ -153,11 +278,11 @@ def create_camels_bbox_file( bbox_file='camels_bbox.txt',
             #---------------------------------------------------------
             # su.get_bounding_box() rounds to 5 digits after decimal
             #---------------------------------------------------------   
-            bbox_unit.write( gauge_id    + delim )
-            bbox_unit.write( str(minlon) + delim )
-            bbox_unit.write( str(maxlon) + delim )
-            bbox_unit.write( str(minlat) + delim )
-            bbox_unit.write( str(maxlat) + '\n' )
+            bbox_unit.write( last_gauge_id + delim )
+            bbox_unit.write( str(minlon)   + delim )
+            bbox_unit.write( str(maxlon)   + delim )
+            bbox_unit.write( str(minlat)   + delim )
+            bbox_unit.write( str(maxlat)   + '\n' )
             n_basins += 1
             print('n_basins =', n_basins, 'of 671.')
             print('   gauge_id =', gauge_id)
@@ -165,9 +290,9 @@ def create_camels_bbox_file( bbox_file='camels_bbox.txt',
             n_hrus_in_basin = np.int32(0)
             if (n_basins >= nb_max):
                 break
-            #----------------------------
-            # Reset bounding box coords
-            #----------------------------
+            #-------------------------------------------
+            # Use first HRU to initialize bounding box
+            #-------------------------------------------
             minlon = hru_minlon
             maxlon = hru_maxlon
             minlat = hru_minlat
@@ -176,40 +301,48 @@ def create_camels_bbox_file( bbox_file='camels_bbox.txt',
         n_hrus_in_basin += 1
         last_gauge_id = gauge_id      
 
-    #--------------------------------
-    # Print info, close files, etc.
-    #--------------------------------
+    #----------------------------------------
+    # Close bbox file, then reopen and sort
+    #----------------------------------------
+    bbox_unit.close()
+    sort_camels_bbox_file( in_bbox_file='camels_bbox.tmp',
+                           out_bbox_file='camels_bbox.txt')
+             
+    #-------------------
+    # Print final info
+    #-------------------
     print('Processed', n_hrus, 'HRUs.')
     print('Processed', n_basins, 'CAMELS basins.') 
-    bbox_unit.close()
     run_time = (time.time() - start_time)
     print('Run time =', run_time, '[sec]')
     print('Finished.')
    
-#   create_camels_bbox_file()
+#   create_camels_bbox_file2()
 #---------------------------------------------------------------------
-def sort_camels_bbox_file( bbox_file='camels_bbox0.txt',
-         bbox_file2='camels_bbox.txt'):
+def sort_camels_bbox_file( in_bbox_file='camels_bbox.tmp',
+                           out_bbox_file='camels_bbox.txt'):
 
-    print('Reading lines from:', bbox_file)
-    camels2_dir = get_camels_data_dir(version='2.0')  
-    bbox_unit = open( camels2_dir + bbox_file, 'r' )
-    lines    = bbox_unit.readlines()
+    print('Sorting lines in new bbox file...')
+    print('Reading lines from:', in_bbox_file)
+    out_dir       = dtu.get_new_data_dir( 'CAMELS')
+    in_bbox_unit  = open( out_dir + in_bbox_file,  'r' )      
+    out_bbox_unit = open( out_dir + out_bbox_file, 'w' )
+    
+    lines    = in_bbox_unit.readlines()
     headings = lines[0]
     lines    = lines[1:]
-    bbox_unit.close()
-    print('len(lines) =', len(lines))
+    in_bbox_unit.close()
+    print('Total number of lines =', len(lines)+1, '(incl. header line)' )
 
     #--------------------------------------     
     # Write sorted lines to new bbox file
     #--------------------------------------
-    print('Writing sorted lines to:', bbox_file2) 
+    print('Writing sorted lines to:', out_bbox_file) 
     lines.sort()
-    bbox_unit2 = open( camels2_dir + bbox_file2, 'w' )
-    bbox_unit2.write(headings)
-    bbox_unit2.writelines( lines )
-    bbox_unit2.close()
-    print('Finished.')
+    out_bbox_unit.write(headings)
+    out_bbox_unit.writelines( lines )
+    out_bbox_unit.close()
+    print('Finished sorting by ID.')
     print()
  
 #   sort_camels_bbox_file()
@@ -217,9 +350,10 @@ def sort_camels_bbox_file( bbox_file='camels_bbox0.txt',
 def find_extra_ids( CHECK_DUPES=False ):
 
     #--------------------------------------------------------------
-    # Note: camels_bbox.txt has 678 lines, while camels_name.txt
-    #       and the others only have 672 lines.  This function
-    #       helps to find the extra gauge IDs.
+    # Note: The bbox file created with create_camels_bbox_file2
+    #       has 678 lines, while camels_name.txt and the others
+    #       only have 672 lines (incl. 1 header line).  This
+    #       function helps to find the extra gauge IDs.
     #--------------------------------------------------------------
     # Note: In the shapefile attribute table, the gauge ID:
     #       07067000 does occur first in a set of 77 HRUs that
@@ -260,13 +394,13 @@ def find_extra_ids( CHECK_DUPES=False ):
     #--------------------------------------------------------------
     # In QGIS, install the BoundingBox plugin (how to use?).
     # And/or right click on a point & select Copy Coordinate.
-    #--------------------------------------------------------------    
-    camels2_dir = get_camels_data_dir(version='2.0')
-    # bbox_file = camels2_dir + 'camels_bbox_677.txt'
-    bbox_file = camels2_dir + 'camels_bbox_672.txt'
-    name_file = camels2_dir + 'camels_name.txt'
+    #--------------------------------------------------------------
+    dir1      = dtu.get_new_data_dir( 'CAMELS' )  
+    dir2      = dtu.get_data_dir( 'CAMELS' )
+    bbox_file = dir1 + 'camels_bbox.txt'
+    name_file = dir2 + 'camels_name.txt'
 
-    bbox_unit = open( bbox_file, 'r' )
+    bbox_unit = open( bbox_file, 'r' )    
     lines1 = bbox_unit.readlines()
     bbox_unit.close()
     print('Number of IDs in bbox_file =', len(lines1)-1)
@@ -278,7 +412,10 @@ def find_extra_ids( CHECK_DUPES=False ):
     name_unit.close()
     print('Number of IDs in name_file =', len(lines2)-1)
     print('Number of unique IDs in name_file =', len(set(lines2))-1)
-            
+
+    #--------------------------------    
+    # Get USGS IDs in the bbox_file
+    #--------------------------------        
     k = 0
     id_list1 = list()
     for line in lines1:
@@ -286,7 +423,10 @@ def find_extra_ids( CHECK_DUPES=False ):
         id_list1.append( id )
         k += 1
         # print('id =', id)
- 
+
+    #--------------------------------    
+    # Get USGS IDs in the name_file
+    #--------------------------------  
     k = 0
     id_list2 = list()
     for line in lines2:
@@ -294,6 +434,9 @@ def find_extra_ids( CHECK_DUPES=False ):
         id_list2.append( id  )
         k += 1
 
+    #----------------------------------
+    # Find duplicate IDs in bbox_file
+    #----------------------------------
     if (CHECK_DUPES):
         # This requires that id_list1 is sorted.
         print('Checking for duplicates...')
@@ -324,24 +467,19 @@ def find_extra_ids( CHECK_DUPES=False ):
     print(diff2)
     print()
    
-      
     print('Finished.')
       
 #   find_extra_ids()
 #---------------------------------------------------------------------
 def create_tsv( new_tsv_file = 'new_camels.tsv', delim='\t' ):
 
-    #--------------------------------------------------------------
-    # Note: CAMELS version 1.2 was released in 2016 and has much
-    #       more data including basin shapefiles. (91 GB)
-    #       CAMELS version 2.0 was released in July 2023 and
-    #       does not include basin shapefiles. (7.5 GB)
-    #--------------------------------------------------------------
-    #       Change these directories as needed.
-    #--------------------------------------------------------------
-    camels1_dir = get_camels_data_dir(version='1.2')
-    camels2_dir = get_camels_data_dir(version='2.0')
-    tsv_dir     = get_camels_data_dir(version='repo')
+    #-------------------------------------------------------
+    # Note: The file "camels_bbox.txt" was not part of the
+    #       original CAMELS dataset, so it is in the same
+    #       directory as the new TSV file to be created.
+    #-------------------------------------------------------
+    out_dir = dtu.get_new_data_dir( 'CAMELS' )
+    in_dir  = dtu.get_data_dir( 'CAMELS' )
 
     #---------------------------------------------------
     # These CAMELS data files use ";" as the delimeter
@@ -349,7 +487,7 @@ def create_tsv( new_tsv_file = 'new_camels.tsv', delim='\t' ):
     #   by gauge_id.  All gauge IDs are 8 chars.
     #---------------------------------------------------
     name_file   = 'camels_name.txt'  # all in camels2_dir
-    bbox_file   = 'camels_bbox_671.txt'
+    bbox_file   = 'camels_bbox.txt'  # must have 672 lines
     topo_file   = 'camels_topo.txt'  
     clim_file   = 'camels_clim.txt'
     soil_file   = 'camels_soil.txt'
@@ -357,15 +495,15 @@ def create_tsv( new_tsv_file = 'new_camels.tsv', delim='\t' ):
 
     #--------------------------------------------------    
     # Open text files to read & new csv file to write
-    #--------------------------------------------------
-    name_unit = open( camels2_dir + name_file, 'r' )
-    bbox_unit = open( camels2_dir + bbox_file, 'r' )
-    topo_unit = open( camels2_dir + topo_file, 'r' )
-    clim_unit = open( camels2_dir + clim_file, 'r' )
-    # soil_unit = open( camels2_dir + soil_file, 'r' )
-    # geol_unit = open( camels2_dir + geol_file, 'r' )
+    #--------------------------------------------------  
+    name_unit = open( in_dir + name_file, 'r' )
+    topo_unit = open( in_dir + topo_file, 'r' )
+    clim_unit = open( in_dir + clim_file, 'r' )
+    # soil_unit = open( in_dir + soil_file, 'r' )
+    # geol_unit = open( in_dir + geol_file, 'r' )
     #---------------------------------------------------
-    tsv_unit = open( tsv_dir + new_tsv_file, 'w' )
+    bbox_unit = open( out_dir + bbox_file, 'r' )   # SPECIAL
+    tsv_unit  = open( out_dir + new_tsv_file, 'w' )
 
     #---------------------------    
     # Read the column headings
@@ -396,11 +534,6 @@ def create_tsv( new_tsv_file = 'new_camels.tsv', delim='\t' ):
     tsv_unit.write( bbox_head + delim )
     tsv_unit.write( topo_head + delim )
     tsv_unit.write( clim_head + '\n')
-
-    #-----------------------------------------   
-    # Don't forget about minlon,maxlon, etc.      ##############
-    # Add afterwards w/ separate function?
-    #----------------------------------------- 
 
     #----------------------------- 
     # Write data to new tsv file
