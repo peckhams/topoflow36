@@ -789,7 +789,7 @@ class met_component( BMI_base.BMI_component ):
         if not(self.PRECIP_ONLY):
             self.update_saturation_vapor_pressure(MBAR=True)
             self.update_vapor_pressure()
-            self.update_dew_point(method = 'Raleigh') ###
+            self.update_dew_point() ###
             self.update_T_surf()
             self.update_saturation_vapor_pressure(MBAR=True, SURFACE=True)  ########
             self.update_bulk_richardson_number()
@@ -1760,7 +1760,7 @@ class met_component( BMI_base.BMI_component ):
                  
     #   update_vapor_pressure()
     #-------------------------------------------------------------------
-    def update_dew_point(self, method):
+    def update_dew_point(self):
 
         if (self.DEBUG):
             print('Calling update_dew_point()...')
@@ -1792,29 +1792,12 @@ class met_component( BMI_base.BMI_component ):
         # This formula needs e_air in mbar units.
         # See: https://en.wikipedia.org/wiki/Dew_point
         #-----------------------------------------------
-        if method == 'Dingman2002':
-            a = 6.1121   # [mbar]
-            b = 18.678
-            c = 257.14   # [deg C]
-            # d = 234.5    # [deg C]
-            log_term   = np.log( self.e_air / a)
-            self.T_dew =  c * log_term / (b - log_term)  # [deg C]
-        
-        if method == 'Dingman2015':
-            e_air_Pa = self.e_air * 100
-            top = np.log(e_air_Pa)-6.415
-            bot = (0.0999-0.00421)*np.log(e_air_Pa)
-            self.T_dew = top/bot
-        
-        if method == 'Raleigh':
-            # Works whether T_air is a grid/grid_series or scalar/time_series
-            b = np.where(self.T_air > 0, 17.625, 22.587)
-            c = np.where(self.T_air > 0, 243.04, 273.86) # [deg C]
-
-            frac = (b * self.T_air)/(c + self.T_air)
-            top = c * (np.log(self.RH)+frac)
-            bot = b - np.log(self.RH) - frac
-            self.T_dew = top/bot
+        a = 6.1121   # [mbar]
+        b = 18.678
+        c = 257.14   # [deg C]
+        # d = 234.5    # [deg C]
+        log_term   = np.log( self.e_air / a)
+        self.T_dew =  c * log_term / (b - log_term)  # [deg C]
 
         if (self.DEBUG):
             Td_min = self.T_dew.min()
