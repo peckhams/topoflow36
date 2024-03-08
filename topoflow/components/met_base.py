@@ -107,6 +107,7 @@ in BMI_base.py.
 #      update_advection_heat_flux()
 #      ------------------------------------
 #      update_julian_day()                   # (7/1/10)
+#      update_albedo()                       # (3/1/24)
 #      update_net_shortwave_radiation()      # (7/1/10)
 #      update_em_air()                       # (7/1/10)
 #      update_net_longwave_radiation()       # (7/1/10)
@@ -147,7 +148,7 @@ class met_component( BMI_base.BMI_component ):
     _att_map = {
         'model_name':         'TopoFlow_Meteorology',
         'version':            '3.1',
-        'author_name':        'Scott D. Peckham',
+        'author_name':        'Scott D. Peckham, Lauren A. Bolotin',
         'grid_type':          'uniform',
         'time_step_type':     'fixed',
         'step_method':        'explicit',
@@ -678,7 +679,7 @@ class met_component( BMI_base.BMI_component ):
             #-------------------------------------------------
             self.P_rain = self.initialize_scalar(0, dtype=dtype)
             self.P_snow = self.initialize_scalar(0, dtype=dtype)
-                               
+
         #------------------------------------------------------
         # NB! "Sample steps" must be defined before we return
         #     Check all other process modules.
@@ -725,7 +726,7 @@ class met_component( BMI_base.BMI_component ):
         #-----------------------
         ## print '    Calling initialize_computed_vars()...'
         self.initialize_computed_vars() # (after read_input_files)
-        
+                
         if not(self.PRECIP_ONLY):
             self.open_output_files() 
         self.status = 'initialized'  # (OpenMI 2.0 convention)
@@ -801,6 +802,7 @@ class met_component( BMI_base.BMI_component ):
             self.update_conduction_heat_flux()
             self.update_advection_heat_flux()
             self.update_julian_day()
+            self.update_albedo(method='aging')
             self.update_net_shortwave_radiation()
             self.update_em_air()
             self.update_net_longwave_radiation()
@@ -983,6 +985,7 @@ class met_component( BMI_base.BMI_component ):
         #-------------------------------------------------
         slopes = rtg_files.read_grid( self.slope_grid_file, self.rti,
                                       RTG_type='FLOAT' )
+        self.slopes = slopes
         beta   = np.arctan( slopes )
         beta   = (self.twopi + beta) % self.twopi
         #---------------------------------------------
@@ -1106,6 +1109,19 @@ class met_component( BMI_base.BMI_component ):
         self.aspect_grid_file = (self.topo_directory + self.aspect_grid_file)  
         self.set_slope_angle()
         self.set_aspect_angle()
+
+        #------------------------------------------
+        # For albedo calculations:
+        # Start 'number of days since major snowfall' at 0
+        self.n = 0    
+        # How many time steps are in a three day period? How many days are in each timestep?:
+        self.dt_per_3days = np.int64(259200/self.dt)
+        self.days_per_dt = self.dt/86400         
+        # Initialize array of rolling 3 day total snowfall    
+        self.P_snow_3day = np.zeros(self.dt_per_3days)
+        self.P_snow_3day_grid = np.zeros((self.P_snow_3day.size, self.slopes.shape[0], self.slopes.shape[1])) # TODO: this should not be hard coded 
+        #------------------------------------------
+
     
         #---------------------------        
         # Create lon and lat grids
@@ -1296,10 +1312,10 @@ class met_component( BMI_base.BMI_component ):
         #-------------------------------------------------
         P_rain = self.P * (self.T_air > self.T_rain_snow)
         
-        if (np.ndim( self.P_rain ) == 0):
+        if ((np.ndim( self.P_rain ) == 0) & (self.T_air_type.lower() == 'scalar')): # Why is it self.P_rain and not P_rain? LB
             self.P_rain.fill( P_rain )   #### (mutable scalar)
         else:
-            self.P_rain[:] = P_rain
+            self.P_rain = P_rain
   
         if (self.DEBUG):
             if (self.P_rain.max() > 0):
@@ -1349,10 +1365,10 @@ class met_component( BMI_base.BMI_component ):
         #-------------------------------------------------
         P_snow = self.P * (self.T_air <= self.T_rain_snow)
         
-        if (np.ndim( self.P_snow ) == 0):
+        if ((np.ndim( self.P_snow ) == 0) & (self.T_air_type.lower() == 'scalar')):
             self.P_snow.fill( P_snow )   #### (mutable scalar)
         else:
-            self.P_snow[:] = P_snow
+            self.P_snow = P_snow
 
         if (self.DEBUG):
             if (self.P_snow.max() > 0):
@@ -1965,6 +1981,81 @@ class met_component( BMI_base.BMI_component ):
             
     #   update_julian_day()
     #-------------------------------------------------------------------
+    def update_albedo(self, method = 'aging'):
+        if ((self.albedo_type.lower() == 'scalar') | (self.albedo_type.lower() == 'grid')):
+            if method == 'aging':
+                #------------------------------------------------
+                # Dynamic albedo accounting for aging snow
+                #------------------------------------------------
+                # (Rohrer and Braun 1994): alpha = alpha0 + K * e^(-nr)
+                # alpha = albedo
+                # alpha0 = minimum snowpack albedo (~0.4)
+                # K = constant (~0.44)
+                # n = number of days since last major snowfall, at least 3 cm over 3 days
+                # r = recession coefficient = 0.05 for temperatures < than 
+                # 0 deg C, 0.12 for temperatures > 0 deg C
+                #------------------------------------------------
+                r = np.where((self.T_air > 0), 0.12, 0.05)
+                K = 0.44
+                alpha0 = 0.4
+
+                '''ON A GRID'''
+                self.P_snow_3day_grid = np.roll(self.P_snow_3day_grid, -1, axis=0) # you can roll on different axes (time axis), shape of the DEM and time axis and roll on the time axis
+                
+                self.P_snow_3day_grid[np.size(self.P_snow_3day_grid, axis = 0)  - 1] = self.P_snow*self.dt
+
+                P_snow_3day_grid_total = np.sum(self.P_snow_3day_grid, axis=0) # maybe multipy by timestep here # also make sure to only sum over time axis
+                # self.P_snow_3day_grid_total = P_snow_3day_grid_total # if you want to output and make sure it's working properly
+
+                self.n = np.where((P_snow_3day_grid_total >= 0.03), 0, self.n)
+                self.n = np.where((P_snow_3day_grid_total < 0.03), self.n+self.days_per_dt, self.n)
+                albedo = alpha0 + K * np.exp(-self.n*r)
+                self.albedo = albedo
+
+        '''NOT ON A GRID'''
+        # Original dynamic albedo code  
+        #     r = np.where((self.T_air > 0), 0.12, 0.05)
+        #     K = 0.44
+        #     alpha0 = 0.4
+
+        #     # How many time steps are in a three day period?:
+        #     dt_per_3days = np.int64(259200/self.dt)
+        #     days_per_dt = self.dt/86400
+
+        #     # How much snow has fallen in the previous 3 days?
+        #     P_snow_3day = np.zeros(dt_per_3days)
+        #     P_snow_3day = np.roll(P_snow_3day, -1)
+        #     P_snow_3day[P_snow_3day.size - 1] = self.P_snow * self.dt
+        #     P_snow_3day_total = np.sum(P_snow_3day)
+
+        #     # NOTE: ----------------------
+        #     # My guess is that this will need to be adjusted to be compatible with 
+        #     # both grids and other formats of P data
+
+        #     # How many days since the last major snowfall (>= 3 cm in 3 days)?
+        #     if P_snow_3day_total >= 0.03:
+        #         self.n = 0
+        #     else: 
+        #         self.n += days_per_dt
+
+        #     albedo = alpha0 + (K * np.exp(-self.n*r))
+        #     self.albedo = albedo
+
+        #------------------------------------------------
+        # Simple dynamic albedo depending on ice vs. snow vs. bare ground (tundra) using values from Dingman
+        #------------------------------------------------
+        if method == 'simple':
+            albedo = self.albedo
+            albedo = np.where((self.h_snow > 0), # where snow exists
+                              np.float64(0.75), albedo)
+            albedo = np.where(((self.h_snow == 0) & (self.h_ice > 0)), # where ice exists without snow
+                              np.float64(0.5), albedo)
+            albedo = np.where(((self.h_snow == 0) & (self.h_ice == 0)), # where there is no snow or ice (tundra)
+                              np.float64(0.15), albedo)
+            self.albedo = albedo
+    #   update_albedo()
+    #-------------------------------------------------------------------
+    #-------------------------------------------------------------------
     def update_net_shortwave_radiation(self):
 
         #---------------------------------------------------------
@@ -2307,11 +2398,11 @@ class met_component( BMI_base.BMI_component ):
         #--------------------------------------------------------
         if (self.NGEN_CSV):
             # units_factor = self.mph_to_mps
-            units_factor = self.mmps_to_mps
+            P_units_factor = self.mmps_to_mps
         else:
-            units_factor = self.mmph_to_mps
+            P_units_factor = self.mmph_to_mps
         P = model_input.read_next(self.P_unit, self.P_type, rti,
-                                  units_factor=units_factor,
+                                  units_factor=P_units_factor,
                                   NGEN_CSV=self.NGEN_CSV)
                                                   
         # print('MET: (time,P) =', self.time, P)
@@ -2585,6 +2676,7 @@ class met_component( BMI_base.BMI_component ):
         self.Qlw_gs_file = (self.out_directory + self.Qlw_gs_file )
         self.ema_gs_file = (self.out_directory + self.ema_gs_file )
         self.tsurf_gs_file = (self.out_directory + self.tsurf_gs_file )
+        self.alb_gs_file = (self.out_directory + self.alb_gs_file)
         #------------------------------------------------------------
         self.ea_ts_file  = (self.out_directory + self.ea_ts_file  )
         self.es_ts_file  = (self.out_directory + self.es_ts_file  )
@@ -2592,7 +2684,10 @@ class met_component( BMI_base.BMI_component ):
         self.Qlw_ts_file = (self.out_directory + self.Qlw_ts_file )
         self.ema_ts_file = (self.out_directory + self.ema_ts_file )
         self.tsurf_ts_file = (self.out_directory + self.tsurf_ts_file)
-        
+        self.alb_ts_file = (self.out_directory + self.alb_ts_file)
+        self.n_ts_file = (self.out_directory + self.n_ts_file)
+        self.psnow_ts_file = (self.out_directory + self.psnow_ts_file)
+        self.tair_ts_file = (self.out_directory + self.tair_ts_file)
 ##        self.ea_gs_file = (self.case_prefix + '_2D-ea.rts')
 ##        self.es_gs_file = (self.case_prefix + '_2D-es.rts')
 ##        #-----------------------------------------------------
@@ -2649,6 +2744,11 @@ class met_component( BMI_base.BMI_component ):
                                             long_name='surface_temperature',
                                             units_name='C')  
             
+        if (self.SAVE_ALB_GRIDS):
+            model_output.open_new_gs_file( self, self.alb_gs_file, self.rti,
+                                            var_name='alb',
+                                            long_name='albedo',
+                                            units_name='none') 
         #--------------------------------------
         # Open new files to write time series
         #--------------------------------------
@@ -2689,7 +2789,24 @@ class met_component( BMI_base.BMI_component ):
             model_output.open_new_ts_file( self, self.tsurf_ts_file, IDs,
                                             var_name='tsurf',
                                             long_name='surface_temperature',
-                                            units_name='C')        
+                                            units_name='C')      
+        if (self.SAVE_ALB_PIXELS):
+            model_output.open_new_ts_file( self, self.alb_ts_file, IDs,
+                                            var_name='alb',
+                                            long_name='albedo',
+                                            units_name='none')   
+        model_output.open_new_ts_file( self, self.n_ts_file, IDs,
+                                            var_name='n',
+                                            long_name='n',
+                                            units_name='none') 
+        model_output.open_new_ts_file( self, self.psnow_ts_file, IDs,
+                                            var_name='psnow',
+                                            long_name='snowfall',
+                                            units_name='m s-1')   
+        model_output.open_new_ts_file( self, self.tair_ts_file, IDs,
+                                            var_name='tair',
+                                            long_name='air_temperature',
+                                            units_name='deg C')  
     #   open_output_files()
     #-------------------------------------------------------------------
     def write_output_files(self, time_seconds=None):
@@ -2722,6 +2839,7 @@ class met_component( BMI_base.BMI_component ):
         if (self.SAVE_QLW_GRIDS):  model_output.close_gs_file( self, 'Qlw')
         if (self.SAVE_EMA_GRIDS):  model_output.close_gs_file( self, 'ema')
         if (self.SAVE_TSURF_GRIDS): model_output.close_gs_file(self, 'tsurf')
+        if (self.SAVE_ALB_GRIDS): model_output.close_gs_file(self, 'alb')
         #-------------------------------------------------------------------
         if (self.SAVE_EA_PIXELS):  model_output.close_ts_file( self, 'ea') 
         if (self.SAVE_ES_PIXELS):  model_output.close_ts_file( self, 'es') 
@@ -2729,7 +2847,11 @@ class met_component( BMI_base.BMI_component ):
         if (self.SAVE_QLW_PIXELS): model_output.close_ts_file( self, 'Qlw')
         if (self.SAVE_EMA_PIXELS): model_output.close_ts_file( self, 'ema')
         if (self.SAVE_TSURF_PIXELS): model_output.close_ts_file(self, 'tsurf')
-        
+        if (self.SAVE_ALB_PIXELS): model_output.close_ts_file(self, 'alb')
+        model_output.close_ts_file(self, 'n')
+        model_output.close_ts_file(self, 'psnow')
+        model_output.close_ts_file(self, 'tair')
+
     #   close_output_files()        
     #-------------------------------------------------------------------  
     def save_grids(self):
@@ -2751,6 +2873,9 @@ class met_component( BMI_base.BMI_component ):
         
         if (self.SAVE_TSURF_GRIDS):
             model_output.add_grid( self, self.T_surf, 'tsurf', self.time_min )
+
+        if (self.SAVE_ALB_GRIDS):
+            model_output.add_grid( self, self.albedo, 'alb', self.time_min )
             
     #   save_grids()            
     #-------------------------------------------------------------------  
@@ -2776,6 +2901,12 @@ class met_component( BMI_base.BMI_component ):
 
         if (self.SAVE_TSURF_PIXELS):
             model_output.add_values_at_IDs( self, time, self.T_surf, 'tsurf', IDs )
+
+        if (self.SAVE_ALB_PIXELS):
+            model_output.add_values_at_IDs( self, time, self.albedo, 'alb', IDs )
+        model_output.add_values_at_IDs( self, time, self.n, 'n', IDs )
+        model_output.add_values_at_IDs( self, time, self.P_snow, 'psnow', IDs )
+        model_output.add_values_at_IDs( self, time, self.T_air, 'tair', IDs )
 
             
     #   save_pixel_values()
