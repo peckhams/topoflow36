@@ -1554,6 +1554,8 @@ def get_usgs_huc_url( huc_no ):
     # This applies to all of the 22 U.S. regions, which includes
     # Alaska (19), Hawaii (20), Puerto Rico (21) and Guam (22).
     #-------------------------------------------------------------
+    if (huc_no == '-'):
+        return '-'
     url = 'https://water.usgs.gov/lookup/getwatershed?'
     url += str(huc_no)
     return url

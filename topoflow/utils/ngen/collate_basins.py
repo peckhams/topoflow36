@@ -12,6 +12,10 @@
 #---------------------------------------------------------------------
 # Copyright (c) 2023-2024, Scott D. Peckham
 #
+# Feb 2024. Fixed issue w/ HLR codes always '0', because
+#           of how "isnumeric()" works.
+#           Wrote get_box_center_lon_lat().
+#           Added to att_dict: huc_url, wfo, and nws_url.
 # Jan 2024. Wrote write_new_values() due to multiple use.
 #           Wrote more general version of get_new_usgs_line().
 #           Renamed all "ngen/utils" files to end in "_utils.py"
@@ -60,6 +64,8 @@
 #  get_heading_list()
 #  get_default_att_dict()
 #  update_attributes()
+#  get_primary_keys()
+#  get_box_center_lon_lat()
 #
 #  collate()                          ##### In progress #####
 #  get_all_nwis_web_field_names()
@@ -343,8 +349,8 @@ def get_all_site_ids():
 def get_att_key_list():
 
     att_key_list = [
-    'site_id', 'nws_loc_id', 'rfc', 'huc', 'site_name',
-    'site_type',
+    'site_id', 'nws_loc_id', 'rfc', 'wfo',
+    'huc', 'site_name', 'site_type',
     'stage_data',
     'state_code', 'country_code',
     'lon', 'lat',
@@ -353,7 +359,7 @@ def get_att_key_list():
     'horiz_datum', 'vert_datum',
     'minlon', 'maxlon', 'minlat', 'maxlat',      
     'long_name', 'closest_site_id', 'closest_site_dist',
-    'site_url', 'huc_url',
+    'site_url', 'huc_url', 'nws_url',
     'status', 'start_date', 'end_date',
     'hlr_code', 'swb_class', 'hgraph_type' ]
 
@@ -363,13 +369,31 @@ def get_att_key_list():
 #---------------------------------------------------------------------
 def get_heading_list():
 
-    #-------------------
-    # Do this for now.
-    #-------------------
-    heading_list = list()
-    att_key_list = get_att_key_list()
-    for key in att_key_list:
-        heading_list.append( key.title() )
+    #----------------------------------------------------
+    # Note: This must match up with get_att_key_list().
+    #----------------------------------------------------
+    heading_list = [
+    'Site_ID', 'NWS_Loc_ID', 'RFC', 'WFO/CWA', 
+    'HUC', 'Site_Name', 'Site_Type',
+    'Stage_Data',
+    'State_Code', 'Country_Code',
+    'Lon', 'Lat',
+    'Elev', 'Elev_Units',
+    'Area', 'Area_Units',
+    'Horiz_Datum', 'Vert_Datum',
+    'Minlon', 'Maxlon', 'Minlat', 'Maxlat',      
+    'Long_Name', 'Closest_Site_ID', 'Closest_Site_Dist',
+    'Site_URL', 'HUC_URL', 'NWS_URL',
+    'Status', 'Start_Date', 'End_Date',
+    'HLR_Code', 'SWB_Class', 'Hgraph_Type' ]
+    
+    #-------------------------------------------
+    # Using "title" doesn't give best results.
+    #-------------------------------------------
+#     heading_list = list()
+#     att_key_list = get_att_key_list()
+#     for key in att_key_list:
+#         heading_list.append( key.title() )
 
     return heading_list
 
@@ -384,7 +408,10 @@ def get_default_att_dict( site_id ):
     att_dict[ 'site_type' ]    = '-'
     #---------------------------------------
     att_dict[ 'nws_loc_id' ]   = '-'
+    att_dict[ 'goes_id' ]      = '-'   ######
     att_dict[ 'rfc' ]          = '-'
+    att_dict[ 'wfo' ]          = '-'   # Note: WFO code = CWA code
+    att_dict[ 'hsa' ]          = '-'   ######
     att_dict[ 'huc' ]          = '-'
     #---------------------------------------
     #### att_dict[ 'has_discharge'] = '-'
@@ -412,14 +439,14 @@ def get_default_att_dict( site_id ):
     att_dict[ 'closest_site_dist' ] = '-'
     att_dict[ 'site_url' ]     = usgs.get_usgs_site_url( site_id )
     att_dict[ 'huc_url' ]      = '-'
-    ##       usgs.get_usgs_huc_url( huc_num )
+    att_dict[ 'nws_url' ]      = '-'  #####
     #---------------------------------------
     att_dict[ 'status' ]       = '-'
     att_dict[ 'start_date' ]   = '-'
     att_dict[ 'end_date' ]     = '-'
     #---------------------------------------
     att_dict[ 'eco_region' ]   = '-'
-    att_dict[ 'hlr_code' ]     = '0'  ######## OR use '-' ????
+    att_dict[ 'hlr_code' ]     = '0'
     att_dict[ 'swb_class' ]    = '-'
     att_dict[ 'hgraph_type' ]  = '-'
     #---------------------------------------    
@@ -545,21 +572,39 @@ def update_attributes( val_list, key, att_dict ):
     #------------------------------------------------------
     if (key == 'NOAA_HADS'):
         headings = ['USGS_ID', 'USGS_name', 'Station_type',
-        'Longitude', 'Latitude', 'RFC_ID', 'NWS_loc_ID']
-        ### 'NWS_HSA_ID', 'GOES_ID', 'HUC8', 'Hgraph_type']
-        UPDATE_ATTS = True
+        'Longitude', 'Latitude', 'RFC_ID', 'NWS_loc_ID',
+        'NWS_HSA_ID', 'GOES_ID' ]
+        ## 'HUC8', 'Hgraph_type']
         #-----------------------------------------
         att_keys = ['site_id', 'site_name', 'site_type',
-        'lon', 'lat', 'rfc', 'nws_loc_id'] 
-        ### 'nws_hsa_id', 'goes_id', 'huc', 'hgraph_type']
+        'lon', 'lat', 'rfc', 'nws_loc_id',
+        'hsa', 'goes_id' ]
+        ## 'huc', 'hgraph_type']
         UPDATE_ATTS = True
     #------------------------------------------------------
+    # Note: This file doesn't have USGS ID
+    #------------------------------------------------------    
+#     if (key == 'NOAA_RFCs'):
+#         headings = []
+#         #-----------------------------------------
+#         att_keys = []
+#         UPDATE_ATTS = True
+    #-------------------------------------------------------------
+    # Note: This uses file: USGS_NWIS_Web_Site_Info_via_API.tsv.
+    #       We also have: USGS_NWIS_WQP3_Site_Info_via_API.tsv.
+    #-------------------------------------------------------------
     if (key == 'NOAA_via_API'):
         headings = ['usgs_id', 'nws_loc_id', 'rfc_abbrev',
+        ## 'wfo_abbrev',  # empty now
         'usgs_name', 'state_code', 'longitude', 'latitude',
         'elevation' ]
+        ## 'updated_time',
+        ## 'in_service', 'pedts_obs', 'pedts_pred']
+        #---------------------------------------------        
         att_keys = ['site_id', 'nws_loc_id', 'rfc',
+        ## 'wfo',
         'site_name', 'state_code', 'lon', 'lat', 'elev' ]
+        ## 'updated_time',
         ## 'in_service', 'pedts_obs', 'pedts_pred']
         UPDATE_ATTS = True    
     #------------------------------------------------------
@@ -640,6 +685,21 @@ def get_primary_keys():
 
 #   get_primary_keys()
 #---------------------------------------------------------------------
+def get_box_center_lon_lat( att_dict ):
+
+    try:
+        minlon = np.float32( att_dict[ 'minlon' ] )
+        maxlon = np.float32( att_dict[ 'maxlon' ] )
+        minlat = np.float32( att_dict[ 'minlat' ] )
+        maxlat = np.float32( att_dict[ 'maxlat' ] )
+        center_lon = (maxlon + minlon) / 2.0  # this is correct
+        center_lat = (maxlat + minlat) / 2.0
+        return str(center_lon), str(center_lat)
+    except:
+        return '-9999', '-9999'
+             
+#   get_box_center_lon_lat()       
+#---------------------------------------------------------------------
 def collate( out_tsv_file=None, max_count=1000, DEBUG=False ):
 
     #-------------------------------------------------------------
@@ -671,13 +731,20 @@ def collate( out_tsv_file=None, max_count=1000, DEBUG=False ):
     state_code_map = dtu.get_state_code_map()  # full name to 2-letter
     n_bad_state_codes   = 0
     n_fixed_state_codes = 0
-    
- 
+
     #---------------------------------------------------
     # Get dictionary to map USGS ID to hydrograph type
     #---------------------------------------------------
     hydrograph_type_dict = rfc.get_hydrograph_type_dict()
 
+    #----------------------------------------------
+    # Get RFC dictionaries:
+    #    to map NWS loc ID to GOES_ID and HSA_ID.
+    #    to map NWS loc ID to WFO/CWA
+    #----------------------------------------------
+    rfc_dict1 = rfc.get_rfc_dict1()
+    rfc_dict2 = rfc.get_rfc_dict2()  # info from RFC shapefile
+  
     #-------------------------------------------------------
     # Get info to map HLR code to lon-lat pair
     # This info is passed to: hlr.get_hlr_code_for_point()
@@ -821,6 +888,62 @@ def collate( out_tsv_file=None, max_count=1000, DEBUG=False ):
             long_name  = usgs.get_usgs_long_name( site_name )
             att_dict[ 'long_name' ] = long_name
 
+        #-------------------------
+        # Use HUC to get HUC_URL
+        #-------------------------
+        huc = att_dict[ 'huc' ]
+        att_dict[ 'huc_url' ] = usgs.get_usgs_huc_url( huc )
+
+        #------------------------------
+        # Try to get the WFO/CWA code
+        #---------------------------------------------------
+        # The nws_id here is always 5 characters and comes
+        # from the USGS-HADS crosswalk.
+        #---------------------------------------------------
+        nws_id  = att_dict[ 'nws_loc_id' ]
+        print('## nws_id =', nws_id)
+        if (nws_id in rfc_dict2):
+            loc_info = rfc_dict2[ nws_id ]
+            att_dict[ 'wfo' ] = loc_info[ 'cwa_id' ]  # wfo ID = cwa ID
+        else:
+            if (nws_id != '-'):
+                print('## nws_id =', nws_id, 'is not in dict.')
+                print()        
+            
+        #------------------------------
+        # Try to get the WFO/CWA code
+        #----------------------------------
+        # This doesn't solve the problem.
+        # Modified dictionary instead.
+        #----------------------------------
+#         nws_id  = att_dict[ 'nws_loc_id' ]
+#         nws_id2 = nws_id[0:5]  # first 5 characters
+#         print('## nws_id =', nws_id)
+#         if (nws_id in rfc_dict2):
+#             loc_info = rfc_dict2[ nws_id ]
+#             att_dict[ 'wfo' ] = loc_info[ 'cwa_id' ]  # wfo ID = cwa ID
+#         elif (nws_id2 in rfc_dict2):
+#             loc_info = rfc_dict2[ nws_id2 ]
+#             att_dict[ 'wfo' ] = loc_info[ 'cwa_id' ]  # wfo ID = cwa ID
+#         else:
+#             print('## nws_id =', nws_id, 'is not in dict.')
+#             print()
+
+        #------------------------------------
+        # Try to get the GOES_ID and HSA_ID
+        #------------------------------------
+        if (nws_id in rfc_dict1):
+            loc_info = rfc_dict1[ nws_id ]
+            att_dict[ 'goes_id' ] = loc_info[ 'goes_id' ]
+            att_dict[ 'hsa' ]     = loc_info[ 'hsa_id' ]
+            
+        #------------------------------
+        # Try to get the NWS site URL
+        #------------------------------
+        nws_id = att_dict[ 'nws_loc_id' ]
+        wfo    = att_dict[ 'wfo' ]
+        att_dict[ 'nws_url' ] = rfc.get_nws_site_url( wfo=wfo, nws_id=nws_id )
+      
         #---------------------------------
         # Try to get 2-letter state code
         #---------------------------------
@@ -843,17 +966,24 @@ def collate( out_tsv_file=None, max_count=1000, DEBUG=False ):
             stype = site_type_map[ site_type ]
             att_dict[ 'site_type' ] = stype
   
-        #----------------------------------------------------
-        # Get the USGS HLR code for this site via lon & lat
-        #----------------------------------------------------
+        #--------------------------------------------------
+        # Get USGS HLR code for site via outlet lon & lat
+        #--------------------------------------------------
         lon = att_dict[ 'lon' ]
         lat = att_dict[ 'lat' ]
-        if (lon.isnumeric() and lat.isnumeric()):
-            if (lon != '-9999') and (lat != '-9999'):
-                hlr_code = hlr.get_hlr_code_for_point( lon, lat,
-                    hlr_grid=hlr_code_grid, grid_info=hlr_grid_info )
-                att_dict[ 'hlr_code' ] = hlr_code  # as a string
+        hlr_code = hlr.get_hlr_code_for_point( lon, lat,
+            hlr_grid=hlr_code_grid, grid_info=hlr_grid_info )
+        att_dict[ 'hlr_code' ] = hlr_code  # as a string
 
+        #---------------------------------------------------
+        # Get USGS HLR code for site via center lon & lat
+        # Center of bounding box may be better than outlet.
+        #---------------------------------------------------
+#         cent_lon, cent_lat = get_box_center_lon_lat( att_dict )
+#         hlr_code = hlr.get_hlr_code_for_point( cent_lon, cent_lat,
+#             hlr_grid=hlr_code_grid, grid_info=hlr_grid_info )
+#         att_dict[ 'hlr_code' ] = hlr_code  # as a string
+        
         #-----------------------------------------------
         # Try to get the hydrograph type for this site
         #-----------------------------------------------
@@ -1306,11 +1436,9 @@ def add_ars_basins( ars_unit, out_tsv_unit,
         #----------------------------------------------------
         # Get the USGS HLR code for this site via lon & lat
         #----------------------------------------------------
-        if (lon.isnumeric() and lat.isnumeric()):
-            if (lon != '-9999') and (lat != '-9999'):
-                hlr_code = hlr.get_hlr_code_for_point( lon, lat,
-                    hlr_grid=hlr_code_grid, grid_info=hlr_grid_info )
-                att_dict[ 'hlr_code' ] = hlr_code  # as a string         
+        hlr_code = hlr.get_hlr_code_for_point( lon, lat,
+            hlr_grid=hlr_code_grid, grid_info=hlr_grid_info )
+        att_dict[ 'hlr_code' ] = hlr_code  # as a string       
  
         #--------------------------------------------
         # Build ordered att_list from att_dict here
@@ -1422,11 +1550,13 @@ def add_czo_basins( czo_unit, out_tsv_unit,
         #----------------------------------------------------
         # Get the USGS HLR code for this site via lon & lat
         #----------------------------------------------------
-        if (lon.isnumeric() and lat.isnumeric()):
-            if (lon != '-9999') and (lat != '-9999'):
-                hlr_code = hlr.get_hlr_code_for_point( lon, lat,
-                    hlr_grid=hlr_code_grid, grid_info=hlr_grid_info )
-                att_dict[ 'hlr_code' ] = hlr_code  # as a string         
+        print('## In add_czo:')
+        print('## lon =', lon)
+        print('## lat =', lat)
+        print()
+        hlr_code = hlr.get_hlr_code_for_point( lon, lat,
+            hlr_grid=hlr_code_grid, grid_info=hlr_grid_info )
+        att_dict[ 'hlr_code' ] = hlr_code  # as a string         
  
         #--------------------------------------------
         # Build ordered att_list from att_dict here
@@ -1570,11 +1700,9 @@ def add_hlr_basins( hlr_unit, out_tsv_unit,
         # Get the USGS HLR code for this site via lon & lat
         #----------------------------------------------------
         att_dict['hlr_code'] = vals[22].strip() # code in {1,...,20
-#         if (lon.isnumeric() and lat.isnumeric()):
-#             if (lon != '-9999') and (lat != '-9999'):
-#                 hlr_code = hlr.get_hlr_code_for_point( lon, lat,
-#                     hlr_grid=hlr_code_grid, grid_info=hlr_grid_info )
-#                 att_dict[ 'hlr_code' ] = hlr_code  # as a string         
+#         hlr_code = hlr.get_hlr_code_for_point( lon, lat,
+#             hlr_grid=hlr_code_grid, grid_info=hlr_grid_info )
+#         att_dict[ 'hlr_code' ] = hlr_code  # as a string         
  
         #--------------------------------------------
         # Build ordered att_list from att_dict here
@@ -1708,11 +1836,9 @@ def add_lter_basins( lter_unit, out_tsv_unit,
         #----------------------------------------------------
         # Get the USGS HLR code for this site via lon & lat
         #----------------------------------------------------
-        if (lon.isnumeric() and lat.isnumeric()):
-            if (lon != '-9999') and (lat != '-9999'):
-                hlr_code = hlr.get_hlr_code_for_point( lon, lat,
-                    hlr_grid=hlr_code_grid, grid_info=hlr_grid_info )
-                att_dict[ 'hlr_code' ] = hlr_code  # as a string         
+        hlr_code = hlr.get_hlr_code_for_point( lon, lat,
+            hlr_grid=hlr_code_grid, grid_info=hlr_grid_info )
+        att_dict[ 'hlr_code' ] = hlr_code  # as a string         
  
         #--------------------------------------------
         # Build ordered att_list from att_dict here
@@ -1874,11 +2000,9 @@ def add_neon_basins( neon_unit, out_tsv_unit,
         #----------------------------------------------------
         # Get the USGS HLR code for this site via lon & lat
         #----------------------------------------------------
-        if (lon.isnumeric() and lat.isnumeric()):
-            if (lon != '-9999') and (lat != '-9999'):
-                hlr_code = hlr.get_hlr_code_for_point( lon, lat,
-                    hlr_grid=hlr_code_grid, grid_info=hlr_grid_info )
-                att_dict[ 'hlr_code' ] = hlr_code  # as a string         
+        hlr_code = hlr.get_hlr_code_for_point( lon, lat,
+            hlr_grid=hlr_code_grid, grid_info=hlr_grid_info )
+        att_dict[ 'hlr_code' ] = hlr_code  # as a string         
  
         #--------------------------------------------
         # Build ordered att_list from att_dict here

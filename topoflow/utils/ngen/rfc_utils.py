@@ -37,6 +37,7 @@
 #
 #  get_rfc_dict1()   # Info from All_USGS-HADS_SITES.tsv
 #  get_rfc_dict2()   # Info from new_rfc_info.tsv
+#  get_rfc_dict3()   # Info from USGS_NWIS_Web_Site_Info_via_API.tsv
 #  get_equivalent_nws_ids2()
 #  get_equivalent_nws_ids()
 #  create_combo_tsv()
@@ -69,6 +70,8 @@ from topoflow.utils.ngen import usgs_utils as usgs
 #---------------------------------------------------------------------
 def get_nws_site_url( wfo='SGF', nws_id='RBUM7' ):
 
+    if ((wfo == '-') or (nws_id == '-')):
+        return '-'
     site_url = 'https://water.weather.gov/ahps2/hydrograph.php'
     site_url += '?wfo='  + wfo.lower()
     site_url += '&gage=' + nws_id.lower()
@@ -205,7 +208,8 @@ def get_rfc_dict2( SAVE_TO_FILE=True ):
     
     site_info = dict()
     k = 0
-
+    n_trouble = 0
+    
     while (True):
         info_line = info_unit.readline()
         if (info_line == ''):
@@ -235,9 +239,28 @@ def get_rfc_dict2( SAVE_TO_FILE=True ):
             {'rfc_id':rfc_id, 'cwa_id':cwa_id,
              'lon':lon_str, 'lat':lat_str, 'minlon':minlon,
              'maxlon':maxlon, 'minlat':minlat, 'maxlat':maxlat }
+        
+        if (len(nws_id) > 5):
+            nws_id2 = nws_id[0:5]  # get first 5 chars
+            if (nws_id2 not in site_info):   
+                site_info[ nws_id2 ] = \
+                    {'rfc_id':rfc_id, 'cwa_id':cwa_id,
+                     'lon':lon_str, 'lat':lat_str, 'minlon':minlon,
+                     'maxlon':maxlon, 'minlat':minlat, 'maxlat':maxlat }
+            else:
+                #----------------------------------
+                # Note: 5 IDs start with MSDT2:
+                # MSDT2, MSDT21, MSDT22, MSDT23
+                #----------------------------------
+                # Note: 11 IDs start with BTLK2:
+                # BTLK2, BTLK21 to BTLK29, BKLT2U
+                #----------------------------------
+                print('### nws_id2 =', nws_id2, 'is already in dict.')
+                n_trouble += 1
         k += 1
 
     print('Processed', k, 'RFC sites.')
+    print('# long IDs with same first 5 chars =', n_trouble)
 
     if (SAVE_TO_FILE):
         file_unit = open( file_path, 'wb' )

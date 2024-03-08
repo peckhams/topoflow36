@@ -10,8 +10,9 @@
 #
 #  % conda activate tf36  (has gdal package)
 #  % python
-#  >>> from topoflow.utils.ngen import mopex_utils as mt
-#  >>> mt.create_tsv( nf_max=500 )
+#  >>> from topoflow.utils.ngen import mopex_utils as mu
+#  >>> mu.create_tsv( nf_max=500 )
+#  >>> mu.sort_by_site_code()
 #
 #---------------------------------------------------------------------
 #

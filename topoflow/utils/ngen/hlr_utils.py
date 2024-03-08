@@ -1608,8 +1608,33 @@ def Lambert_Azimuthal_Equal_Area_XY( lon, lat,
 #---------------------------------------------------------------------
 def get_hlr_code_for_point( lon, lat, hlr_grid=None, grid_info=None,
                             out_prj_file=None, USE_GDAL=False,
-                            REPORT=False, WARNINGS=False):
+                            REPORT=False, WARNINGS=True):
 
+    #--------------------------------------------
+    # Note: float() can also handle '1e5', etc.
+    #--------------------------------------------
+    try:
+        lon2 = float(lon)
+        lat2 = float(lat)
+    except:
+        ## print('### ERROR: lon or lat is not a number.')
+        return '0'
+    #---------------------------------------------
+    if (lon == '-9999') or (lat == '-9999'):
+        ## print('### ERROR: lon or lat is -9999.')
+        return '0'
+
+    #----------------------------------------------------------
+    # Note: isnumeric() returns False if there is anything
+    #       other than a digit, such as minus sign or decimal
+    #------------------------------------------------------
+#     lon2 = lon.replace('-', '').replace('.', '')
+#     lat2 = lat.replace('-', '').replace('.', '')
+#     if not(lon2.isnumeric() and lat2.isnumeric()):
+#         print('### ERROR: lon or lat is not numeric.')
+#         return '0'
+
+            
     if (grid_info is None):
         grid_info = get_hlr_grid_info()
 
@@ -1695,14 +1720,19 @@ def get_hlr_code_for_point( lon, lat, hlr_grid=None, grid_info=None,
         if (WARNINGS):
             print('### ERROR: Computed x,y falls outside of grid.')
             print('###        Returning hlr_code = 0.')
-            if not( in_xrange ):
-                print('### xmin, xmax =', xmin, ',', xmax)
-                print('### x =', x)
-            if not (in_yrange ):
-                print('### ymin, ymax =', ymin, ',', ymax)
-                print('### y =', y) 
+            print('### lon =', lon)
+            print('### lat =', lat)
+            #--------------------------------------------
+            # Note: These are Lambert_Azimuthal coords.
+            #--------------------------------------------
+#             if not( in_xrange ):
+#                 print('### xmin, xmax =', xmin, ',', xmax)
+#                 print('### x =', x)
+#             if not (in_yrange ):
+#                 print('### ymin, ymax =', ymin, ',', ymax)
+#                 print('### y =', y) 
             print()
-        return 0 
+        return '0' 
             
     #------------------------------------------------
     # Recall that row 0 is top row & goes with ymax
