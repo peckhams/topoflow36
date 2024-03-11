@@ -994,12 +994,26 @@ def replace_abbreviations( name ):
     name = name.replace(' BR ',  ' BRANCH ')
     name = name.replace('NB ', 'NORTH BRANCH ')
     name = name.replace('SB ', 'SOUTH BRANCH ')             
+    #-------------------------------------------------------
+    # HILLSBORO CA AT S-10-A NR DEERFIELD BCH., FL
+    # SITE 8T IN CONS AREA NO.1 NR BOYNTON BCH, FL
+    #-------------------------------------------------------
+    name = name.replace(' BCH.', ' BEACH')
+    name = name.replace(' BCH',  ' BEACH')      
+    #---------------------------------------------
+    # Lake:  TOLEDO BD RES NR BURKEVILLE TX
+    # Site ID: 8025360, Site Type: Stream
+    #   Sabine Rv at Toledo Bd Res nr Burkeville, TX
+    #   SABINE RV AT TOLEDO BD PWRHOUSE NR BURKEVILLE TX
+    #-------------------------------------------------------
+    name = name.replace(' BD ',  ' BEND ')    
     #---------------------------------------------
     name = name.replace(' BK ',  ' BROOK ')
     name = name.replace(' BRK ', ' BROOK ')  
     #---------------------------------------------
     name = name.replace(' BYU ',   ' BAYOU ')      ## CHECK MORE
-    #---------------------------------------------    
+    #---------------------------------------------
+    name = name.replace(' CA ',    ' CANAL ')       
     name = name.replace(' CANL ',  ' CANAL ')
     name = name.replace(' CONF ',  ' CONFLUENCE ')
     name = name.replace(' CONFL ', ' CONFLUENCE ') 
@@ -1033,6 +1047,20 @@ def replace_abbreviations( name ):
     #--------------------------------------------- 
     name = name.replace(' DIV ',  ' DIVERSION ')
     name = name.replace(' DTCH ', ' DITCH ')     
+    #------------------------------------------------------
+    # D&R Ca feeder US of gate at Washington Crossing NJ
+    # Del and Rar Ca feeder at Washington Crossing NJ
+    # Del and Rar Ca feed at L Ferry Rd at Trenton NJ
+    # Del and Rar fdr Ca at Perdicaris Pl at Trenton NJ
+    # Delaware and Raritan Canal at Port Mercer NJ
+    # Del & Rar Canal at Landing La at New Brunswick NJ
+    #------------------------------------------------------
+    name = name.replace(' D&R CA ',         'DELAWARE AND RARITAN CANAL')
+    name = name.replace(' DEL & RAR CA ',   'DELAWARE AND RARITAN CANAL')
+    name = name.replace(' DEL AND RAR CA ', 'DELAWARE AND RARITAN CANAL')  
+    #------------------------------------------------------    
+    name = name.replace(' FDR ',   ' FEEDER ')
+    name = name.replace(' FEED ',  ' FEEDER ')    
     #--------------------------------------------- 
     name = name.replace(' INTK ',  ' INTAKE ')
     name = name.replace(' INTKE ', ' INTAKE ')     
@@ -1173,6 +1201,8 @@ def replace_abbreviations( name ):
     #------------------------------------------------------
     # CA AQUEDUCT A N PORTAL TEHACHAPI TNL NR GORMAN CA
     name = name.replace(' TNL ',  ' TUNNEL ')  # JUST ONE
+    # Musconetcong Rv US Old Tpke Rd nr Beattystown NJ
+    name = name.replace(' TPKE ',  ' TURNPIKE ') 
     name = name.replace(' TUN ',  ' TUNNEL ')  ### CHECK ALL
 
     return name

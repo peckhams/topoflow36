@@ -1718,8 +1718,8 @@ def get_hlr_code_for_point( lon, lat, hlr_grid=None, grid_info=None,
     in_yrange = (y > ymin) and (y < ymax)
     if not( in_xrange and in_yrange ):
         if (WARNINGS):
-            print('### ERROR: Computed x,y falls outside of grid.')
-            print('###        Returning hlr_code = 0.')
+            print('### WARNING: Computed x,y falls outside of grid.')
+            print('###          Returning hlr_code = 0.')
             print('### lon =', lon)
             print('### lat =', lat)
             #--------------------------------------------

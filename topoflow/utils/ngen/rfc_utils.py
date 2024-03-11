@@ -1,13 +1,16 @@
 
 # Copyright (c) 2023-2024, Scott D. Peckham
 #
+# Mar 2024. Updated get_rfc_dict2() to use these.
+#           Modified get_nws_site_url().
+#           Wrote get_wfo_via_nws_site_url().
 # Jan 2024. Wrote create_combo_tsv().
 #           Wrote get_rfc_dict1(), get_rfc_dict2().
 #           Wrote create_rfc_tsv(); renamed create_tsv() to
 #              create_hads_tsv().
 #           Wrote get_usgs_rfc_dict_v1().
 #           Renamed all "ngen/utils" files to end in "_utils.py"
-#           instead of "_tools.py"
+#             instead of "_tools.py"
 #           Modified to use new data_utils.py.
 # Dec 2023. Wrote get_site_data_from_api() & create_tsv_via_api().
 #           Wrote get_usgs_rfc_dict_v0().
@@ -34,6 +37,7 @@
 #---------------------------------------------------------------------
 #
 #  get_nws_site_url()
+#  get_wfo_via_nws_site_url()   # 3/8/2024
 #
 #  get_rfc_dict1()   # Info from All_USGS-HADS_SITES.tsv
 #  get_rfc_dict2()   # Info from new_rfc_info.tsv
@@ -41,6 +45,7 @@
 #  get_equivalent_nws_ids2()
 #  get_equivalent_nws_ids()
 #  create_combo_tsv()
+#  compare_nws_ids()
 #
 #  get_usgs_rfc_dict_v0()
 #  get_usgs_rfc_dict_v1()
@@ -68,16 +73,64 @@ from topoflow.utils.ngen import shape_utils as su
 from topoflow.utils.ngen import usgs_utils as usgs
 
 #---------------------------------------------------------------------
-def get_nws_site_url( wfo='SGF', nws_id='RBUM7' ):
+def get_nws_site_url( nws_id ):
 
-    if ((wfo == '-') or (nws_id == '-')):
+    #---------------------------------------------------
+    # Note: Found out that only the nws_id is needed;
+    #       the wfo will be added automatically.
+    #       Can use nws_id='RBUM7', wfo='SGF' to test.
+    #---------------------------------------------------
+    if (nws_id == '-'):
         return '-'
     site_url = 'https://water.weather.gov/ahps2/hydrograph.php'
-    site_url += '?wfo='  + wfo.lower()
-    site_url += '&gage=' + nws_id.lower()
-    return site_url
+    site_url += '?gage=' + nws_id.lower()
+    return site_url    
+    #---------------------------------------------------    
+#     if ((wfo == '-') or (nws_id == '-')):
+#         return '-'
+#     site_url = 'https://water.weather.gov/ahps2/hydrograph.php'
+#     site_url += '?gage=' + nws_id.lower()
+#     site_url += '&wfo='  + wfo.lower()
+#     return site_url
 
 #   get_nws_site_url()
+#---------------------------------------------------------------------
+def get_wfo_via_nws_site_url( nws_id='RBUM7', REPORT=False ):
+
+    #----------------------------------------------- 
+    # Note: It seems this only works if nws_id has
+    #       the standard 5 characters.
+    #-----------------------------------------------
+    if (len(nws_id) > 5):
+        nws_id2 = nws_id[0:5]
+        nws_url = get_nws_site_url( nws_id2 )
+    else:
+        nws_url = get_nws_site_url( nws_id )    
+    #-------------------------------------------
+    r = requests.get( nws_url )
+    redirect_url = r.url
+    #-------------------------------------------
+    if ('&wfo=' in redirect_url):
+        # Note: redirect_url ends with the WFO
+        wfo = redirect_url[-3:].upper()
+    else:
+        #---------------------------------------------------
+        # Note: For nws_id='2843', 'ZZZZ', etc.
+        # redirect_url = https://water.weather.gov/ahps/
+        #---------------------------------------------------
+        # Note: For nws_id='ELMM8', redirect_url = nws_url
+        #---------------------------------------------------
+        wfo = '-'
+    
+    if (REPORT):
+        print('nws_id   =', nws_id)
+        print('nws_url  =', nws_url)
+        print('full_url =', redirect_url)
+        print('wfo      =', wfo)
+        print()
+    return wfo
+
+#   get_wfo_via_nws_site_url()
 #---------------------------------------------------------------------
 def get_rfc_dict1( SAVE_TO_FILE=True ):
 
@@ -89,6 +142,12 @@ def get_rfc_dict1( SAVE_TO_FILE=True ):
     #   https://hads.ncep.noaa.gov/USGS/ALL_USGS-HADS_SITES.txt
     # and has info for 10510 sites/basins.
     # Note that this file is sorted by 5-char NWS location ID.
+    # However, note that the resulting dictionary only has
+    # 10505 keys.
+    # Note:  new_hads_info_sorted.tsv has 10512 data rows.
+    # Note: len( set(ids) ) = 10472
+    # It turns out there are about 40 duplicated site IDs.
+    # See collate() function in collate_basins.py.
     #-------------------------------------------------------------
     # Note: None of the NWS IDs in the set of all USGS-HADS
     # sites is numeric.
@@ -149,13 +208,24 @@ def get_rfc_dict1( SAVE_TO_FILE=True ):
 
         lon_str = '{x:.5f}'.format(x=lon)
         lat_str = '{x:.5f}'.format(x=lat)
-                     
+
         ## url = usgs.get_usgs_site_url( usgs_id )
+        
+        #----------------------------------------- 
+        # Use this now to get the WFO = CWA code
+        # This is slow due to web access, but
+        #   seems like best way to get the WFO.
+        #-----------------------------------------
+        wfo_id = get_wfo_via_nws_site_url( nws_id )
+
         site_info[ nws_id ] = \
             {'usgs_id':usgs_id, 'usgs_name':usgs_name,
              'goes_id':goes_id, 'hsa_id':hsa_id,
+             'wfo_id': wfo_id,  ## 3/9/24
              'lat':lat_str, 'lon':lon_str } 
         k += 1
+        if ((k % 20) == 0):
+            print('  k =', k)
 
     print('Processed', k, 'RFC sites.')
 
@@ -173,15 +243,21 @@ def get_rfc_dict1( SAVE_TO_FILE=True ):
 #---------------------------------------------------------------------
 def get_rfc_dict2( SAVE_TO_FILE=True ):
 
-    #-------------------------------------------------------------    
+    #---------------------------------------------------------    
     # Construct a site_info dictionary, where NWS loc ID
     # is the key used to get dictionary info for a site.
     # This version uses the file: new_rfc_info.tsv
     # which was extracted from the shapefile:
     #   NOAA_RFC/Data/ba12my15.shp
-    # and has info for 9370 sites/basins.
+    # and has info for 9370 (or now 8827?) sites/basins.
     # The attributes differs from what is in rfc_dict1.
-    #-------------------------------------------------------------
+    #---------------------------------------------------------
+    # Note: 5 NWS loc IDs in ba12my15.csv start with MSDT2:
+    #     MSDT2, MSDT21, MSDT22, MSDT23
+    #
+    # Note: 11 NWS loc IDs in ba12my15.csv start with BKLT2:
+    #     BKLT2, BKLT21 to BKLT29, BKLT2U
+    #---------------------------------------------------------  
     new_dir = dtu.get_new_data_dir( 'NOAA_RFC' )
     #------------------------------------------------
     dict_file = 'RFC_site_info_dict2.pkl'
@@ -208,7 +284,6 @@ def get_rfc_dict2( SAVE_TO_FILE=True ):
     
     site_info = dict()
     k = 0
-    n_trouble = 0
     
     while (True):
         info_line = info_unit.readline()
@@ -234,33 +309,25 @@ def get_rfc_dict2( SAVE_TO_FILE=True ):
         lat = np.float64( lat_str )
         lon_str = '{x:.5f}'.format(x=lon)
         lat_str = '{x:.5f}'.format(x=lat)
-        
+
+        #----------------------------------------- 
+        # Use this now to get the WFO = CWA code
+        # This is slow due to web access, but
+        #   seems like best way to get the WFO.
+        #-----------------------------------------
+        wfo_id = get_wfo_via_nws_site_url( nws_id )
+               
         site_info[ nws_id ] = \
-            {'rfc_id':rfc_id, 'cwa_id':cwa_id,
+            {'rfc_id':rfc_id, 'wfo_id':wfo_id,
+             'cwa_id':wfo_id,   ##### 'cwa_id':cwa_id,
              'lon':lon_str, 'lat':lat_str, 'minlon':minlon,
              'maxlon':maxlon, 'minlat':minlat, 'maxlat':maxlat }
-        
-        if (len(nws_id) > 5):
-            nws_id2 = nws_id[0:5]  # get first 5 chars
-            if (nws_id2 not in site_info):   
-                site_info[ nws_id2 ] = \
-                    {'rfc_id':rfc_id, 'cwa_id':cwa_id,
-                     'lon':lon_str, 'lat':lat_str, 'minlon':minlon,
-                     'maxlon':maxlon, 'minlat':minlat, 'maxlat':maxlat }
-            else:
-                #----------------------------------
-                # Note: 5 IDs start with MSDT2:
-                # MSDT2, MSDT21, MSDT22, MSDT23
-                #----------------------------------
-                # Note: 11 IDs start with BTLK2:
-                # BTLK2, BTLK21 to BTLK29, BKLT2U
-                #----------------------------------
-                print('### nws_id2 =', nws_id2, 'is already in dict.')
-                n_trouble += 1
+
         k += 1
+        if ((k % 20) == 0):
+            print('  k =', k)
 
     print('Processed', k, 'RFC sites.')
-    print('# long IDs with same first 5 chars =', n_trouble)
 
     if (SAVE_TO_FILE):
         file_unit = open( file_path, 'wb' )
@@ -832,6 +899,42 @@ def create_combo_tsv( tsv_file='new_combo_rfc_info.tsv',
     print()
 
 #   create_combo_tsv()
+#---------------------------------------------------------------------
+def compare_nws_ids( PRINT_DIFF1_IDS=False, PRINT_DIFF2_IDS=False):
+
+    rfc_dict1 = get_rfc_dict1()
+    rfc_dict2 = get_rfc_dict2()
+    ids1 = list( rfc_dict1.keys() )
+    ids2 = list( rfc_dict2.keys() )
+    
+    print('rfc_dict1 basins: n =', len(set(ids1)))
+    print('rfc_dict2 basins: n =', len(set(ids2)))
+    ids3 = list( set(ids1) & set(ids2) )
+    print('IDs in both dictionaries: ', 'n =', len(ids3))
+        
+    #---------------------------
+    # Compare the two ID lists
+    #--------------------------- 
+    diff1 = list( set(ids1) - set(ids2))
+    diff1.sort()
+    print('NWS IDs in dict1 but not in dict2: ', 'n =', len(diff1))
+    if (PRINT_DIFF1_IDS):
+        print('Basin IDs in dict1 not in dict2:')
+        print(diff1)
+        print('len(diff1) =', len(diff1))
+        print()
+
+    diff2 = list( set(ids2) - set(ids1))
+    diff2.sort()
+    print('NWS IDs in dict2 but not in dict1: ', 'n =', len(diff2))
+    if (PRINT_DIFF2_IDS):
+        print('Basin IDs in dict2 not in dict1:')
+        print(diff2)
+        print('len(diff2) =', len(diff2))
+        print()
+    ## return diff2
+    
+#   compare_nws_ids()
 #---------------------------------------------------------------------
 def get_usgs_rfc_dict_v0( SAVE_TO_FILE=True ):
 

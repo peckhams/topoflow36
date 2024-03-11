@@ -53,6 +53,8 @@
 #  export_csv_to_tsv()
 #  convert_dms_to_dec_deg()
 #
+#  sort_tsv_by_site_id()
+#
 #---------------------------------------------------------------------
 import numpy as np
 import os, os.path
@@ -235,7 +237,8 @@ def get_new_tsv_filepath( db_str='USGS_NWIS_Web' ):
     elif (db_str == 'NOAA_HADS'):
         file_path = new_dir + 'new_hads_info_sorted.tsv'
     elif (db_str == 'NOAA_via_API'):
-        file_path = new_dir + 'USGS_NWIS_Web_Site_Info_via_API.tsv'
+        file_path = new_dir + 'USGS_NWIS_Web_Site_Info_via_API_sorted.tsv'
+        ### Next one is not sorted by USGS site ID!!
         ### file_path = new_dir + 'USGS_NWIS_WQP3_Site_Info_via_API.tsv'
     #-----------------------------------------------------------------
     elif (db_str == 'NSF_CZO'):
@@ -788,7 +791,7 @@ def get_basin_ids( db_str='USGS_NWIS_Web' ):
         if (db_str in wqp_list):
             id = id.replace('USGS-', '')
         if (len(id) == 7):
-            id = '0' + id   ########## 2023-11-22. Is this ever needed?
+            id = '0' + id   # Need for NOAA_via_API, others?
         id_list.append( id )     
 
     file_unit.close()
@@ -1273,5 +1276,55 @@ def convert_dms_to_dec_deg( dms_str, delim=None,
 
 #   convert_dms_to_dec_deg()
 #---------------------------------------------------------------------
+def sort_tsv_by_site_id( key='NOAA_via_API', tsv_file1=None,
+                         tsv_file2=None):
 
+    if (key == 'NOAA_via_API'):
+        if (tsv_file1 is None):
+            tsv_file1 = 'USGS_NWIS_Web_Site_Info_via_API.tsv'
+    if (key == 'NOAA_HADS'):
+        if (tsv_file1 is None):
+            tsv_file1 = 'new_hads_info.tsv'
+    if (tsv_file1 is not None) and (tsv_file2 is None):
+        prefix = tsv_file1[:-4]
+        tsv_file2 = (prefix + '_sorted.tsv')
 
+    new_dir   = get_new_data_dir( key )
+    tsv_path1 = new_dir + tsv_file1
+    tsv_path2 = new_dir + tsv_file2
+    tab = '\t'
+    
+    tsv_unit1 = open(tsv_path1, 'r')
+    lines = tsv_unit1.readlines()  # returns a list
+    tsv_unit1.close()
+
+    #------------------------------------     
+    # Extract and save the header lines
+    #------------------------------------
+    nh_lines = get_header_lines( db_str=key )
+    header = lines[0:nh_lines]  # a list
+
+    #---------------------------------------   
+    # Get all of the remaining lines
+    # Assume line starts with USGS site ID
+    #---------------------------------------
+    lines2 = lines[nh_lines:]  
+    lines3 = list()
+    for line in lines2:
+        # Pad USGS to 8+ chars, if needed
+        vals = line.split( tab )
+        usgs_id = vals[0].strip()
+        if (len(usgs_id) == 7):
+            line = '0' + line
+        lines3.append(line)
+   
+    #------------------------------------------------
+    # Sort all lines by "USGS_ID" (in first column)
+    #------------------------------------------------ 
+    lines3.sort()
+    tsv_unit2 = open(tsv_path2, 'w')
+    tsv_unit2.writelines( header + lines3 )
+    tsv_unit2.close()
+
+#   sort_tsv_by_site_id()
+#---------------------------------------------------------------------

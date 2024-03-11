@@ -1,19 +1,23 @@
 
-# Next Steps:
+# Are there NOAA NWS/RFC basins that don't have a USGS ID?
 #
-# * GAGES-II Selected Basins (there are 1947 of them):
-#    - Can be assigned an HLR code using basin centroid lat/lon.
+# GAGES-II Selected Basins (there are 1947 of them):
+#    - Can be assigned an HLR code using box center lat/lon.
 #    - Can be assigned an SWB/SWB2 class.
 #    - Have basin shapefiles and have geographic bounding box.
 #    - Have lots of additional metadata.
-#    - Probably include many CAMELS, FPS, MOPEX, and RFC basins.
+#    - Include many CAMELS, FPS, MOPEX, and RFC basins.
 #    - Some of the included RFC basins likely have hydrograph type.
 #
 #---------------------------------------------------------------------
 # Copyright (c) 2023-2024, Scott D. Peckham
 #
+# Mar 2024. Added nws_url, wfo, goes_id, eco_region, pedts_obs,
+#             & hsa to the combined TSV created by collate().
+#           Updated: get_att_key_list, get_heading_list,
+#             get_default_att_dict, update_attributes.
 # Feb 2024. Fixed issue w/ HLR codes always '0', because
-#           of how "isnumeric()" works.
+#             of how "isnumeric()" works.
 #           Wrote get_box_center_lon_lat().
 #           Added to att_dict: huc_url, wfo, and nws_url.
 # Jan 2024. Wrote write_new_values() due to multiple use.
@@ -83,7 +87,7 @@ from topoflow.utils.ngen import usgs_utils as usgs
 from topoflow.utils.ngen import usda_utils as usda
 from topoflow.utils.ngen import hlr_utils  as hlr
 from topoflow.utils.ngen import rfc_utils  as rfc
-from topoflow.utils.ngen import czo_utils as cz
+from topoflow.utils.ngen import czo_utils  as cz
 
 from topoflow.utils import regrid  # (to read hlr code geotiff)
 
@@ -114,9 +118,13 @@ def get_next_id( line, key, delim ):
 
     #---------------------------------------
     # Prepend '0' if only 7 digits for FPS
-    #---------------------------------------    
-    if (key == 'USGS_FPS') and (len(id) == 7):
-        id = '0' + id
+    # Also happens for NOAA_via_API!
+    #---------------------------------------
+    if (len(id) == 7):
+        id = '0' + id    
+#     if (key == 'USGS_FPS') and (len(id) == 7):
+#         id = '0' + id
+
     return id
   
 #   get_next_id()
@@ -271,7 +279,7 @@ def get_inclusion_keys():
 #---------------------------------------------------------------------
 def get_inclusion_dict( key_names=None ):
  
-     #------------------------------------------------------  
+    #------------------------------------------------------  
     # Note: USGS_FPS has many strange (non-USGS) site IDs.
     #       Most have fewer than 8 characters.
     #-------------------------------------------------------
@@ -330,7 +338,7 @@ def get_inclusion_list( site_id, inclusion_dict=None ):
     for key in inclusion_keys:
         inclusion_list.append( sub_dict[key] )
 
-    ## Won't be in a particular order.
+    ## If we do this, won't be in a particular order.
     ## inclusion_list = list( sub_dict.values() )
 
     return inclusion_list
@@ -349,9 +357,10 @@ def get_all_site_ids():
 def get_att_key_list():
 
     att_key_list = [
-    'site_id', 'nws_loc_id', 'rfc', 'wfo',
+    'site_id', 'nws_loc_id', 'goes_id',
+    'rfc', 'wfo', 'hsa',
     'huc', 'site_name', 'site_type',
-    'stage_data',
+    'stage_data', 'pedts_obs',
     'state_code', 'country_code',
     'lon', 'lat',
     'elev', 'elev_units',
@@ -361,7 +370,7 @@ def get_att_key_list():
     'long_name', 'closest_site_id', 'closest_site_dist',
     'site_url', 'huc_url', 'nws_url',
     'status', 'start_date', 'end_date',
-    'hlr_code', 'swb_class', 'hgraph_type' ]
+    'eco_region', 'hlr_code', 'swb_class', 'hgraph_type' ]
 
     return att_key_list
     
@@ -373,9 +382,10 @@ def get_heading_list():
     # Note: This must match up with get_att_key_list().
     #----------------------------------------------------
     heading_list = [
-    'Site_ID', 'NWS_Loc_ID', 'RFC', 'WFO/CWA', 
+    'Site_ID', 'NWS_Loc_ID', 'GOES_ID',
+    'RFC', 'WFO/CWA', 'HSA', 
     'HUC', 'Site_Name', 'Site_Type',
-    'Stage_Data',
+    'Stage_Data', 'PEDTS_Obs',
     'State_Code', 'Country_Code',
     'Lon', 'Lat',
     'Elev', 'Elev_Units',
@@ -385,7 +395,7 @@ def get_heading_list():
     'Long_Name', 'Closest_Site_ID', 'Closest_Site_Dist',
     'Site_URL', 'HUC_URL', 'NWS_URL',
     'Status', 'Start_Date', 'End_Date',
-    'HLR_Code', 'SWB_Class', 'Hgraph_Type' ]
+    'Eco_Region', 'HLR_Code', 'SWB_Class', 'Hgraph_Type' ]
     
     #-------------------------------------------
     # Using "title" doesn't give best results.
@@ -415,7 +425,8 @@ def get_default_att_dict( site_id ):
     att_dict[ 'huc' ]          = '-'
     #---------------------------------------
     #### att_dict[ 'has_discharge'] = '-'
-    att_dict[ 'stage_data' ]    = '-'
+    att_dict[ 'stage_data' ]   = '-'
+    att_dict[ 'pedts_obs' ]    = '-'
     #---------------------------------------
     att_dict[ 'state_code' ]   = '-'
     att_dict[ 'country_code' ] = '-'
@@ -569,6 +580,7 @@ def update_attributes( val_list, key, att_dict ):
         #-----------------------------------------
         ## att_dict[ 'swb_class' ] = val_list[68] # original SWB  
         att_dict[ 'swb_class' ] = val_list[69] # extended SWB
+        ## DON'T NEED UPDATE_ATTS=True HERE.
     #------------------------------------------------------
     if (key == 'NOAA_HADS'):
         headings = ['USGS_ID', 'USGS_name', 'Station_type',
@@ -597,15 +609,15 @@ def update_attributes( val_list, key, att_dict ):
         headings = ['usgs_id', 'nws_loc_id', 'rfc_abbrev',
         ## 'wfo_abbrev',  # empty now
         'usgs_name', 'state_code', 'longitude', 'latitude',
-        'elevation' ]
-        ## 'updated_time',
-        ## 'in_service', 'pedts_obs', 'pedts_pred']
+        'elevation',
+        ## 'updated_time', 'in_service',
+        'pedts_obs' ]  ### ,'pedts_pred']
         #---------------------------------------------        
         att_keys = ['site_id', 'nws_loc_id', 'rfc',
         ## 'wfo',
-        'site_name', 'state_code', 'lon', 'lat', 'elev' ]
-        ## 'updated_time',
-        ## 'in_service', 'pedts_obs', 'pedts_pred']
+        'site_name', 'state_code', 'lon', 'lat', 'elev',
+        ## 'updated_time','in_service',
+        'pedts_obs']  #### ,'pedts_pred']
         UPDATE_ATTS = True    
     #------------------------------------------------------
     if (key == 'USGS_FPS'):
@@ -766,7 +778,7 @@ def collate( out_tsv_file=None, max_count=1000, DEBUG=False ):
     # Open TSV files for each of the basin datasets
     #------------------------------------------------
     delim = '\t'  # tab
-    file_units = dict()
+    file_units   = dict()
     current_id   = dict()
     current_line = dict()
     for key in key_names:
@@ -789,16 +801,92 @@ def collate( out_tsv_file=None, max_count=1000, DEBUG=False ):
     # Write column headings for new TSV file
     #-----------------------------------------
     write_new_header( out_tsv_unit, delim)
+
+    #-----------------------------------------
+    # Get the dataset "inclusion" dictionary
+    #-----------------------------------------    
+    inclusion_dict = get_inclusion_dict()
+    #-------------------------------------------------------
+    # Could use this to compute inclusion list dynamically
+    #-------------------------------------------------------
+    ## default_inclusion_dict = dict()
+    ## for key in inclusion_key_list:
+    ##     default_inclusion_dict[ key ] = 'N'
     
-    inclusion_dict  = get_inclusion_dict()
     att_key_list    = get_att_key_list()
     site_type_codes = ['ST', 'ST-CA', 'ST-DCH', 'ST-TS']
     site_type_map   = {'ST':'Stream', 'ST-CA':'Stream-Canal',
         'ST-DCH':'Stream-Ditch', 'ST-TS':'Stream-Tidal'}      
-    #----------------------------------------------
-    # Loop through all site_IDs, and use the fact
-    # that each TSV is sorted by USGS site ID.
-    #----------------------------------------------
+    #--------------------------------------------------------------
+    # The algorithm used here loops through all site IDs, and
+    # relies on the fact that the TSV file for each dataset has
+    # been sorted by USGS site ID (the first value in each line).
+    #
+    # It is also assumed that a given site ID only occurs once
+    # in each dataset TSV file.  It turns out this is not the
+    # case for new_hads_info_sorted.tsv!!  There are 40 IDs that
+    # occur 2 or more times.
+    #
+    # Datasets that don't include USGS site ID (e.g. USDA_ARS)
+    # have to be processed separately at the end.
+    #--------------------------------------------------------------
+    # Note that "inclusion_list" is computed in advance and tells
+    # all of the datasets that a given USGS site ID belongs to.
+    # But it could be computed dynamically based on which keys
+    # have a "current_ID" match to a given USGS site ID.
+    #--------------------------------------------------------------    
+    # To understand the algorithm, consider the following 3
+    # sorted lists of IDs, associated with rows of data in 3 TSV
+    # files, with key names key1, key2, and key3.
+    #     list1 = [1,3,4,7]  (key = key1)
+    #     list2 = [2,3,8,9]  (key = key2)
+    #     list3 = [9,12,13]  (key = key3)
+    # Create the sorted list of all IDs.
+    #     all_IDs = [1,2,3,4,7,8,9,12,13].
+    # Read the first ID from each list (for each key) into
+    #   a Python dictionary "current_ID":
+    #     current_ID[ key1 ] = 1
+    #     current_ID[ key2 ] = 2
+    #     current_ID[ key3 ] = 9
+    # We then step through the IDs in all_IDs and check
+    #   the value of current_ID for each key for a match.
+    # For ID=1, only current_ID[ key1 ] is a match.
+    #     Read & write info for ID=1
+    #     Set current_ID[ key1 ] = 3.
+    # For ID=2, only current_ID[ key2 ] is a match.
+    #     Read & write info for ID = 1
+    #     Set current_ID[ key2 ] = 3.
+    # For ID=3, both current_ID[key1] & current_ID[key2] match.
+    #     Read & write info for ID = 3 from key1 & key2 files.
+    #     Set current_ID[ key1 ] = 4. 
+    #     Set current_ID[ key2 ] = 8.    
+    # For ID=4, only current_ID[ key1 ] is a match.
+    #     Read & write info for ID = 4.
+    #     Set current_ID[ key1 ] = 7.     
+    # For ID=5 and ID=6, there are no matches.
+    #     Do nothing.
+    # For ID=7, only current_ID[ key1 ] is a match.
+    #     Read & write info for ID = 7.
+    #     Can't read another line from key1 file to get next ID.
+    #     Do nothing.
+    #     Still have current_ID[ key1 ] = 7
+    # For ID=8, only current_ID[ key2 ] is a match.
+    #     Read & write info for ID = 8.
+    #     Set current_ID[ key2 ] = 9.
+    # For ID=9, both current_ID[key2] & current_ID[key3] match.
+    #     Read & write info for ID = 9 from key1 & key3 files.
+    #     EOF for key2, so keep current_ID[ key2 ] = 9. 
+    #     Set current_ID[ key3 ] = 12.
+    # For ID=10 and ID=11, there are no matches.
+    #     Do nothing.
+    # For ID=12, only current_ID[ key3 ] is a match.
+    #     Read & write info for ID = 12.
+    #     Set current_ID[ key2 ] = 13.
+    # For ID=13, only current_ID[ key3 ] is a match.
+    #     Read & write info for ID = 13.
+    #     EOF for key3, so keep current_ID[ key2 ] = 13.
+    # No more IDs in all_IDs, so we're done.   
+    #------------------------------------------------------------
     site_id_list = get_all_site_ids()
     counter = 0
     #### UPDATE next line
@@ -823,7 +911,8 @@ def collate( out_tsv_file=None, max_count=1000, DEBUG=False ):
         # Set defaults for attributes
         #------------------------------
         att_dict = get_default_att_dict( site_id )
-      
+        ### dyn_inclusion_dict = default_inclusion_dict.copy()
+        
         #---------------
         # For testing
         #---------------
@@ -850,12 +939,23 @@ def collate( out_tsv_file=None, max_count=1000, DEBUG=False ):
                 if (DEBUG):
                     print('  Found match for ' + key + '.')
                 # val_list = get_line_values( current_line, key, delim)
+                
                 line     = current_line[ key ]
                 val_list = line.split( delim )
                 #-----------------------------------------
                 # Update the attributes for this site_id
                 #-----------------------------------------
                 update_attributes( val_list, key, att_dict ) 
+
+                #-------------------------------------------------
+                # Update dynamic inclusion_dict for this site_id
+                #-------------------------------------------------
+                ## dyn_inclusion_dict[ key ] = 'Y'
+                
+#                 if (key == 'NOAA_HADS'):
+#                     print('nws_loc_id =', att_dict['nws_loc_id'])
+#                 if (key == 'NOAA_via_API'):
+#                     print('nws_loc_id =', att_dict['nws_loc_id'])
 
                 #------------------------------------------------------
                 # If bounding box is still not set, try to get it
@@ -867,12 +967,37 @@ def collate( out_tsv_file=None, max_count=1000, DEBUG=False ):
 #                     att_dict[ 'maxlon' ] = bbox[1]
 #                     att_dict[ 'minlat' ] = bbox[2]
 #                     att_dict[ 'maxlat' ] = bbox[3]
-                #------------------------------------------------------                               
-                line = get_next_line( key, file_units )
-                if (line != ''):
+                #------------------------------------------------------
+                while (True):
+                    # Note: Only get last data row for repeated IDs
+                    line = get_next_line( key, file_units )
+                    if (line == ''):
+                        break
                     next_id = get_next_id( line, key, delim )
-                    current_id[ key ]   = next_id
-                    current_line[ key ] = line
+                    if (next_id != db_site_id):
+                        current_id[ key ]   = next_id
+                        current_line[ key ] = line
+                        break
+                    else:
+                        ## n_duplicates[ key ] += 1
+                        print('#########################################')
+                        print('### WARNING! duplicate site ID found')
+                        print('### for key =', key)
+                        print('#########################################')
+                        print()
+                #------------------------------------------------------                              
+#                 line = get_next_line( key, file_units )
+#                 if (line != ''):
+#                     next_id = get_next_id( line, key, delim )
+#                     if (next_id == db_site_id):
+#                         print('#########################################')
+#                         print('### WARNING! duplicate site ID found')
+#                         print('### for key =', key)
+#                         print('#########################################')
+#                         print()
+#                 
+#                     current_id[ key ]   = next_id
+#                     current_line[ key ] = line
 
         #------------------------------------
         # Expand abbreviations in site_name
@@ -894,40 +1019,40 @@ def collate( out_tsv_file=None, max_count=1000, DEBUG=False ):
         huc = att_dict[ 'huc' ]
         att_dict[ 'huc_url' ] = usgs.get_usgs_huc_url( huc )
 
+        #-----------------------
+        # Get the NWS site URL
+        #-----------------------
+        nws_id = att_dict[ 'nws_loc_id' ]
+        att_dict[ 'nws_url' ] = rfc.get_nws_site_url( nws_id )
+        
         #------------------------------
         # Try to get the WFO/CWA code
         #---------------------------------------------------
         # The nws_id here is always 5 characters and comes
         # from the USGS-HADS crosswalk.
         #---------------------------------------------------
-        nws_id  = att_dict[ 'nws_loc_id' ]
-        print('## nws_id =', nws_id)
+        # Note that rfc_dict1 is constructed from NWS IDs
+        # and other data in new_hads_info_sorted.tsv.
+        #---------------------------------------------------
+        # Note that rfc_dict2 is constructed from NWS IDs
+        # and other data in ba12my15.shp.
+        #---------------------------------------------------
+        # Now rfc_dict1 and rfc_dict2 get WFO ID via:
+        #   get_wfo_via_nws_site_url() in rfc_utils.py.
+        #---------------------------------------------------        
+        ## print('## nws_id =', nws_id)
         if (nws_id in rfc_dict2):
             loc_info = rfc_dict2[ nws_id ]
-            att_dict[ 'wfo' ] = loc_info[ 'cwa_id' ]  # wfo ID = cwa ID
+            att_dict[ 'wfo' ] = loc_info[ 'wfo_id' ]  # wfo ID = cwa ID
+        elif (nws_id in rfc_dict1):
+            loc_info = rfc_dict1[ nws_id ]
+            att_dict[ 'wfo' ] = loc_info[ 'wfo_id' ]  # wfo ID = cwa ID
+            # THIS IS TRIGGERED MANY, MANY TIMES
+            ## print('###### ASSIGNED WFO USING rfc_dict1')
         else:
             if (nws_id != '-'):
-                print('## nws_id =', nws_id, 'is not in dict.')
-                print()        
-            
-        #------------------------------
-        # Try to get the WFO/CWA code
-        #----------------------------------
-        # This doesn't solve the problem.
-        # Modified dictionary instead.
-        #----------------------------------
-#         nws_id  = att_dict[ 'nws_loc_id' ]
-#         nws_id2 = nws_id[0:5]  # first 5 characters
-#         print('## nws_id =', nws_id)
-#         if (nws_id in rfc_dict2):
-#             loc_info = rfc_dict2[ nws_id ]
-#             att_dict[ 'wfo' ] = loc_info[ 'cwa_id' ]  # wfo ID = cwa ID
-#         elif (nws_id2 in rfc_dict2):
-#             loc_info = rfc_dict2[ nws_id2 ]
-#             att_dict[ 'wfo' ] = loc_info[ 'cwa_id' ]  # wfo ID = cwa ID
-#         else:
-#             print('## nws_id =', nws_id, 'is not in dict.')
-#             print()
+                print('## nws_id =', nws_id, 'is not in rfc_dict1 or rfc_dict2.')
+                print()
 
         #------------------------------------
         # Try to get the GOES_ID and HSA_ID
@@ -936,14 +1061,7 @@ def collate( out_tsv_file=None, max_count=1000, DEBUG=False ):
             loc_info = rfc_dict1[ nws_id ]
             att_dict[ 'goes_id' ] = loc_info[ 'goes_id' ]
             att_dict[ 'hsa' ]     = loc_info[ 'hsa_id' ]
-            
-        #------------------------------
-        # Try to get the NWS site URL
-        #------------------------------
-        nws_id = att_dict[ 'nws_loc_id' ]
-        wfo    = att_dict[ 'wfo' ]
-        att_dict[ 'nws_url' ] = rfc.get_nws_site_url( wfo=wfo, nws_id=nws_id )
-      
+     
         #---------------------------------
         # Try to get 2-letter state code
         #---------------------------------
@@ -1009,7 +1127,13 @@ def collate( out_tsv_file=None, max_count=1000, DEBUG=False ):
 #                 lon_str, lat_str, REPORT=False)
 #         closest_site_id   = closest_id
 #         closest_site_dist = '{x:.2f}'.format(x=dmin)  # string
-         
+
+        #--------------------------------------------
+        # If using dynamic inclusion dictionary,
+        # convert to inclusion_list here.
+        #--------------------------------------------
+        ## inclusion_list = ???
+
         #--------------------------------------------
         # Build ordered att_list from att_dict here
         #--------------------------------------------
