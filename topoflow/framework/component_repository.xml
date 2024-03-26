@@ -193,7 +193,7 @@
     <model_family>   TopoFlow </model_family>
     <version>        3.5 </version>
     <language>       python </language>
-    <author>         Mark Kessler, Eric Hutton, Scott D. Peckham, Lauren A. Bolotin </author>
+    <author>         Scott D. Peckham, Lauren A. Bolotin </author>
     <help_url>       http://csdms.colorado.edu/wiki/Model_help:Gc2d </help_url>
     <cfg_template>   Glacier_Energy_Balance.cfg.in </cfg_template>
     <time_step_type> fixed </time_step_type>
