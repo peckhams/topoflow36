@@ -599,8 +599,8 @@ class met_component( BMI_base.BMI_component ):
         # Is this constant actually the dimensionless ratio of
         # the molecular weight of water to that of dry air ?
         #-----------------------------------------------------------
-        ## self.latent_heat_constant = np.float64(0.622)
-        self.latent_heat_constant = np.float64(0.662)
+        self.latent_heat_constant = np.float64(0.622)
+        # self.latent_heat_constant = np.float64(0.662)
         
         #-------------------------------------
         # Unit conversion factors for precip 
@@ -1977,13 +1977,15 @@ class met_component( BMI_base.BMI_component ):
             ts_max = self.TSN_offset.max()
             print('  solar_noon min, max =', sn_min, ', ', sn_max)
             print('  TSN_offset min, max =', ts_min, ', ', ts_max)
-            print()
+            print() 
             
     #   update_julian_day()
     #-------------------------------------------------------------------
     def update_albedo(self, method = 'aging'):
+        # Only use this routine if time varying albedo is not supplied as an input:
         if ((self.albedo_type.lower() == 'scalar') | (self.albedo_type.lower() == 'grid')):
             if method == 'aging':
+                albedo = self.albedo
                 #------------------------------------------------
                 # Dynamic albedo accounting for aging snow
                 #------------------------------------------------
@@ -1999,48 +2001,24 @@ class met_component( BMI_base.BMI_component ):
                 K = 0.44
                 alpha0 = 0.4
 
-                '''ON A GRID'''
                 self.P_snow_3day_grid = np.roll(self.P_snow_3day_grid, -1, axis=0) # you can roll on different axes (time axis), shape of the DEM and time axis and roll on the time axis
-                
-                self.P_snow_3day_grid[np.size(self.P_snow_3day_grid, axis = 0)  - 1] = self.P_snow*self.dt
+                ws_density_ratio = (self.rho_H2O/self.rho_snow)
+                self.P_snow_3day_grid[np.size(self.P_snow_3day_grid, axis = 0)  - 1] = self.P_snow*self.dt*ws_density_ratio
 
                 P_snow_3day_grid_total = np.sum(self.P_snow_3day_grid, axis=0) # maybe multipy by timestep here # also make sure to only sum over time axis
                 # self.P_snow_3day_grid_total = P_snow_3day_grid_total # if you want to output and make sure it's working properly
 
                 self.n = np.where((P_snow_3day_grid_total >= 0.03), 0, self.n)
                 self.n = np.where((P_snow_3day_grid_total < 0.03), self.n+self.days_per_dt, self.n)
-                albedo = alpha0 + K * np.exp(-self.n*r)
+                snow_albedo = alpha0 + K * np.exp(-self.n*r)
+
+                albedo = np.where((self.h_snow > 0), # where snow exists
+                                snow_albedo, albedo)
+                albedo = np.where(((self.h_snow == 0) & (self.h_ice > 0)), # where ice exists without snow
+                                np.float64(0.5), albedo)
+                albedo = np.where(((self.h_snow == 0) & (self.h_ice == 0)), # where there is no snow or ice (tundra)
+                                np.float64(0.15), albedo)
                 self.albedo = albedo
-
-        '''NOT ON A GRID'''
-        # Original dynamic albedo code  
-        #     r = np.where((self.T_air > 0), 0.12, 0.05)
-        #     K = 0.44
-        #     alpha0 = 0.4
-
-        #     # How many time steps are in a three day period?:
-        #     dt_per_3days = np.int64(259200/self.dt)
-        #     days_per_dt = self.dt/86400
-
-        #     # How much snow has fallen in the previous 3 days?
-        #     P_snow_3day = np.zeros(dt_per_3days)
-        #     P_snow_3day = np.roll(P_snow_3day, -1)
-        #     P_snow_3day[P_snow_3day.size - 1] = self.P_snow * self.dt
-        #     P_snow_3day_total = np.sum(P_snow_3day)
-
-        #     # NOTE: ----------------------
-        #     # My guess is that this will need to be adjusted to be compatible with 
-        #     # both grids and other formats of P data
-
-        #     # How many days since the last major snowfall (>= 3 cm in 3 days)?
-        #     if P_snow_3day_total >= 0.03:
-        #         self.n = 0
-        #     else: 
-        #         self.n += days_per_dt
-
-        #     albedo = alpha0 + (K * np.exp(-self.n*r))
-        #     self.albedo = albedo
-
         #------------------------------------------------
         # Simple dynamic albedo depending on ice vs. snow vs. bare ground (tundra) using values from Dingman
         #------------------------------------------------
@@ -2068,7 +2046,7 @@ class met_component( BMI_base.BMI_component ):
         #--------------------------------
         # Compute Qn_SW for this time
         #--------------------------------
-        Qn_SW = solar.Clear_Sky_Radiation( self.lat_deg,
+        K_cs = solar.Clear_Sky_Radiation( self.lat_deg,
                                            self.julian_day,
                                            self.W_p,
                                            self.TSN_offset,
@@ -2076,6 +2054,8 @@ class met_component( BMI_base.BMI_component ):
                                            self.beta,
                                            self.albedo,
                                            self.dust_atten )
+        
+        Qn_SW = K_cs * (1-self.albedo)
         
         if (np.ndim( self.Qn_SW ) == 0):
             self.Qn_SW.fill( Qn_SW )   #### (mutable scalar)
@@ -2688,6 +2668,19 @@ class met_component( BMI_base.BMI_component ):
         self.n_ts_file = (self.out_directory + self.n_ts_file)
         self.psnow_ts_file = (self.out_directory + self.psnow_ts_file)
         self.tair_ts_file = (self.out_directory + self.tair_ts_file)
+        self.ri_ts_file = (self.out_directory + self.ri_ts_file)
+        self.rh_ts_file = (self.out_directory + self.rh_ts_file)
+        self.uz_ts_file = (self.out_directory + self.uz_ts_file)
+        self.dn_ts_file = (self.out_directory + self.dn_ts_file)
+        self.dh_ts_file = (self.out_directory + self.dh_ts_file)
+        self.esatair_ts_file = (self.out_directory + self.esatair_ts_file)
+        self.esatsurf_ts_file = (self.out_directory + self.esatsurf_ts_file)
+        self.qh_ts_file = (self.out_directory + self.qh_ts_file)
+        self.qe_ts_file = (self.out_directory + self.qe_ts_file)
+        self.qc_ts_file = (self.out_directory + self.qc_ts_file)
+        self.prain_ts_file = (self.out_directory + self.prain_ts_file)
+        self.qsum_ts_file = (self.out_directory + self.qsum_ts_file)
+        
 ##        self.ea_gs_file = (self.case_prefix + '_2D-ea.rts')
 ##        self.es_gs_file = (self.case_prefix + '_2D-es.rts')
 ##        #-----------------------------------------------------
@@ -2807,6 +2800,54 @@ class met_component( BMI_base.BMI_component ):
                                             var_name='tair',
                                             long_name='air_temperature',
                                             units_name='deg C')  
+        model_output.open_new_ts_file( self, self.ri_ts_file, IDs,
+                                            var_name='ri',
+                                            long_name='richardson_number',
+                                            units_name='none') 
+        model_output.open_new_ts_file( self, self.rh_ts_file, IDs,
+                                            var_name='rh',
+                                            long_name='relative_humidity',
+                                            units_name='none')   
+        model_output.open_new_ts_file( self, self.uz_ts_file, IDs,
+                                            var_name='uz',
+                                            long_name='wind_speed',
+                                            units_name='m h-1')   
+        model_output.open_new_ts_file( self, self.dn_ts_file, IDs,
+                                            var_name='dn',
+                                            long_name='dn',
+                                            units_name='m h-1')
+        model_output.open_new_ts_file( self, self.dh_ts_file, IDs,
+                                            var_name='dh',
+                                            long_name='dh',
+                                            units_name='m h-1') 
+        model_output.open_new_ts_file( self, self.esatair_ts_file, IDs,
+                                            var_name='esatair',
+                                            long_name='e_sat_air',
+                                            units_name='m h-1') 
+        model_output.open_new_ts_file( self, self.esatsurf_ts_file, IDs,
+                                            var_name='esatsurf',
+                                            long_name='e_sat_surf',
+                                            units_name='m h-1') 
+        model_output.open_new_ts_file( self, self.qh_ts_file, IDs,
+                                            var_name='qh',
+                                            long_name='qh',
+                                            units_name='m h-1') 
+        model_output.open_new_ts_file( self, self.qe_ts_file, IDs,
+                                            var_name='qe',
+                                            long_name='qe',
+                                            units_name='m h-1') 
+        model_output.open_new_ts_file( self, self.qc_ts_file, IDs,
+                                            var_name='qc',
+                                            long_name='qc',
+                                            units_name='m h-1') 
+        model_output.open_new_ts_file( self, self.prain_ts_file, IDs,
+                                            var_name='prain',
+                                            long_name='prain',
+                                            units_name='m h-1') 
+        model_output.open_new_ts_file( self, self.qsum_ts_file, IDs,
+                                            var_name='qsum',
+                                            long_name='qsum',
+                                            units_name='m h-1') 
     #   open_output_files()
     #-------------------------------------------------------------------
     def write_output_files(self, time_seconds=None):
@@ -2851,6 +2892,19 @@ class met_component( BMI_base.BMI_component ):
         model_output.close_ts_file(self, 'n')
         model_output.close_ts_file(self, 'psnow')
         model_output.close_ts_file(self, 'tair')
+        model_output.close_ts_file(self, 'ri')
+        model_output.close_ts_file(self, 'rh')
+        model_output.close_ts_file(self, 'uz')
+        model_output.close_ts_file(self, 'dh')
+        model_output.close_ts_file(self, 'dn')
+        model_output.close_ts_file(self, 'esatair')
+        model_output.close_ts_file(self, 'esatsurf')
+        model_output.close_ts_file(self, 'qh')
+        model_output.close_ts_file(self, 'qe')
+        model_output.close_ts_file(self, 'qc')
+        model_output.close_ts_file(self, 'prain')
+        model_output.close_ts_file(self, 'qsum')
+
 
     #   close_output_files()        
     #-------------------------------------------------------------------  
@@ -2907,6 +2961,18 @@ class met_component( BMI_base.BMI_component ):
         model_output.add_values_at_IDs( self, time, self.n, 'n', IDs )
         model_output.add_values_at_IDs( self, time, self.P_snow, 'psnow', IDs )
         model_output.add_values_at_IDs( self, time, self.T_air, 'tair', IDs )
+        model_output.add_values_at_IDs( self, time, self.Ri, 'ri', IDs )
+        model_output.add_values_at_IDs( self, time, self.RH, 'rh', IDs )
+        model_output.add_values_at_IDs( self, time, self.uz, 'uz', IDs )
+        model_output.add_values_at_IDs( self, time, self.Dn, 'dn', IDs )
+        model_output.add_values_at_IDs( self, time, self.Dh, 'dh', IDs )
+        model_output.add_values_at_IDs( self, time, self.e_sat_air, 'esatair', IDs )
+        model_output.add_values_at_IDs( self, time, self.e_sat_surf, 'esatsurf', IDs )
+        model_output.add_values_at_IDs( self, time, self.Qh, 'qh', IDs )
+        model_output.add_values_at_IDs( self, time, self.Qe, 'qe', IDs )
+        model_output.add_values_at_IDs( self, time, self.Qc, 'qc', IDs )
+        model_output.add_values_at_IDs( self, time, self.P_rain, 'prain', IDs )
+        model_output.add_values_at_IDs( self, time, self.Q_sum, 'qsum', IDs )
 
             
     #   save_pixel_values()
