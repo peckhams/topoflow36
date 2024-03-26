@@ -2665,21 +2665,6 @@ class met_component( BMI_base.BMI_component ):
         self.ema_ts_file = (self.out_directory + self.ema_ts_file )
         self.tsurf_ts_file = (self.out_directory + self.tsurf_ts_file)
         self.alb_ts_file = (self.out_directory + self.alb_ts_file)
-        self.n_ts_file = (self.out_directory + self.n_ts_file)
-        self.psnow_ts_file = (self.out_directory + self.psnow_ts_file)
-        self.tair_ts_file = (self.out_directory + self.tair_ts_file)
-        self.ri_ts_file = (self.out_directory + self.ri_ts_file)
-        self.rh_ts_file = (self.out_directory + self.rh_ts_file)
-        self.uz_ts_file = (self.out_directory + self.uz_ts_file)
-        self.dn_ts_file = (self.out_directory + self.dn_ts_file)
-        self.dh_ts_file = (self.out_directory + self.dh_ts_file)
-        self.esatair_ts_file = (self.out_directory + self.esatair_ts_file)
-        self.esatsurf_ts_file = (self.out_directory + self.esatsurf_ts_file)
-        self.qh_ts_file = (self.out_directory + self.qh_ts_file)
-        self.qe_ts_file = (self.out_directory + self.qe_ts_file)
-        self.qc_ts_file = (self.out_directory + self.qc_ts_file)
-        self.prain_ts_file = (self.out_directory + self.prain_ts_file)
-        self.qsum_ts_file = (self.out_directory + self.qsum_ts_file)
         
 ##        self.ea_gs_file = (self.case_prefix + '_2D-ea.rts')
 ##        self.es_gs_file = (self.case_prefix + '_2D-es.rts')
@@ -2788,66 +2773,7 @@ class met_component( BMI_base.BMI_component ):
                                             var_name='alb',
                                             long_name='albedo',
                                             units_name='none')   
-        model_output.open_new_ts_file( self, self.n_ts_file, IDs,
-                                            var_name='n',
-                                            long_name='n',
-                                            units_name='none') 
-        model_output.open_new_ts_file( self, self.psnow_ts_file, IDs,
-                                            var_name='psnow',
-                                            long_name='snowfall',
-                                            units_name='m s-1')   
-        model_output.open_new_ts_file( self, self.tair_ts_file, IDs,
-                                            var_name='tair',
-                                            long_name='air_temperature',
-                                            units_name='deg C')  
-        model_output.open_new_ts_file( self, self.ri_ts_file, IDs,
-                                            var_name='ri',
-                                            long_name='richardson_number',
-                                            units_name='none') 
-        model_output.open_new_ts_file( self, self.rh_ts_file, IDs,
-                                            var_name='rh',
-                                            long_name='relative_humidity',
-                                            units_name='none')   
-        model_output.open_new_ts_file( self, self.uz_ts_file, IDs,
-                                            var_name='uz',
-                                            long_name='wind_speed',
-                                            units_name='m h-1')   
-        model_output.open_new_ts_file( self, self.dn_ts_file, IDs,
-                                            var_name='dn',
-                                            long_name='dn',
-                                            units_name='m h-1')
-        model_output.open_new_ts_file( self, self.dh_ts_file, IDs,
-                                            var_name='dh',
-                                            long_name='dh',
-                                            units_name='m h-1') 
-        model_output.open_new_ts_file( self, self.esatair_ts_file, IDs,
-                                            var_name='esatair',
-                                            long_name='e_sat_air',
-                                            units_name='m h-1') 
-        model_output.open_new_ts_file( self, self.esatsurf_ts_file, IDs,
-                                            var_name='esatsurf',
-                                            long_name='e_sat_surf',
-                                            units_name='m h-1') 
-        model_output.open_new_ts_file( self, self.qh_ts_file, IDs,
-                                            var_name='qh',
-                                            long_name='qh',
-                                            units_name='m h-1') 
-        model_output.open_new_ts_file( self, self.qe_ts_file, IDs,
-                                            var_name='qe',
-                                            long_name='qe',
-                                            units_name='m h-1') 
-        model_output.open_new_ts_file( self, self.qc_ts_file, IDs,
-                                            var_name='qc',
-                                            long_name='qc',
-                                            units_name='m h-1') 
-        model_output.open_new_ts_file( self, self.prain_ts_file, IDs,
-                                            var_name='prain',
-                                            long_name='prain',
-                                            units_name='m h-1') 
-        model_output.open_new_ts_file( self, self.qsum_ts_file, IDs,
-                                            var_name='qsum',
-                                            long_name='qsum',
-                                            units_name='m h-1') 
+
     #   open_output_files()
     #-------------------------------------------------------------------
     def write_output_files(self, time_seconds=None):
@@ -2889,21 +2815,6 @@ class met_component( BMI_base.BMI_component ):
         if (self.SAVE_EMA_PIXELS): model_output.close_ts_file( self, 'ema')
         if (self.SAVE_TSURF_PIXELS): model_output.close_ts_file(self, 'tsurf')
         if (self.SAVE_ALB_PIXELS): model_output.close_ts_file(self, 'alb')
-        model_output.close_ts_file(self, 'n')
-        model_output.close_ts_file(self, 'psnow')
-        model_output.close_ts_file(self, 'tair')
-        model_output.close_ts_file(self, 'ri')
-        model_output.close_ts_file(self, 'rh')
-        model_output.close_ts_file(self, 'uz')
-        model_output.close_ts_file(self, 'dh')
-        model_output.close_ts_file(self, 'dn')
-        model_output.close_ts_file(self, 'esatair')
-        model_output.close_ts_file(self, 'esatsurf')
-        model_output.close_ts_file(self, 'qh')
-        model_output.close_ts_file(self, 'qe')
-        model_output.close_ts_file(self, 'qc')
-        model_output.close_ts_file(self, 'prain')
-        model_output.close_ts_file(self, 'qsum')
 
 
     #   close_output_files()        
@@ -2958,21 +2869,6 @@ class met_component( BMI_base.BMI_component ):
 
         if (self.SAVE_ALB_PIXELS):
             model_output.add_values_at_IDs( self, time, self.albedo, 'alb', IDs )
-        model_output.add_values_at_IDs( self, time, self.n, 'n', IDs )
-        model_output.add_values_at_IDs( self, time, self.P_snow, 'psnow', IDs )
-        model_output.add_values_at_IDs( self, time, self.T_air, 'tair', IDs )
-        model_output.add_values_at_IDs( self, time, self.Ri, 'ri', IDs )
-        model_output.add_values_at_IDs( self, time, self.RH, 'rh', IDs )
-        model_output.add_values_at_IDs( self, time, self.uz, 'uz', IDs )
-        model_output.add_values_at_IDs( self, time, self.Dn, 'dn', IDs )
-        model_output.add_values_at_IDs( self, time, self.Dh, 'dh', IDs )
-        model_output.add_values_at_IDs( self, time, self.e_sat_air, 'esatair', IDs )
-        model_output.add_values_at_IDs( self, time, self.e_sat_surf, 'esatsurf', IDs )
-        model_output.add_values_at_IDs( self, time, self.Qh, 'qh', IDs )
-        model_output.add_values_at_IDs( self, time, self.Qe, 'qe', IDs )
-        model_output.add_values_at_IDs( self, time, self.Qc, 'qc', IDs )
-        model_output.add_values_at_IDs( self, time, self.P_rain, 'prain', IDs )
-        model_output.add_values_at_IDs( self, time, self.Q_sum, 'qsum', IDs )
 
             
     #   save_pixel_values()
