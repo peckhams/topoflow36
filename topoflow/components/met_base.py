@@ -2015,7 +2015,7 @@ class met_component( BMI_base.BMI_component ):
                 albedo = np.where((self.h_snow > 0), # where snow exists
                                 snow_albedo, albedo)
                 albedo = np.where(((self.h_snow == 0) & (self.h_ice > 0)), # where ice exists without snow
-                                np.float64(0.5), albedo)
+                                np.float64(0.3), albedo)
                 albedo = np.where(((self.h_snow == 0) & (self.h_ice == 0)), # where there is no snow or ice (tundra)
                                 np.float64(0.15), albedo)
                 self.albedo = albedo
@@ -2027,7 +2027,7 @@ class met_component( BMI_base.BMI_component ):
             albedo = np.where((self.h_snow > 0), # where snow exists
                               np.float64(0.75), albedo)
             albedo = np.where(((self.h_snow == 0) & (self.h_ice > 0)), # where ice exists without snow
-                              np.float64(0.5), albedo)
+                              np.float64(0.3), albedo)
             albedo = np.where(((self.h_snow == 0) & (self.h_ice == 0)), # where there is no snow or ice (tundra)
                               np.float64(0.15), albedo)
             self.albedo = albedo
