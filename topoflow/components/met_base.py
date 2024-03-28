@@ -167,9 +167,9 @@ class met_component( BMI_base.BMI_component ):
     # just means "liquid_equivalent".
     #---------------------------------------------------------   
     _input_var_names = [ 'snowpack__depth', # h_snow
-                        'glacier_ice__thickness' ]  # h_ice
+                        'glacier_ice__thickness', # rho_snow
+                         'snowpack__z_mean_of_mass-per-volume_density']  # h_ice
 #         'snowpack__depth' ]                            # h_snow
-#         'snowpack__z_mean_of_mass-per-volume_density', # rho_snow
 #         'snowpack__liquid-equivalent_depth',           # h_swe
 #         'snowpack__melt_volume_flux' ]                 # SM   (MR used for ice?)
 
@@ -371,7 +371,7 @@ class met_component( BMI_base.BMI_component ):
     _var_name_map = {
         'snowpack__depth': 'h_snow',
         'glacier_ice__thickness': 'h_ice',
-        # 'snowpack__z_mean_of_mass-per-volume_density': 'rho_snow',
+        'snowpack__z_mean_of_mass-per-volume_density': 'rho_snow',
         # 'snowpack__liquid-equivalent_depth': 'h_swe',
         # 'snowpack__melt_volume_flux': 'SM',
         #-----------------------------------------------------------------
@@ -452,7 +452,7 @@ class met_component( BMI_base.BMI_component ):
     _var_units_map = {
         'snowpack__depth':                   'm',
         'glacier_ice__thickness':           'm',
-#         'snowpack__z_mean_of_mass-per-volume_density':     'kg m-3',
+        'snowpack__z_mean_of_mass-per-volume_density':     'kg m-3',
 #         'snowpack__liquid-equivalent_depth': 'm',
 #         'snowpack__melt_volume_flux':        'm s-1',
         #-------------------------------------------------------------
