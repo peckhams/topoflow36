@@ -2072,9 +2072,7 @@ class channels_component( BMI_base.BMI_component ):
         #-------------------------------------------------------------                
         if (self.ATTENUATE):
             self.vol_stored += (self.R * self.da) * dt  # (in place)
-            ## n_days  = 20.0  # Getting closer to observed
-            n_days  = 50.0
-            t_drain = 3600.0 * 24.0 * n_days  # (seconds)
+            t_drain = 3600.0 * 24.0 * self.n_day  # (seconds)
             Q_sides = (self.vol_stored / t_drain)   # (m3/s)
             vol_sides = np.minimum( Q_sides * dt, self.vol_stored)
             self.vol += vol_sides

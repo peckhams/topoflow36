@@ -1,6 +1,7 @@
 
-# Copyright (c) 2023, Scott D. Peckham
+# Copyright (c) 2023, Scott D. Peckham, Lauren A. Bolotin
 #
+# Mar 2024.  Added function to create .rts file of lapsed air temperature
 # Aug 2023.  Created to compute RH from spec. humidity.
 #
 #-------------------------------------------------------------------
@@ -9,10 +10,12 @@
 #
 #  saturation_vapor_pressure()
 #  relative_humidity()
+#  lapse_air_temperature()
 #
 #-------------------------------------------------------------------
 
 import numpy as np
+from osgeo import gdal
 # from topoflow.utils import met_base
 
 #------------------------------------------------------------------- 
@@ -98,8 +101,55 @@ def relative_humidity(q_air, T_air, P_surf, method=None):
 
 #   relative_humidity() 
 #-------------------------------------------------------------------
+def lapse_air_temperature(DEM: str, ref_elev: float, ref_temp_ts: str, 
+                          rts_file: str, LR: float = 0.0098):
+    """
+    Turn a time series of air temperature data into a 
+        spatiotemporally varying grid stack of data using the lapse rate.
 
+    Args:
+        DEM (str): the DEM used as the grid for the model run
+        ref_elev (float): the elevation (m) for which the user has air temperature data
+        ref_temp_ts (str): the filename (.txt) containing the air temperature time series
+        rts_file (str): the desired name for the .rts file to be created
+        LR (float, optional): the lapse rate (in deg C m-1) to use for creating a grid of air temperature. 
+            Defaults to the dry adiabatic lapse rate (0.0098 deg C m-1).
+    """
+    # Import the DEM 
+    ds = gdal.Open(DEM, gdal.GA_ReadOnly )
+    grid = ds.ReadAsArray(0, 0, ds.RasterXSize, ds.RasterYSize)
 
+    # Read in the temperature time series
+    ref_temp_ts = np.loadtxt(ref_temp_ts)
+    ref_elev_float = np.float64(ref_elev)
 
+    # Find the difference between each grid cell's elevation and the reference elevation
+    elev_diff = np.subtract(grid, ref_elev_float)
+
+    # Open a new .rts file
+    rts_unit = open(rts_file, 'wb')
+
+    # Create a grid for each time step
+    n_times = len(ref_temp_ts)
+    for i in range(n_times):
+        t = ref_temp_ts[i]
+
+        # Initialize array of 0's
+        temp_grid = np.zeros(elev_diff.shape)
+        # Fill with lapsed temperature values based on elevation
+        temp_grid = t - (elev_diff * LR)
+
+        temp_grid = np.float32(temp_grid) # assumed type for .rts files
+        # For debugging/checking:
+        # print(temp_grid.shape)
+        # print(type(temp_grid))
+
+        temp_grid.tofile(rts_unit) # saves .rts frame by frame
+    
+    # Close the file
+    rts_unit.close()
+
+#   lapse_air_temperature()
+#-------------------------------------------------------------------
 
     

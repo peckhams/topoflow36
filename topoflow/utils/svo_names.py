@@ -99,6 +99,7 @@ def get_svo_name_map():
     svo_name_map['qe'] = svo_name_map['Qe']
     svo_name_map['qc'] = svo_name_map['Qc']
     svo_name_map['qh'] = svo_name_map['Qh']
+    svo_name_map['alb'] = svo_name_map['albedo']
     svo_name_map['tair'] = svo_name_map['T_air']
     svo_name_map['tsurf'] = svo_name_map['T_surf']
     svo_name_map['rh'] = svo_name_map['RH']
