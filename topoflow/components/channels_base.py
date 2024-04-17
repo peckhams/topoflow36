@@ -565,6 +565,10 @@ class channels_component( BMI_base.BMI_component ):
         if not(hasattr(self, 'ATTENUATE')):
             self.ATTENUATE = False
 
+        if self.ATTENUATE is True:
+            if not(hasattr(self, 'n_day')):
+                self.n_day = 5
+
         #----------------------------------------------------       
         # (2021-07-24) Added min_baseflow_flux to CFG file.
         #---------------------------------------------------- 
