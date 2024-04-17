@@ -1123,11 +1123,11 @@ class met_component( BMI_base.BMI_component ):
         # Start 'number of days since major snowfall' at 0
         self.n = 0    
         # How many time steps are in a three day period? How many days are in each timestep?:
-        self.dt_per_3days = np.int64(259200/self.dt)
+        dt_per_3days = np.int64(259200/self.dt)
         self.days_per_dt = self.dt/86400         
         # Initialize array of rolling 3 day total snowfall    
-        self.P_snow_3day = np.zeros(self.dt_per_3days)
-        self.P_snow_3day_grid = np.zeros((self.P_snow_3day.size, self.slopes.shape[0], self.slopes.shape[1])) # TODO: this should not be hard coded 
+        P_snow_3day = np.zeros(dt_per_3days)
+        self.P_snow_3day_grid = np.zeros((P_snow_3day.size, self.slopes.shape[0], self.slopes.shape[1])) # TODO: this should not be hard coded 
         #------------------------------------------
 
     
