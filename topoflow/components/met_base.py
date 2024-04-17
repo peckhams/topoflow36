@@ -896,18 +896,26 @@ class met_component( BMI_base.BMI_component ):
         if not(hasattr(self, 'start_year')):
             self.start_year = solar.Current_Year()
     
-        #-------------------------------------------------
-        # Options to save shortwave & longwave radiation
-        #-------------------------------------------------
+        #----------------------------------------------------
+        # Options to save forcing/calculated variable outputs
+        #----------------------------------------------------
         if not(hasattr(self, 'SAVE_QSW_GRIDS')):
             self.SAVE_QSW_GRIDS = False
         if not(hasattr(self, 'SAVE_QLW_GRIDS')):
             self.SAVE_QLW_GRIDS = False
+        if not(hasattr(self, 'SAVE_TSURF_GRIDS')):
+            self.SAVE_TSURF_GRIDS = False
+        if not(hasattr(self, 'SAVE_ALB_GRIDS')):
+            self.SAVE_ALB_GRIDS = False
         #-------------------------------------------
         if not(hasattr(self, 'SAVE_QSW_PIXELS')):
             self.SAVE_QSW_PIXELS = False
         if not(hasattr(self, 'SAVE_QLW_PIXELS')):
             self.SAVE_QLW_PIXELS = False
+        if not(hasattr(self, 'SAVE_TSURF_PIXELS')):
+            self.SAVE_TSURF_PIXELS = False
+        if not(hasattr(self, 'SAVE_ALB_PIXELS')):
+            self.SAVE_ALB_PIXELS = False
                                         
     #   set_missing_cfg_options()
     #-------------------------------------------------------------------
