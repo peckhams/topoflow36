@@ -1127,7 +1127,10 @@ class met_component( BMI_base.BMI_component ):
         self.days_per_dt = self.dt/86400         
         # Initialize array of rolling 3 day total snowfall    
         P_snow_3day = np.zeros(dt_per_3days)
-        self.P_snow_3day_grid = np.zeros((P_snow_3day.size, self.slopes.shape[0], self.slopes.shape[1])) # TODO: this should not be hard coded 
+        # Initialize grid for rolling 3 day total snowfall
+        self.P_snow_3day_grid = self.initialize_grid(0)
+        # Combine the grid and array so you have [# of time steps, # of rows, # of columns]
+        self.P_snow_3day_grid = np.zeros((P_snow_3day.size, self.P_snow_3day_grid.shape[0], self.P_snow_3day_grid.shape[1])) 
         #------------------------------------------
 
     
