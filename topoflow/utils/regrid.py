@@ -42,12 +42,14 @@
 
 #-------------------------------------------------------------------
 import numpy as np
-import gdal, osr  ## ogr
+from osgeo import gdal, osr  ## ogr
 import glob, sys
 import os, os.path
 
 from . import rti_files
 from . import rtg_files
+from . import ncgs_files
+from . import time_utils
 
 ## from . import rts_files   # (avoid this extra dependency)
 
@@ -1866,5 +1868,303 @@ def create_rts_from_chirps_files( rts_file='TEST.rts',
 # #   rename_nc_files()
 #-------------------------------------------------------------------
 
-         
- 
+def create_ncgs_forcings_file(var_name=None, nc_file_in=None, ncgs_file_out=None, grid_info=None,
+           resample_algo='bilinear', SILENT=False, VERBOSE=False, NC4=False):
+
+    #---------------------------------------------
+    # Define DEM spatial info for regridding
+    #---------------------------------------------
+    DEM_bounds = [grid_info.x_west_edge,grid_info.y_south_edge,grid_info.x_east_edge,grid_info.y_north_edge]
+    DEM_xres_sec = grid_info.xres
+    DEM_yres_sec = grid_info.yres
+    DEM_xres_deg = (grid_info.xres / 3600.0)
+    DEM_yres_deg = (grid_info.yres / 3600.0)
+    DEM_ncols = grid_info.ncols
+    DEM_nrows = grid_info.nrows
+
+    #-----------------------------------------    
+    # Use a temp file in memory or on disk ?
+    #-----------------------------------------
+    IN_MEMORY = False
+    if (IN_MEMORY):
+        tmp_file = '/vsimem/TEMP.tif'
+    else:
+        tmp_file = 'TEMP.tif'
+    
+    #-------------------------------------------------
+    # It may not be wise to change the nodata values
+    # because GDAL may not recognize them as nodata
+    # during spatial interpolation, etc.
+    # This could be the cause of "artifacts".
+    #-------------------------------------------------
+    # A nodata value of zero may be okay for rainfall
+    # rates, but is not good in general.
+    #-------------------------------------------------    
+    #### rts_nodata = -9999.0    ######
+    # rts_nodata = 0.0
+    rts_nodata = None   # (do not change nodata values)
+    count = 0
+    vmax  = -1e8
+    vmin  = 1e8
+    bad_count = 0
+    BAD_FILE  = False
+    tif_file  = 'TEMP1.tif'
+    
+    #-----------------------------------------    
+    # Open input nc file
+    #-----------------------------------------
+    ncgs_in = ncgs_files.ncgs_file()
+    ncgs_in.open_file(file_name=nc_file_in)
+
+    #-----------------------------------------    
+    # Get variable info from input nc file
+    #-----------------------------------------    
+    var_dtype = ncgs_in.ncgs_unit.variables[var_name].dtype 
+    var_longname = ncgs_in.get_var_long_name(var_name=var_name)
+    var_units = ncgs_in.get_var_units(var_name=var_name)
+
+    #-----------------------------------------    
+    # Create time_info for output nc file from input nc file if none given
+    #-----------------------------------------
+    time_values = ncgs_in.ncgs_unit.variables['time'][:]
+    time_dtype = ncgs_in.ncgs_unit.variables['time'].dtype 
+    time_units = ncgs_in.ncgs_unit.variables['time'].units
+    if time_units == "minutes since 2016-10-01 00:00:00":
+        origin_datetime = time_utils.datetime.datetime(2016,10,1,0,0,0)
+        time_units = 'minutes'
+    else:
+        print('ERROR unrecognized units for time dimension in ',nc_file_in)
+    start_datetime = time_utils.convert_times_from_minutes_to_datetime(times_min=[time_values[0]],origin_datetime_obj=origin_datetime)
+    end_datetime = time_utils.convert_times_from_minutes_to_datetime(times_min=[time_values[-1]],origin_datetime_obj=origin_datetime)
+    (start_date, start_time) = time_utils.split_datetime_str(start_datetime[0]) 
+    (end_date,   end_time)   = time_utils.split_datetime_str(end_datetime[0])   
+    duration = time_utils.get_duration( start_date, start_time, end_date, end_time, time_units)
+    time_res = time_values[1]-time_values[0]
+    time_info = ncgs_in.get_time_info()
+    time_info.start_date     = start_date
+    time_info.start_time     = start_time
+    time_info.end_date       = end_date
+    time_info.end_time       = end_time
+    time_info.start_datetime = start_datetime
+    time_info.end_datetime   = end_datetime
+    time_info.duration       = duration
+    time_info.duration_units = time_units
+
+    #-----------------------------------------    
+    # Close input nc file
+    #-----------------------------------------
+    ncgs_in.close_file() # close file
+
+    #-----------------------------------------    
+    # Read var using gdal (to faciliate regridding)
+    #-----------------------------------------
+    if (VERBOSE):  print('Reading grid of values for variable: ',var_name)
+    ds_in  = gdal.Open("NETCDF:{0}:{1}".format(nc_file_in, var_name) )
+    band   = ds_in.GetRasterBand(1)
+    nc_nodata = band.GetNoDataValue()
+    grid1 = band.ReadAsArray()
+
+    if (VERBOSE):
+        print( '===============================================================')
+        print( 'count =', (count + 1) )
+        print( '===============================================================')
+        print( 'grid1: min   =', grid1.min(), ', max =', grid1.max() )
+        print( 'grid1.shape  =', grid1.shape )
+        print( 'grid1.dtype  =', grid1.dtype )
+        print( 'grid1 nodata =', nc_nodata, '(in original nc_file)' )
+        ### w  = np.where(grid1 > nc_nodata)
+        w  = np.where(grid1 != nc_nodata)
+        nw = w[0].size
+        print( 'grid1 # data =', nw)
+        print( ' ' )
+              
+    #--------------------------------------        
+    # Use gdal.Info() to print/check info
+    #--------------------------------------
+    ## print( gdal.Info( ds_in ) )
+    ## print( '===============================================================')
+
+    #-----------------------------------------------        
+    # Check if the bounding boxes actually overlap
+    #-----------------------------------------------
+    if not(SILENT):  print('Comparing bounds...')
+    ds_bounds = get_raster_bounds( ds_in, VERBOSE=False )
+    if (bounds_disjoint( ds_bounds, DEM_bounds )):
+        print( '###############################################')
+        print( 'WARNING: Bounding boxes do not overlap.')
+        print( '         New grid will contain only nodata.')
+        print( '###############################################')
+        print( 'count =', count )
+        print( 'file  =', nc_file )
+        print( 'ds_bounds  =', ds_bounds )
+        print( 'DEM_bounds =', DEM_bounds )
+        print( ' ')
+        bad_count += 1
+        BAD_FILE = True
+
+    #-------------------------------------------
+    # Clip and resample data to the DEM's grid
+    # then save to a temporary GeoTIFF file.
+    #-------------------------------------------
+    if not(BAD_FILE):
+        print('Regridding to DEM grid...')
+        grid2 = gdal_regrid_to_dem_grid( ds_in, tmp_file,
+                        DEM_bounds, DEM_xres_deg, DEM_yres_deg,
+                        nodata=rts_nodata, IN_MEMORY=IN_MEMORY,
+                        RESAMPLE_ALGO=resample_algo )
+        # This was already done in gdal_regrid_to_dem_grid()
+        ## ds_in = None   # Close the tmp_file
+        ## if (IN_MEMORY):
+        ##    gdal.Unlink( tmp_file )
+        if (VERBOSE):
+            print( 'grid2: min  =', grid2.min(), ', max =', grid2.max() )
+            print( 'grid2.shape =', grid2.shape )
+            print( 'grid2.dtype =', grid2.dtype )
+            if (rts_nodata is not None):
+                w  = np.where(grid2 != rts_nodata)
+                nw = w[0].size
+                print( 'grid2 # data =', nw)
+                print()
+    else:
+        grid2 = np.zeros( (DEM_nrows, DEM_ncols), dtype='float32' )
+        if (rts_nodata is not None):
+            grid2 += rts_nodata
+
+    #-----------------------------------------    
+    # close the read-in dataset
+    #-----------------------------------------
+    ds_in = None  # (close ds)
+
+    #-----------------------------------------    
+    # forcings unit conversions
+    #-----------------------------------------
+    if (var_name == 'Rainf_tavg'):
+        print('Converting units: [kg m-2 s-1] to [mmph]...')
+        w = (grid2 != nc_nodata)  # (boolean array)
+        grid2[w] *= 3600.0        # (preserve nodata)
+    if (var_name == 'Tair_f_inst'):
+        print('Converting units: Kelvin to Celsius...')
+        w = (grid2 != nc_nodata)  # (boolean array)
+        grid2[w] -= 273.15        # (preserve nodata)                 
+    if (var_name == 'Psurf_f_inst'):
+        print('Converting units: Pa to mbar...')
+        w = (grid2 != nc_nodata)  # (boolean array)
+        grid2[w] /= 100.0         # (preserve nodata)
+
+    #-----------------------------------------    
+    # initialize new file
+    #-----------------------------------------
+    ncgs_out = ncgs_files.ncgs_file()
+    ncgs_out.open_new_file(file_name=ncgs_file_out,grid_info=grid_info,time_info=time_info,var_name=var_name,
+                            units_name='m',time_units='minutes',time_res=time_res,
+                            OVERWRITE_OK=True,MAKE_RTI=False)
+                
+    #------------------------------------
+    # create attributes for the forcings variable
+    #------------------------------------
+    ncgs_out.ncgs_unit.variables[var_name].long_name    = var_name
+    ncgs_out.ncgs_unit.variables[var_name].units        = var_units
+    ncgs_out.ncgs_unit.variables[var_name].dx           = grid_info.xres
+    ncgs_out.ncgs_unit.variables[var_name].dy           = grid_info.yres 
+    ncgs_out.ncgs_unit.variables[var_name].y_south_edge = grid_info.y_south_edge
+    ncgs_out.ncgs_unit.variables[var_name].y_north_edge = grid_info.y_north_edge
+    ncgs_out.ncgs_unit.variables[var_name].x_west_edge  = grid_info.x_west_edge
+    ncgs_out.ncgs_unit.variables[var_name].x_east_edge  = grid_info.x_east_edge        
+
+    #------------------------------------
+    # Populate the variable
+    #------------------------------------
+    ncgs_out.ncgs_unit.variables[var_name][:,:,:] = grid2
+
+    #---------------------------
+    # Determine variable units
+    #---------------------------
+    #--------------------------------------------------
+    # Note: The GLDAS Noah-LSM Parameters (Table 3.3) 
+    #       Other GLDAS products have other vars
+    #         and some of those are included here.
+    #       "_tavg" vars are backward 3-hour avg.
+    #       "_acc" vars are backward 3-hour accum.
+    #       "_inst" vars are instantaneous
+    #       "_f" vars are forcing vars.
+    #       Updated this map on 2023-08-28.
+    #------------------------------------------------  
+    umap = {
+    'Swnet_tavg'         : 'W m-2',       # Net shortwave rad. flux
+    'Lwnet_tavg'         : 'W m-2',       # Net longwave rad. flux
+    'Qle_tavg'           : 'W m-2',       # Latent heat net flux
+    'Qh_tavg'            : 'W m-2',       # Sensible heat net flux
+    'Qg_tavg'            : 'W m-2',       # Ground heat flux
+    'SWdown_f_tavg'      : 'W m-2',       # Downward SW rad. flux
+    'LWdown_f_tavg'      : 'W m-2',       # Downward LW rad. flux
+    'PotEvap_tavg'       : 'W m-2',       # Potential evap. rate
+    'ECanop_tavg'        : 'W m-2',       # Canopy water evaporation
+    'Tveg_tavg'          : 'W m-2',       # Transpiration
+    'ESoil_tavg'         : 'W m-2',       # Direct evap. from bare soil
+    #-----------------------------------------------------------------------
+#       'Rainf_tavg'         : 'kg m-2 s-1',  # Rain precip. rate (see below)
+#       'Rainf_f_tavg'       : 'kg m-2 s-1',  # Total precip. rate (see below)
+    'Snowf_tavg'         : 'kg m-2 s-1',  # Snow precip. rate
+    'Evap_tavg'          : 'kg m-2 s-1',  # Evapotranspiration
+    'EvapSnow_tavg'      : 'kg m-2 s-1',  # Snow evaporation
+    'Qs_tavg'            : 'kg m-2 s-1',  # Storm surface runoff
+    'Qsb_tavg'           : 'kg m-2 s-1',  # Baseflow-gw runoff
+    'Qsm_tavg'           : 'kg m-2 s-1',  # Snow melt
+    #-----------------------------------------------------------------------
+    'Qs_acc'             : 'kg m-2',      # Storm surface runoff
+    'Qsb_acc'            : 'kg m-2',      # Baseflow-gw runoff
+    'Qsm_acc'            : 'kg m-2',      # Snow melt
+    'RootMoist_inst'     : 'kg m-2',      # Root zone soil moisture
+    'CanopInt_inst'      : 'kg m-2',      # Plant canopy surface water
+    #-----------------------------------------------------------------------
+    'Rainf_tavg'         : 'mm h-1',      # Rain precip. rate (converted)
+    'Rainf_f_tavg'       : 'mm h-1',      # Total precip. rate (converted)        
+    #-----------------------------------------------------------------------
+    'Tair_f_inst'        : 'C',           # Air temp. (K to C)
+    'SnowT_tavg'         : 'C',           # Snow surf. temp. (K to C)
+    'AvgSurfT_inst'      : 'C',           # Avg. surface skin temp. (K to C)
+    'AvgSurfT_tavg'      : 'C',           # Avg. surface skin temp. (K to C)
+    #-----------------------------------------------------------------------
+    'SnowDepth_inst'     : 'm',           # Snow depth (inst.)
+    'SnowDepth_tavg'     : 'm',           # Snow depth (time avg.)
+    'Albedo_inst'        : 'none [0,1]',  # Albedo  (% to [0,1])
+    'Psurf_f_inst'       : 'Pa',          # Surface pressure 
+#       'Psurf_f_tavg'       : 'Pa',          # Surface pressure  
+    'Qair_f_inst'        : 'kg kg-1',     # Specific humidity     
+    #-----------------------------------------------------------------------
+    'SWE_inst'              : 'kg m-2',   # Snow depth water equiv.
+    'SWE_tavg'              : 'kg m-2',   # Snow depth water equiv.
+    'Qsb_acc'               : 'kg m-2',   # Baseflow groundwater runoff
+    'SoilMoi0_10cm_inst'    : 'kg m-2',   # Soil moisture (0-10 cm)
+    'SoilMoi10_40cm_inst'   : 'kg m-2',   # Soil moisture (10-40 cm)
+    'SoilMoi40_100cm_inst'  : 'kg m-2',   # Soil moisture (40-100 cm) 
+    'SoilMoi100_200cm_inst' : 'kg m-2',   # Soil moisture (100-200 cm)  
+#       'SoilMoist_S_tavg'      : 'kg m-2',      # Surface soil moisture
+#       'SoilMoist_RZ_tavg'     : 'kg m-2',      # Root zone soil moisture
+#       'SoilMoist_P_tavg'      : 'kg m-2',      # Profile soil moisture
+    'CanopInt_inst'         : 'kg m-2',      # Plant canopy surface water
+#       'CanopInt_tavg'         : 'kg m-2',      # Plant canopy surface water
+    #-----------------------------------------------------------------------
+    'ACond_tavg'         : 'm s-1',       # Aerodynamic conductance
+    'Wind_f_inst'        : 'm s-1' }      # Wind speed
+
+    try:
+        units = umap[ var_name ]
+    except:
+        print("SORRY, Don't know units for this forcings file")
+        units = 'not available (see docs)'
+
+    #----------------------     
+    # Print final message
+    #----------------------  
+    print( ' ')
+    print( 'Variable name  =', var_name )
+    print( 'Variable units =', units)
+    print( 'max(variable)  =', vmax)
+    print( 'min(variable)  =', vmin, '(possible nodata)' )
+    print( 'bad_count =', bad_count )
+    print( 'n_grids   =', count )
+    print( 'Finished saving data to rts file.')
+    print( ' ')
+    ncgs_out.close()
+#   create_ncgs_forcings_file()

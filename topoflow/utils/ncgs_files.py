@@ -737,8 +737,8 @@ class ncgs_file():
         #---------------------------------------
         # Save attributes of the main variable
         #---------------------------------------
-        svo_name = svo_names.get_svo_name( var_name )
-        ncgs_unit.variables[var_name].svo_name  = svo_name 
+        #svo_name = svo_names.get_svo_name( var_name )
+        #ncgs_unit.variables[var_name].svo_name  = svo_name 
         ncgs_unit.variables[var_name].long_name = long_name
         ncgs_unit.variables[var_name].units     = units_name
         ncgs_unit.variables[var_name].n_grids   = 0   ##########
@@ -929,15 +929,31 @@ class ncgs_file():
     #----------------------------------------------------------
     def get_time_info(self):
         
-        ncgs_unit  = self.ncgs_unit
-        time_units = ncgs_unit.variables['time'].units
-        duration   = ncgs_unit.variables['time'].time_coverage_duration
-        time_res   = ncgs_unit.variables['time'].time_coverage_resolution
-        start_datetime = ncgs_unit.variables['time'].time_coverage_start
-        end_datetime   = ncgs_unit.variables['time'].time_coverage_end        
+        ncgs_unit      = self.ncgs_unit
+        time_units     = ''
+        duration       = ''
+        time_res       = ''
+        start_date     = ''
+        start_time     = ''
+        start_datetime = ''
+        end_date       = ''
+        end_time       = ''
+        end_datetime   = ''
 
-        (start_date, start_time) = time_utils.split_datetime_str(start_datetime) 
-        (end_date,   end_time)   = time_utils.split_datetime_str(end_datetime)
+        if hasattr(ncgs_unit.variables['time'],'units'):
+            time_units     = ncgs_unit.variables['time'].units
+        if hasattr(ncgs_unit.variables['time'],'time_coverage_duration'):
+            duration       = ncgs_unit.variables['time'].time_coverage_duration
+        if hasattr(ncgs_unit.variables['time'],'time_coverage_resolution'):
+            time_res       = ncgs_unit.variables['time'].time_coverage_resolution
+        if hasattr(ncgs_unit.variables['time'],'time_coverage_start'):
+            start_datetime = ncgs_unit.variables['time'].time_coverage_start
+        if hasattr(ncgs_unit.variables['time'],'time_coverage_end'):
+            end_datetime   = ncgs_unit.variables['time'].time_coverage_end        
+        if start_datetime != '':
+            (start_date, start_time) = time_utils.split_datetime_str(start_datetime) 
+        if end_datetime != '':
+            (end_date,   end_time)   = time_utils.split_datetime_str(end_datetime)
                 
         class time_info_class:
             pass
