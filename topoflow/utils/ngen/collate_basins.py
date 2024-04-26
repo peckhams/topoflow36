@@ -394,8 +394,8 @@ def get_heading_list():
     'Minlon', 'Maxlon', 'Minlat', 'Maxlat',      
     'Long_Name', 'Closest_Site_ID', 'Closest_Site_Dist',
     'Site_URL', 'HUC_URL', 'NWS_URL',
-    'Status', 'Start_Date', 'End_Date',
-    'Eco_Region', 'HLR_Code', 'SWB_Class', 'Hgraph_Type' ]
+    'Status_as_FPS', 'Start_Date', 'End_Date',
+    'Eco_Region', 'HLR_Code_Outlet', 'SWB_Class', 'Hgraph_Type' ]
     
     #-------------------------------------------
     # Using "title" doesn't give best results.
@@ -583,7 +583,7 @@ def update_attributes( val_list, key, att_dict ):
         ## DON'T NEED UPDATE_ATTS=True HERE.
     #------------------------------------------------------
     if (key == 'NOAA_HADS'):
-        headings = ['USGS_ID', 'USGS_name', 'Station_type',
+        headings = ['USGS_ID', 'USGS_name', 'Site_type',
         'Longitude', 'Latitude', 'RFC_ID', 'NWS_loc_ID',
         'NWS_HSA_ID', 'GOES_ID' ]
         ## 'HUC8', 'Hgraph_type']
@@ -754,9 +754,10 @@ def collate( out_tsv_file=None, max_count=1000, DEBUG=False ):
     #    to map NWS loc ID to GOES_ID and HSA_ID.
     #    to map NWS loc ID to WFO/CWA
     #----------------------------------------------
-    rfc_dict1 = rfc.get_rfc_dict1()
-    rfc_dict2 = rfc.get_rfc_dict2()  # info from RFC shapefile
-  
+    rfc_dict1  = rfc.get_rfc_dict1()
+    rfc_dict2  = rfc.get_rfc_dict2()  # info from RFC shapefile
+    huc12_dict = usgs.get_huc12_dict()
+    
     #-------------------------------------------------------
     # Get info to map HLR code to lon-lat pair
     # This info is passed to: hlr.get_hlr_code_for_point()
@@ -1012,6 +1013,18 @@ def collate( out_tsv_file=None, max_count=1000, DEBUG=False ):
         if (site_name != '-'):
             long_name  = usgs.get_usgs_long_name( site_name )
             att_dict[ 'long_name' ] = long_name
+
+        #----------------------------------
+        # Get HUC12 code for this site ID
+        #----------------------------------
+#         if (len(site_id) == 7):
+#             # This was not triggered.
+#             print('############## ERROR in collate() ##################')
+#             print('####################################################')
+        if (site_id in huc12_dict):
+            # Overwrite HUC8 code, if present
+            att_dict[ 'huc' ] = huc12_dict[ site_id ]
+        # If not in huc12_dict, keep HUC8 code, if known.
 
         #-------------------------
         # Use HUC to get HUC_URL

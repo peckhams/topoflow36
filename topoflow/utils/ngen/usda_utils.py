@@ -104,7 +104,7 @@ def get_ars_long_name( values ):
     alt_name   = values[3].strip()  # alternate river name
     wshed_name = values[4].strip()  # watershed name
     
-    if (alt_name != 'Alternate_Name'):
+    if (alt_name != '-'):
         long_name = alt_name + ', '
     else:
         long_name = ''
@@ -146,29 +146,11 @@ def write_tsv_header( out_unit, delim='\t' ):
     'Latitude (dec deg)', 'Longitude (dec deg)',
     'Acres', 'Area (km2)',
     'Start Date', 'End Date', 'ARS DB Years',
-    'Data URL', 'Notes']
+    'Old Data URL', 'Notes']
     header = ''
     for h in headings:
         header += (h + delim)
     out_unit.write( header[:-1] + '\n' )
-    
-#     out_unit.write('Watershed ID'    + delim)
-#     out_unit.write('Location'        + delim)
-#     out_unit.write('State Code'      + delim)
-#     out_unit.write('Alternate Name'  + delim)
-#     out_unit.write('Watershed Name'  + delim)
-#     out_unit.write('Latitude (DMS)'  + delim)
-#     out_unit.write('Longitude (DMS)' + delim)
-#     out_unit.write('Latitude (dec deg)'  + delim)
-#     out_unit.write('Longitude (dec deg)' + delim)
-#     out_unit.write('Acres'        + delim)
-#     out_unit.write('Area (km2)'   + delim)
-#     out_unit.write('Start Date'   + delim)
-#     out_unit.write('End Date'     + delim)
-#     out_unit.write('ARS DB Years' + delim)
-#     out_unit.write('Data URL'     + delim)
-#     out_unit.write('Notes')
-#     out_unit.write('\n')
 
 #   write_tsv_header()
 #---------------------------------------------------------------------
@@ -471,9 +453,8 @@ def get_alternate_name( wn ):
     elif (wn >=83001) and (wn <= 83014):
         alt_name = 'Goodwin Creek'
     else:
-        alt_name = 'Alternate_Name'
-        
-    ## alt_name = 'Alternate_Name'
+        alt_name = '-'  # 3/20/24
+        ### alt_name = 'Alternate_Name'
     
     return alt_name
    

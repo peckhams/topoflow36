@@ -1,4 +1,7 @@
 
+#  May want to convert lat and lon in DMS to decimal degrees.
+#  Are all stations in HCDN also in our collated TSV?
+
 #  Copyright (c) 2023-2024, Scott D. Peckham
 #
 #  Jan 2024. Renamed all "ngen/utils" files to end in "_utils.py"

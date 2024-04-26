@@ -1111,18 +1111,27 @@ def get_hydrograph_type_dict( SAVE_TO_FILE=True ):
 
     #--------------------------------    
     # Make a list of CSV file names
+    # Got these files from Wanru
     #--------------------------------
     file_names = list()
     file_names.append( 'NWMv3_basin_type_flashy.txt' ) 
     file_names.append( 'NWMv3_basin_type_slow.txt' )
     file_names.append( 'NWMv3_basin_type_regulation.txt' )
     file_names.append( 'NWMv3_basin_type_snow.txt' )
+    file_names.append( 'NWMv3_basin_type_default_conus.txt' )
+    file_names.append( 'NWMv3_basin_type_qmean_lt_1cms_conus.txt' )
 
     #----------------------------------    
     # Make a list of hydrograph types
     #----------------------------------
-    htypes = ['flashy', 'slow', 'regulated', 'snow-dom']
-    
+    htypes = ['flashy', 'slow', 'regulated', 'snow-dom',
+              'normal', 'low-flow']
+
+    #-------------------------------------------   
+    # Get USGS site info dict for missing info
+    #-------------------------------------------
+    usgs_site_info_dict = usgs.get_usgs_site_info_dict()
+
     #---------------------------------------------   
     # Create a dictionary with hydrograph types
     # and other info for each USGS site ID found
@@ -1143,7 +1152,20 @@ def get_hydrograph_type_dict( SAVE_TO_FILE=True ):
             huc8 = vals[6].strip()
             rfc  = vals[7].strip()
             ## url  = usgs.get_usgs_site_url( sid )
-            if (lat != 'NA'):  ############## ADD MISSING INFO LATER #######
+            if (lat == 'NA'):
+                #-------------------------------------------------
+                # Add missing info for this site from dictionary
+                #-------------------------------------------------
+                try:
+                    info = usgs_site_info_dict[ sid ]
+                    lat  = info['lat']
+                    lon  = info['lon']
+                    huc8 = info['huc']
+                    rfc  = '-'
+                except:
+                    print('## WARNING: Info not found for site ID =', sid )
+                    print('##          Likely not stream-type site.')
+            if (lat != 'NA'):  
                 htype_dict[ sid ] = \
                     {'htype':htype, 'rfc_name':rfc, 'huc8':huc8,
                      'lat':lat, 'lon':lon }       
@@ -1655,7 +1677,8 @@ def create_hads_tsv( data_dir=None,
     header += 'Hgraph_type'  + '\n'  # newline at end  
     tsv_unit.write( header )   
 
-    rfc_map   = get_usgs_rfc_dict()      ############### SEE NEW METHOD
+    #### rfc_map   = get_usgs_rfc_dict_v0()
+    rfc_map   = get_usgs_rfc_dict_v1()
     htype_map = get_hydrograph_type_dict()
     null_info = {'rfc_name': 'unknown', 'huc8': 'unknown',
                  'lat':'-999', 'lon':'-999'}

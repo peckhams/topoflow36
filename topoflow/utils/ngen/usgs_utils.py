@@ -34,6 +34,7 @@
 #
 #  get_wqp_site_subset()
 #  get_site_type_dict()    ###
+#  get_huc12_dict()
 #
 #  get_usgs_site_coords()
 #  compare_usgs_site_coords()
@@ -295,6 +296,89 @@ def get_site_type_dict( in_tsv_file='WQP_All_Site_Info.tsv',
     return site_type_dict
 
 #   get_site_type_dict()
+#---------------------------------------------------------------------
+def get_huc12_dict( in_tsv_file='NWIS_All_Stream_Sites_with_HUC12.tsv',
+                    SAVE_TO_FILE=True ): 
+
+    #-------------------------------------------------------------
+    # Note: NWIS_All_Stream_Sites_with_HUC12.csv contains info 
+    #       for 158,818 NWIS stream sites, including HUC12 code.
+    #-------------------------------------------------------------
+    new_dir = dtu.get_new_data_dir( 'USGS_NWIS_Web' )
+    
+    dict_file = 'USGS_NWIS_HUC12_dict.pkl'
+    dict_path = new_dir + dict_file
+    if (os.path.exists( dict_path )):
+        print('Reading saved USGS-NWIS HUC12 dictionary...')
+        dict_unit = open( dict_path, 'rb')
+        huc12_dict = pickle.load( dict_unit )
+        dict_unit.close()
+        print('Finished.')
+        print()
+        return huc12_dict
+
+    delim = '\t'   # tab
+    print('Working...')
+    in_count = 0
+    usgs_site_count = 0
+ 
+    #------------------
+    # Open input file
+    #------------------
+    in_tsv_path = new_dir + in_tsv_file
+    in_tsv_unit = open(in_tsv_path,  'r')
+
+    #-----------------------    
+    # Skip the header line
+    #-----------------------
+    header = in_tsv_unit.readline()
+    huc12_dict = dict()
+
+    while (True):
+        line = in_tsv_unit.readline()
+        if (line == ''):
+            break  # (reached end of file)
+        values = line.split( delim )
+        in_count += 1
+
+        agency  = values[0].strip()
+        site_id = values[1].strip()
+        huc12   = values[56].strip()
+        if (huc12 == ''):
+            huc12 = '-'
+        
+        if (len(site_id) == 7):
+            site_id = '0' + site_id   ###########
+
+        if (len(huc12) == 11):
+            huc12 = '0' + huc12
+
+        if (agency == 'USGS'):
+            huc12_dict[ site_id ] = huc12
+            usgs_site_count += 1
+                                
+        if ((in_count % 10000) == 0):
+            print('  in_count =', in_count)
+
+    if (SAVE_TO_FILE):
+        dict_unit = open( dict_path, 'wb' )
+        pickle.dump( huc12_dict, dict_unit, protocol=pickle.HIGHEST_PROTOCOL)
+        dict_unit.close()
+        print('Saved USGS-NWIS HUC12 dictionary to file:')
+        print('  ' + dict_path)
+        print()
+        
+    #-------------------  
+    # Close input file
+    #-------------------
+    in_tsv_unit.close()
+    print('Total in count =', in_count)
+    print('Number of USGS sites =', usgs_site_count )
+    print('Finished.')
+    
+    return huc12_dict
+
+#   get_huc12_dict()
 #---------------------------------------------------------------------
 def get_usgs_site_coords( delim='\t', NWIS_ALL=False,
                           SAVE_TO_FILE=False):
@@ -1570,7 +1654,7 @@ def get_usgs_site_url( site_no ):
  
 #   get_usgs_site_url()
 #---------------------------------------------------------------------
-def get_usgs_huc_url( huc_no ):
+def get_usgs_huc_url( huc_num ):
 
     #-------------------------------------------------------------
     # Legacy HUC numbers have 8 digits, new ones have 12.
@@ -1584,10 +1668,17 @@ def get_usgs_huc_url( huc_no ):
     # This applies to all of the 22 U.S. regions, which includes
     # Alaska (19), Hawaii (20), Puerto Rico (21) and Guam (22).
     #-------------------------------------------------------------
-    if (huc_no == '-'):
+    if (huc_num == '-'):
         return '-'
     url = 'https://water.usgs.gov/lookup/getwatershed?'
-    url += str(huc_no)
+    huc_num_str = str(huc_num)
+    huc_len = len(huc_num_str)
+    if (huc_len == 7) or (huc_len == 11):
+        huc_num_str = ('0' + huc_num_str)
+    if (len(huc_num_str) > 8):
+        # Website for these URLs requires a HUC8 code.
+        huc_num_str = huc_num_str[0:8]
+    url += huc_num_str
     return url
     
 #   get_usgs_huc_url()
