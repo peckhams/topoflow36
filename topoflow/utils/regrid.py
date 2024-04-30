@@ -45,6 +45,7 @@ import numpy as np
 from osgeo import gdal, osr  ## ogr
 import glob, sys
 import os, os.path
+import netCDF4 as nc
 
 from . import rti_files
 from . import rtg_files
@@ -1868,7 +1869,7 @@ def create_rts_from_chirps_files( rts_file='TEST.rts',
 # #   rename_nc_files()
 #-------------------------------------------------------------------
 
-def create_ncgs_forcings_file(var_name=None, nc_file_in=None, ncgs_file_out=None, grid_info=None,
+def create_aorc_ncgs_forcings_file(var_name=None, nc_file_in=None, grid_info=None,
            resample_algo='bilinear', SILENT=False, VERBOSE=False, NC4=False):
 
     #---------------------------------------------
@@ -1924,7 +1925,7 @@ def create_ncgs_forcings_file(var_name=None, nc_file_in=None, ncgs_file_out=None
     var_units = ncgs_in.get_var_units(var_name=var_name)
 
     #-----------------------------------------    
-    # Create time_info for output nc file from input nc file if none given
+    # Create time_info for output nc file from input nc file
     #-----------------------------------------
     time_values = ncgs_in.ncgs_unit.variables['time'][:]
     time_dtype = ncgs_in.ncgs_unit.variables['time'].dtype 
@@ -1953,7 +1954,7 @@ def create_ncgs_forcings_file(var_name=None, nc_file_in=None, ncgs_file_out=None
     #-----------------------------------------    
     # Close input nc file
     #-----------------------------------------
-    ncgs_in.close_file() # close file
+    ncgs_in.close_file()
 
     #-----------------------------------------    
     # Read var using gdal (to faciliate regridding)
@@ -2042,39 +2043,67 @@ def create_ncgs_forcings_file(var_name=None, nc_file_in=None, ncgs_file_out=None
         print('Converting units: [kg m-2 s-1] to [mmph]...')
         w = (grid2 != nc_nodata)  # (boolean array)
         grid2[w] *= 3600.0        # (preserve nodata)
+        var_units = 'mmph'
     if (var_name == 'Tair_f_inst'):
         print('Converting units: Kelvin to Celsius...')
         w = (grid2 != nc_nodata)  # (boolean array)
-        grid2[w] -= 273.15        # (preserve nodata)                 
+        grid2[w] -= 273.15        # (preserve nodata)  
+        var_units = 'C'               
     if (var_name == 'Psurf_f_inst'):
         print('Converting units: Pa to mbar...')
         w = (grid2 != nc_nodata)  # (boolean array)
         grid2[w] /= 100.0         # (preserve nodata)
+        var_units = 'mbar'
+
+    #-----------------------------------------    
+    # name conversions
+    #-----------------------------------------
+    topoflow_var_name = None
+    if (var_name == 'Rainf_tavg'):
+        topoflow_var_name = 'P'
+    elif (var_name == 'Tair_f_inst'):
+        topoflow_var_name = 'T_air'
+    elif (var_name == 'Psurf_f_inst'):
+        topoflow_var_name = 'p0'
+    elif (var_name == 'Lwnet_tavg'):
+        topoflow_var_name = 'Qn_LW'
+    elif (var_name == 'Swnet_tavg'):
+        topoflow_var_name = 'Qn_SW'
+    elif (var_name == 'Wind_f_inst'):
+        topoflow_var_name = 'uz'
+    if topoflow_var_name is None:
+        topoflow_var_name = var_name
 
     #-----------------------------------------    
     # initialize new file
     #-----------------------------------------
     ncgs_out = ncgs_files.ncgs_file()
-    ncgs_out.open_new_file(file_name=ncgs_file_out,grid_info=grid_info,time_info=time_info,var_name=var_name,
-                            units_name='m',time_units='minutes',time_res=time_res,
+    output_file_name = os.path.join(os.path.dirname(nc_file_in),'AORC_'+topoflow_var_name+'.nc')
+    ncgs_out.open_new_file(file_name=output_file_name,grid_info=grid_info,time_info=time_info,var_name=topoflow_var_name,
+                            units_name=var_units,time_units='minutes',time_res=time_res,
                             OVERWRITE_OK=True,MAKE_RTI=False)
-                
+
     #------------------------------------
     # create attributes for the forcings variable
     #------------------------------------
-    ncgs_out.ncgs_unit.variables[var_name].long_name    = var_name
-    ncgs_out.ncgs_unit.variables[var_name].units        = var_units
-    ncgs_out.ncgs_unit.variables[var_name].dx           = grid_info.xres
-    ncgs_out.ncgs_unit.variables[var_name].dy           = grid_info.yres 
-    ncgs_out.ncgs_unit.variables[var_name].y_south_edge = grid_info.y_south_edge
-    ncgs_out.ncgs_unit.variables[var_name].y_north_edge = grid_info.y_north_edge
-    ncgs_out.ncgs_unit.variables[var_name].x_west_edge  = grid_info.x_west_edge
-    ncgs_out.ncgs_unit.variables[var_name].x_east_edge  = grid_info.x_east_edge        
+    ncgs_out.ncgs_unit.variables[topoflow_var_name].long_name    = topoflow_var_name
+    ncgs_out.ncgs_unit.variables[topoflow_var_name].dx           = grid_info.xres
+    ncgs_out.ncgs_unit.variables[topoflow_var_name].dy           = grid_info.yres 
+    ncgs_out.ncgs_unit.variables[topoflow_var_name].y_south_edge = grid_info.y_south_edge
+    ncgs_out.ncgs_unit.variables[topoflow_var_name].y_north_edge = grid_info.y_north_edge
+    ncgs_out.ncgs_unit.variables[topoflow_var_name].x_west_edge  = grid_info.x_west_edge
+    ncgs_out.ncgs_unit.variables[topoflow_var_name].x_east_edge  = grid_info.x_east_edge        
 
     #------------------------------------
     # Populate the variable
     #------------------------------------
-    ncgs_out.ncgs_unit.variables[var_name][:,:,:] = grid2
+    ncgs_out.ncgs_unit.variables[topoflow_var_name][:,:,:] = grid2
+    ncgs_out.ncgs_unit.variables['time'][:] = [i+1 for i in range(grid2.shape[0])]
+
+    #------------------------------------
+    # Close the file
+    #------------------------------------
+    ncgs_out.close()
 
     #---------------------------
     # Determine variable units
@@ -2164,7 +2193,6 @@ def create_ncgs_forcings_file(var_name=None, nc_file_in=None, ncgs_file_out=None
     print( 'min(variable)  =', vmin, '(possible nodata)' )
     print( 'bad_count =', bad_count )
     print( 'n_grids   =', count )
-    print( 'Finished saving data to rts file.')
     print( ' ')
-    ncgs_out.close()
+
 #   create_ncgs_forcings_file()

@@ -183,6 +183,7 @@ class ncgs_file():
         #try:
             ncgs_unit = nc.Dataset(file_name, mode='r')
             self.ncgs_unit = ncgs_unit
+            self.file_name = file_name
             ### return ncgs_unit
             return True
 #         except:
@@ -883,8 +884,8 @@ class ncgs_file():
     #----------------------------------------------------------
     def get_grid(self, var_name, time_index):
 
-        var = self.ncgs_unit.variables[ var_name ]
-        return var[ time_index ]
+        var = self.ncgs_unit.variables[var_name][time_index,:,:]
+        return var
         
     #   get_grid()
     #----------------------------------------------------------
