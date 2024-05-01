@@ -183,7 +183,6 @@ class ncgs_file():
         #try:
             ncgs_unit = nc.Dataset(file_name, mode='r')
             self.ncgs_unit = ncgs_unit
-            self.file_name = file_name
             ### return ncgs_unit
             return True
 #         except:
@@ -738,8 +737,8 @@ class ncgs_file():
         #---------------------------------------
         # Save attributes of the main variable
         #---------------------------------------
-        #svo_name = svo_names.get_svo_name( var_name )
-        #ncgs_unit.variables[var_name].svo_name  = svo_name 
+        svo_name = svo_names.get_svo_name( var_name )
+        ncgs_unit.variables[var_name].svo_name  = svo_name 
         ncgs_unit.variables[var_name].long_name = long_name
         ncgs_unit.variables[var_name].units     = units_name
         ncgs_unit.variables[var_name].n_grids   = 0   ##########
