@@ -17,7 +17,6 @@
 import numpy as np
 import os.path
 import netCDF4 as nc
-from . import ncgs_files
 
 #-------------------------------------------------------------------
 def open_file(var_type, input_file, NGEN_CSV=False):
