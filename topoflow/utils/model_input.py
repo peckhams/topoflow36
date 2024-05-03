@@ -16,6 +16,7 @@
 #-------------------------------------------------------------------
 import numpy as np
 import os.path
+import netCDF4 as nc
 
 #-------------------------------------------------------------------
 def open_file(var_type, input_file, NGEN_CSV=False):
@@ -61,12 +62,21 @@ def open_file(var_type, input_file, NGEN_CSV=False):
             #----------------------
             line = file_unit.readline()
     else:
-        #--------------------------------------------
-        # Input file contains a grid or grid stack
-        # as row-major, binary file with no header.
-        #--------------------------------------------
-        file_unit = open(input_file, 'rb')
-            
+        file_ext = os.path.splitext(input_file)[1]
+        if file_ext in ('.nc','.nc4'):
+            #--------------------------------------------
+            # Input file is netcdf format
+            #--------------------------------------------
+            file_unit = nc.Dataset(input_file, mode = 'r')
+        else:
+            #--------------------------------------------
+            # Input file contains a grid or grid stack
+            # as row-major, binary file with no header.
+            #--------------------------------------------
+            file_unit = open(input_file, 'rb')
+
+    #print('file_unit:')
+    #print(file_unit)
     return file_unit
 
 #   open_file()
@@ -131,7 +141,7 @@ def read_next2(self, var_name, rti, dtype='float32', factor=1.0):
 #-------------------------------------------------------------------
 def read_next(file_unit, var_type, rti,
               dtype='float32', units_factor=1.0,
-              NGEN_CSV=False):
+              NGEN_CSV=False,time_index=None):
 
     if (var_type.lower() == 'scalar'): 
         #-------------------------------------------
@@ -157,7 +167,8 @@ def read_next(file_unit, var_type, rti,
         # NB!  grid_type argument allows DEM to be
         # read for GW vars, which might not be FLOAT'
         #----------------------------------------------
-        data = read_grid(file_unit, rti, dtype)
+        data = read_grid(file_unit, rti, dtype, time_index)
+
     else:
         raise RuntimeError('No match found for ' + var_type + '.')
         return None
@@ -223,7 +234,7 @@ def read_scalar(file_unit, dtype='float32',
 
 #   read_scalar()  
 #-------------------------------------------------------------------
-def read_grid(file_unit, rti, dtype='float32'):
+def read_grid(file_unit, rti, dtype='float32', time_index=None):
 
     #----------------------------------------------------
     # Note:  Read 2D grid from row-major, binary file.
@@ -232,13 +243,29 @@ def read_grid(file_unit, rti, dtype='float32'):
     #        returns an empty array (size 0) with same
     #        dtype.  In this case, return None.
     #----------------------------------------------------
-    grid = np.fromfile(file_unit, count=rti.n_pixels, dtype=dtype)
-    if (grid.size == 0):
-        return None
 
-    grid = np.reshape(grid, (rti.nrows, rti.ncols))
-    if (rti.SWAP_ENDIAN):
-        grid.byteswap(True)
+    if isinstance(file_unit,nc.Dataset):
+
+        #determine name of netcdf variable (from ncgs.get_var_names())
+        names    = list( file_unit.variables.keys() )
+        dims     = list( file_unit.dimensions.keys() )
+        names = [s for s in names if (s not in dims) and s != 'datetime']
+        if len(names) != 1:
+            print('ERROR more than one non dim variables in ',file_unit.filepath())
+
+        #get var
+        grid = file_unit.variables[names[0]][time_index,:,:]
+
+    else:
+
+        grid = np.fromfile(file_unit, count=rti.n_pixels, dtype=dtype)
+        if (grid.size == 0):
+            return None
+
+        grid = np.reshape(grid, (rti.nrows, rti.ncols))
+        if (rti.SWAP_ENDIAN):
+            grid.byteswap(True)
+
     #-------------------------        
     return grid
 

@@ -1291,10 +1291,10 @@ class met_component( BMI_base.BMI_component ):
         #-------------------------------------------------
         P_rain = self.P * (self.T_air > self.T_rain_snow)
         
-        if (np.ndim( self.P_rain ) == 0):
+        if ((np.ndim( self.P_rain ) == 0) & (self.T_air_type.lower() == 'scalar')): # Why is it self.P_rain and not P_rain? LB
             self.P_rain.fill( P_rain )   #### (mutable scalar)
         else:
-            self.P_rain[:] = P_rain
+            self.P_rain = P_rain
   
         if (self.DEBUG):
             if (self.P_rain.max() > 0):
@@ -1344,10 +1344,10 @@ class met_component( BMI_base.BMI_component ):
         #-------------------------------------------------
         P_snow = self.P * (self.T_air <= self.T_rain_snow)
         
-        if (np.ndim( self.P_snow ) == 0):
+        if ((np.ndim( self.P_snow ) == 0) & (self.T_air_type.lower() == 'scalar')):
             self.P_snow.fill( P_snow )   #### (mutable scalar)
         else:
-            self.P_snow[:] = P_snow
+            self.P_snow = P_snow
 
         if (self.DEBUG):
             if (self.P_snow.max() > 0):
@@ -2278,8 +2278,9 @@ class met_component( BMI_base.BMI_component ):
         else:
             units_factor = self.mmph_to_mps
         P = model_input.read_next(self.P_unit, self.P_type, rti,
-                                  units_factor=units_factor,
-                                  NGEN_CSV=self.NGEN_CSV)
+                                units_factor=units_factor,
+                                NGEN_CSV=self.NGEN_CSV,
+                                time_index=self.time_index)
                                                   
         # print('MET: (time,P) =', self.time, P)
         # print('shape(P) =', P.shape)
@@ -2310,7 +2311,7 @@ class met_component( BMI_base.BMI_component ):
         # then we'll need to use "fill()" method to prevent breaking
         # the reference to the "mutable scalar". (2/7/13)
         ###############################################################
-        T_air = model_input.read_next(self.T_air_unit, self.T_air_type, rti)
+        T_air = model_input.read_next(self.T_air_unit, self.T_air_type, rti, time_index=self.time_index)
         ## print('## T_air_type =', self.T_air_type )
         if (T_air is not None):
             # For testing
@@ -2344,27 +2345,27 @@ class met_component( BMI_base.BMI_component ):
             return
         ###########################################
 
-        T_surf = model_input.read_next(self.T_surf_unit, self.T_surf_type, rti)
+        T_surf = model_input.read_next(self.T_surf_unit, self.T_surf_type, rti, time_index=self.time_index)
         if (T_surf is not None):
             self.update_var( 'T_surf', T_surf )
 
-        RH = model_input.read_next(self.RH_unit, self.RH_type, rti)
+        RH = model_input.read_next(self.RH_unit, self.RH_type, rti, time_index=self.time_index)
         if (RH is not None):
             self.update_var( 'RH', RH )
 
-        p0 = model_input.read_next(self.p0_unit, self.p0_type, rti)
+        p0 = model_input.read_next(self.p0_unit, self.p0_type, rti, time_index=self.time_index)
         if (p0 is not None):
             self.update_var( 'p0', p0 )
 
-        uz = model_input.read_next(self.uz_unit, self.uz_type, rti)
+        uz = model_input.read_next(self.uz_unit, self.uz_type, rti, time_index=self.time_index)
         if (uz is not None):
             self.update_var( 'uz', uz )
 
-        z = model_input.read_next(self.z_unit, self.z_type, rti)
+        z = model_input.read_next(self.z_unit, self.z_type, rti, time_index=self.time_index)
         if (z is not None):
             self.update_var( 'z', z )
 
-        z0_air = model_input.read_next(self.z0_air_unit, self.z0_air_type, rti)
+        z0_air = model_input.read_next(self.z0_air_unit, self.z0_air_type, rti, time_index=self.time_index)
         if (z0_air is not None):
             self.update_var( 'z0_air', z0_air )
 
@@ -2374,27 +2375,27 @@ class met_component( BMI_base.BMI_component ):
         # Note: We could later write a version of read_next() that takes "self"
         #       and "var_name" as args and that uses "exec()".
         #----------------------------------------------------------------------------
-        albedo = model_input.read_next(self.albedo_unit, self.albedo_type, rti)
+        albedo = model_input.read_next(self.albedo_unit, self.albedo_type, rti, time_index=self.time_index)
         if (albedo is not None):
             self.update_var( 'albedo', albedo )
             ## self.albedo = albedo
 
-        em_surf = model_input.read_next(self.em_surf_unit, self.em_surf_type, rti)
+        em_surf = model_input.read_next(self.em_surf_unit, self.em_surf_type, rti, time_index=self.time_index)
         if (em_surf is not None):
             self.update_var( 'em_surf', em_surf )
             ## self.em_surf = em_surf
 
-        dust_atten = model_input.read_next(self.dust_atten_unit, self.dust_atten_type, rti)
+        dust_atten = model_input.read_next(self.dust_atten_unit, self.dust_atten_type, rti, time_index=self.time_index)
         if (dust_atten is not None):
             self.update_var( 'dust_atten', dust_atten )
             ## self.dust_atten = dust_atten
 
-        cloud_factor = model_input.read_next(self.cloud_factor_unit, self.cloud_factor_type, rti)
+        cloud_factor = model_input.read_next(self.cloud_factor_unit, self.cloud_factor_type, rti, time_index=self.time_index)
         if (cloud_factor is not None):
             self.update_var( 'cloud_factor', cloud_factor )
             ## self.cloud_factor = cloud_factor
 
-        canopy_factor = model_input.read_next(self.canopy_factor_unit, self.canopy_factor_type, rti)
+        canopy_factor = model_input.read_next(self.canopy_factor_unit, self.canopy_factor_type, rti, time_index=self.time_index)
         if (canopy_factor is not None):
             self.update_var( 'canopy_factor', canopy_factor )
             ## self.canopy_factor = canopy_factor

@@ -42,12 +42,17 @@
 
 #-------------------------------------------------------------------
 import numpy as np
-import gdal, osr  ## ogr
+from osgeo import gdal, osr  ## ogr
 import glob, sys
 import os, os.path
+import netCDF4 as nc
+from datetime import datetime, timedelta
 
 from . import rti_files
 from . import rtg_files
+from . import ncgs_files
+from . import time_utils
+from . import met_utils
 
 ## from . import rts_files   # (avoid this extra dependency)
 
@@ -1866,5 +1871,307 @@ def create_rts_from_chirps_files( rts_file='TEST.rts',
 # #   rename_nc_files()
 #-------------------------------------------------------------------
 
-         
- 
+def create_aorc_ncgs_forcings_files(nc_file_in=None, grid_info=None, time_info=None,
+           resample_algo='bilinear', SILENT=False, VERBOSE=False, NC4=False):
+
+    #-----------------------------------------    
+    # Use a temp file in memory or on disk ?
+    #-----------------------------------------
+    IN_MEMORY = False
+    if (IN_MEMORY):
+        tmp_file = '/vsimem/TEMP.tif'
+    else:
+        tmp_file = 'TEMP.tif'
+    
+    #-------------------------------------------------
+    # It may not be wise to change the nodata values
+    # because GDAL may not recognize them as nodata
+    # during spatial interpolation, etc.
+    # This could be the cause of "artifacts".
+    #-------------------------------------------------
+    # A nodata value of zero may be okay for rainfall
+    # rates, but is not good in general.
+    #-------------------------------------------------    
+    #### rts_nodata = -9999.0    ######
+    # rts_nodata = 0.0
+    rts_nodata = None   # (do not change nodata values)
+    count = 0
+    vmax  = -1e8
+    vmin  = 1e8
+    bad_count = 0
+    BAD_FILE  = False
+    tif_file  = 'TEMP1.tif'
+    
+    #-----------------------------------------    
+    # Get time info from input nc file
+    #-----------------------------------------
+    ncgs_in = ncgs_files.ncgs_file()
+    ncgs_in.open_file(file_name=nc_file_in)
+    time_values = ncgs_in.ncgs_unit.variables['time'][:]
+    time_units = ncgs_in.ncgs_unit.variables['time'].units
+    ncgs_in.close_file()
+
+    #-----------------------------------------    
+    # Create time info for file
+    #-----------------------------------------
+    if time_units == "minutes since 2016-10-01 00:00:00":
+        time_origin_datetime_obj = time_utils.datetime.datetime(2016,10,1,0,0,0)
+        time_units = 'minutes'
+    else:
+        print('ERROR unrecognized units for time dimension in ',ncgs_in.ncgs_unit.filepath())
+    start_datetime = time_utils.convert_times_from_minutes_to_datetime(times_min=[time_values[0]],origin_datetime_obj=time_origin_datetime_obj)
+    end_datetime = time_utils.convert_times_from_minutes_to_datetime(times_min=[time_values[-1]],origin_datetime_obj=time_origin_datetime_obj)
+    start_datetime = start_datetime[0]
+    end_datetime = end_datetime[0]
+
+    #-----------------------------------------    
+    # Compare time info objects
+    #-----------------------------------------
+    start_datetime_obj_file = time_utils.get_datetime_obj_from_one_str(start_datetime)
+    end_datetime_obj_file = time_utils.get_datetime_obj_from_one_str(end_datetime)
+    start_datetime_obj_simulation = time_utils.get_datetime_obj_from_one_str(time_info.start_datetime)
+    end_datetime_obj_simulation = time_utils.get_datetime_obj_from_one_str(time_info.end_datetime)
+    if time_units != time_info.duration_units:
+        print('ERROR specified time units do not match time units in ',nc_file_in)
+    if start_datetime_obj_file > start_datetime_obj_simulation:
+        print('ERROR specified start datetime is not within datetime range of ',nc_file_in)
+    if end_datetime_obj_file < end_datetime_obj_simulation:
+        print('ERROR specified end datetime is not within datetime range of ',nc_file_in)
+
+    #-----------------------------------------    
+    # Find first and second time step index values 
+    #-----------------------------------------
+    time_index_first = None
+    time_index_second = None
+    for i in range(len(time_values)):
+        i_datetime_str = time_utils.convert_times_from_minutes_to_datetime(times_min=[time_values[i]],origin_datetime_obj=start_datetime_obj_file)
+        i_datetime_obj = time_utils.get_datetime_obj_from_one_str(i_datetime_str[0])
+        if i_datetime_obj == start_datetime_obj_simulation:
+            time_index_first = i
+        if i_datetime_obj == start_datetime_obj_simulation + timedelta(minutes=time_info.dt):
+            time_index_second = i
+        if time_index_first is not None and time_index_second is not None:
+            break
+    if time_index_first is None:
+        print('ERROR could not find first simulation datetime in ',nc_file_in)
+    if time_index_second is None:
+        print('ERROR could not find second simulation datetime in ',ncgs_unit.filepath())
+
+    #-----------------------------------------    
+    # Determine needed time indices 
+    #-----------------------------------------
+    time_index = [i for i in range(time_index_first,len(time_values),time_index_second-time_index_first)]
+
+    #-----------------------------------------    
+    # Create array of datetime strings for netcdf datetime variable
+    #-----------------------------------------
+    var_datetimes = [time_utils.convert_times_from_minutes_to_datetime(times_min=[time_values[i]],origin_datetime_obj=start_datetime_obj_file)[0] for i in time_index]
+
+    #---------------------------------------------
+    # Define DEM spatial info for regridding
+    #---------------------------------------------
+    DEM_bounds = [grid_info.x_west_edge,grid_info.y_south_edge,grid_info.x_east_edge,grid_info.y_north_edge]
+    DEM_xres_sec = grid_info.xres
+    DEM_yres_sec = grid_info.yres
+    DEM_xres_deg = (grid_info.xres / 3600.0)
+    DEM_yres_deg = (grid_info.yres / 3600.0)
+    DEM_ncols = grid_info.ncols
+    DEM_nrows = grid_info.nrows
+
+    #---------------------------------------------
+    # Define dictionary to hold grids stacks and variable units
+    #---------------------------------------------
+    dt_grids = dict()
+    dt_var_units = dict()
+
+    #---------------------------------------------
+    # Iterate over variables
+    #---------------------------------------------
+    var_names = ['Psurf_f_inst','Qair_f_inst','Rainf_tavg','Tair_f_inst','Wind_f_inst']
+    for var_name in var_names:
+        
+        if not(SILENT): print('\nEvaluating variable: ',var_name)
+
+        #-----------------------------------------    
+        # Read var using gdal (to faciliate regridding)
+        #-----------------------------------------
+        if (VERBOSE):  print('Reading grid of values for variable: ',var_name)
+        (ds_in, grid1, nc_nodata) = gdal_open_nc_file( nc_file_in, var_name, VERBOSE=VERBOSE)
+
+        if (VERBOSE):
+            print( '===============================================================')
+            print( 'count =', (count + 1) )
+            print( '===============================================================')
+            print( 'grid1: min   =', grid1.min(), ', max =', grid1.max() )
+            print( 'grid1.shape  =', grid1.shape )
+            print( 'grid1.dtype  =', grid1.dtype )
+            print( 'grid1 nodata =', nc_nodata, '(in original nc_file)' )
+            ### w  = np.where(grid1 > nc_nodata)
+            w  = np.where(grid1 != nc_nodata)
+            nw = w[0].size
+            print( 'grid1 # data =', nw)
+            print( ' ' )
+                
+        #--------------------------------------        
+        # Use gdal.Info() to print/check info
+        #--------------------------------------
+        ## print( gdal.Info( ds_in ) )
+        ## print( '===============================================================')
+
+        #-----------------------------------------------        
+        # Check if the bounding boxes actually overlap
+        #-----------------------------------------------
+        if not(SILENT): print('Comparing bounds...')
+        ds_bounds = get_raster_bounds( ds_in, VERBOSE=False )
+        if (bounds_disjoint( ds_bounds, DEM_bounds )):
+            print( '###############################################')
+            print( 'WARNING: Bounding boxes do not overlap.')
+            print( '         New grid will contain only nodata.')
+            print( '###############################################')
+            print( 'count =', count )
+            print( 'file  =', nc_file )
+            print( 'ds_bounds  =', ds_bounds )
+            print( 'DEM_bounds =', DEM_bounds )
+            print( ' ')
+            bad_count += 1
+            BAD_FILE = True
+
+        #-------------------------------------------
+        # Clip and resample data to the DEM's grid
+        # then save to a temporary GeoTIFF file.
+        #-------------------------------------------
+        if not(BAD_FILE):
+            if not(SILENT): print('Regridding to DEM grid...')
+            grid2 = gdal_regrid_to_dem_grid( ds_in, tmp_file,
+                            DEM_bounds, DEM_xres_deg, DEM_yres_deg,
+                            nodata=rts_nodata, IN_MEMORY=IN_MEMORY,
+                            RESAMPLE_ALGO=resample_algo )
+            # This was already done in gdal_regrid_to_dem_grid()
+            ## ds_in = None   # Close the tmp_file
+            ## if (IN_MEMORY):
+            ##    gdal.Unlink( tmp_file )
+            if (VERBOSE):
+                print( 'grid2: min  =', grid2.min(), ', max =', grid2.max() )
+                print( 'grid2.shape =', grid2.shape )
+                print( 'grid2.dtype =', grid2.dtype )
+                if (rts_nodata is not None):
+                    w  = np.where(grid2 != rts_nodata)
+                    nw = w[0].size
+                    print( 'grid2 # data =', nw)
+                    print()
+        else:
+            grid2 = np.zeros( (DEM_nrows, DEM_ncols), dtype='float32' )
+            if (rts_nodata is not None):
+                grid2 += rts_nodata
+
+        #-----------------------------------------    
+        # close the read-in dataset
+        #-----------------------------------------
+        ds_in = None  # (close ds)
+
+        #-----------------------------------------    
+        # forcings unit conversions
+        #-----------------------------------------
+        if (var_name == 'Rainf_tavg'):
+            if not(SILENT): print('Converting units: [kg m-2 s-1] to [mmph]...')
+            w = (grid2 != nc_nodata)  # (boolean array)
+            grid2[w] *= 3600.0        # (preserve nodata)
+            var_units = 'mmph'
+        if (var_name == 'Tair_f_inst'):
+            if not(SILENT): print('Converting units: Kelvin to Celsius...')
+            w = (grid2 != nc_nodata)  # (boolean array)
+            grid2[w] -= 273.15        # (preserve nodata)  
+            var_units = 'C'               
+        if (var_name == 'Psurf_f_inst'):
+            if not(SILENT): print('Converting units: Pa to mbar...')
+            w = (grid2 != nc_nodata)  # (boolean array)
+            grid2[w] /= 100.0         # (preserve nodata)
+            var_units = 'mbar'
+
+        #-----------------------------------------    
+        # name conversions
+        #-----------------------------------------
+        topoflow_var_name = None
+        if (var_name == 'Rainf_tavg'):
+            topoflow_var_name = 'P'
+        elif (var_name == 'Tair_f_inst'):
+            topoflow_var_name = 'T_air'
+        elif (var_name == 'Psurf_f_inst'):
+            topoflow_var_name = 'p0'
+        elif (var_name == 'Lwnet_tavg'):
+            topoflow_var_name = 'Qn_LW'
+        elif (var_name == 'Swnet_tavg'):
+            topoflow_var_name = 'Qn_SW'
+        elif (var_name == 'Wind_f_inst'):
+            topoflow_var_name = 'uz'
+        if topoflow_var_name is None:
+            topoflow_var_name = var_name
+
+        #-----------------------------------------    
+        # Slice the time dimension
+        #-----------------------------------------
+        grid2 = grid2[time_index,:,:]
+
+        #-----------------------------------------    
+        # Save grid and var units
+        #-----------------------------------------
+        dt_grids[topoflow_var_name] = grid2
+        dt_var_units[topoflow_var_name] = var_units
+
+    #-----------------------------------------    
+    # Calculate grid for relative humidity
+    #-----------------------------------------
+    dt_grids['rh'] = met_utils.relative_humidity(dt_grids['Qair_f_inst'], dt_grids['T_air'], dt_grids['p0'])
+    dt_var_units['rh'] = 'None'
+
+    #-----------------------------------------    
+    # Set minimum wind speed (topoflow may error when wind speed = 0)
+    #-----------------------------------------
+    dt_grids['uz'][dt_grids['uz'] == 0.] = np.nextafter(np.single(0), np.single(1))
+
+    #-----------------------------------------    
+    # iterate over variables and create output nc files
+    #-----------------------------------------
+    if not(SILENT): print('')
+    for topoflow_var_name in ['P','T_air','p0','uz','rh']:
+        if not(SILENT): print('Creating nc file for variable: ',topoflow_var_name)
+
+        #-----------------------------------------    
+        # initialize new file
+        #-----------------------------------------
+        ncgs_out = ncgs_files.ncgs_file()
+        output_file_name = os.path.join(os.path.dirname(nc_file_in),'AORC_'+topoflow_var_name+'.nc')
+        if os.path.isfile(output_file_name):
+            os.remove(output_file_name)
+        OK = ncgs_out.open_new_file(file_name=output_file_name,grid_info=grid_info,time_info=time_info,var_name=topoflow_var_name,
+                                units_name=dt_var_units[topoflow_var_name],time_units='minutes',time_res=time_info.dt,
+                                OVERWRITE_OK=True,MAKE_RTI=False)
+        if not OK:
+            print('ERROR unable to successfully create the new file ',output_file_name)
+
+        #------------------------------------
+        # Populate the variable
+        #------------------------------------
+        ncgs_out.ncgs_unit.variables[topoflow_var_name][:,:,:] = dt_grids[topoflow_var_name]
+
+        #------------------------------------
+        # Populate time variable
+        #------------------------------------
+        ncgs_out.ncgs_unit.variables['datetime'][:] = np.array(var_datetimes)
+        ncgs_out.ncgs_unit.variables['time'][:] = [i+1 for i in range(len(time_index))]
+
+        #------------------------------------
+        # Set other attributes
+        #------------------------------------
+        ncgs_out.ncgs_unit.variables[topoflow_var_name].long_name    = topoflow_var_name
+        ncgs_out.ncgs_unit.variables[topoflow_var_name].dx           = grid_info.xres
+        ncgs_out.ncgs_unit.variables[topoflow_var_name].dy           = grid_info.yres 
+        ncgs_out.ncgs_unit.variables[topoflow_var_name].y_south_edge = grid_info.y_south_edge
+        ncgs_out.ncgs_unit.variables[topoflow_var_name].y_north_edge = grid_info.y_north_edge
+        ncgs_out.ncgs_unit.variables[topoflow_var_name].x_west_edge  = grid_info.x_west_edge
+        ncgs_out.ncgs_unit.variables[topoflow_var_name].x_east_edge  = grid_info.x_east_edge        
+
+        #------------------------------------
+        # Close the file
+        #------------------------------------
+        ncgs_out.close()

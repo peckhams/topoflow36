@@ -883,8 +883,8 @@ class ncgs_file():
     #----------------------------------------------------------
     def get_grid(self, var_name, time_index):
 
-        var = self.ncgs_unit.variables[ var_name ]
-        return var[ time_index ]
+        var = self.ncgs_unit.variables[var_name][time_index,:,:]
+        return var
         
     #   get_grid()
     #----------------------------------------------------------

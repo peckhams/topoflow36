@@ -26,7 +26,7 @@
 #
 #-------------------------------------------------------------------
 
-import gdal, osr  ## ogr
+from osgeo import gdal, osr  ## ogr
 import os.path
 import numpy as np
 
