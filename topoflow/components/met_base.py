@@ -138,7 +138,6 @@ from topoflow.utils import model_input
 from topoflow.utils import model_output
 from topoflow.utils import rtg_files
 from topoflow.utils import time_utils
-from topoflow.utils import ncgs_files
 
 #-----------------------------------------------------------------------
 class met_component( BMI_base.BMI_component ):
