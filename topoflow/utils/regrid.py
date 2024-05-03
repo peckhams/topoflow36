@@ -1991,7 +1991,7 @@ def create_aorc_ncgs_forcings_files(nc_file_in=None, grid_info=None, time_info=N
     var_names = ['Psurf_f_inst','Qair_f_inst','Rainf_tavg','Tair_f_inst','Wind_f_inst']
     for var_name in var_names:
         
-        print('\nEvaluating variable: ',var_name)
+        if not(SILENT): print('\nEvaluating variable: ',var_name)
 
         #-----------------------------------------    
         # Read var using gdal (to faciliate regridding)
@@ -2022,7 +2022,7 @@ def create_aorc_ncgs_forcings_files(nc_file_in=None, grid_info=None, time_info=N
         #-----------------------------------------------        
         # Check if the bounding boxes actually overlap
         #-----------------------------------------------
-        if not(SILENT):  print('Comparing bounds...')
+        if not(SILENT): print('Comparing bounds...')
         ds_bounds = get_raster_bounds( ds_in, VERBOSE=False )
         if (bounds_disjoint( ds_bounds, DEM_bounds )):
             print( '###############################################')
@@ -2042,7 +2042,7 @@ def create_aorc_ncgs_forcings_files(nc_file_in=None, grid_info=None, time_info=N
         # then save to a temporary GeoTIFF file.
         #-------------------------------------------
         if not(BAD_FILE):
-            print('Regridding to DEM grid...')
+            if not(SILENT): print('Regridding to DEM grid...')
             grid2 = gdal_regrid_to_dem_grid( ds_in, tmp_file,
                             DEM_bounds, DEM_xres_deg, DEM_yres_deg,
                             nodata=rts_nodata, IN_MEMORY=IN_MEMORY,
@@ -2074,17 +2074,17 @@ def create_aorc_ncgs_forcings_files(nc_file_in=None, grid_info=None, time_info=N
         # forcings unit conversions
         #-----------------------------------------
         if (var_name == 'Rainf_tavg'):
-            print('Converting units: [kg m-2 s-1] to [mmph]...')
+            if not(SILENT): print('Converting units: [kg m-2 s-1] to [mmph]...')
             w = (grid2 != nc_nodata)  # (boolean array)
             grid2[w] *= 3600.0        # (preserve nodata)
             var_units = 'mmph'
         if (var_name == 'Tair_f_inst'):
-            print('Converting units: Kelvin to Celsius...')
+            if not(SILENT): print('Converting units: Kelvin to Celsius...')
             w = (grid2 != nc_nodata)  # (boolean array)
             grid2[w] -= 273.15        # (preserve nodata)  
             var_units = 'C'               
         if (var_name == 'Psurf_f_inst'):
-            print('Converting units: Pa to mbar...')
+            if not(SILENT): print('Converting units: Pa to mbar...')
             w = (grid2 != nc_nodata)  # (boolean array)
             grid2[w] /= 100.0         # (preserve nodata)
             var_units = 'mbar'
@@ -2133,9 +2133,9 @@ def create_aorc_ncgs_forcings_files(nc_file_in=None, grid_info=None, time_info=N
     #-----------------------------------------    
     # iterate over variables and create output nc files
     #-----------------------------------------
-    print('')
+    if not(SILENT): print('')
     for topoflow_var_name in ['P','T_air','p0','uz','rh']:
-        print('Creating nc file for variable: ',topoflow_var_name)
+        if not(SILENT): print('Creating nc file for variable: ',topoflow_var_name)
 
         #-----------------------------------------    
         # initialize new file
