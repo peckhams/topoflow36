@@ -2128,7 +2128,7 @@ def create_aorc_ncgs_forcings_files(nc_file_in=None, grid_info=None, time_info=N
     #-----------------------------------------    
     # Set minimum wind speed (topoflow may error when wind speed = 0)
     #-----------------------------------------
-    dt_grids['uz'][dt_grids['uz'] == 0.] = numpy.nextafter(numpy.single(0), numpy.single(1))
+    dt_grids['uz'][dt_grids['uz'] == 0.] = np.nextafter(np.single(0), np.single(1))
 
     #-----------------------------------------    
     # iterate over variables and create output nc files
