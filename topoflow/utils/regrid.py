@@ -52,7 +52,6 @@ from . import rti_files
 from . import rtg_files
 from . import ncgs_files
 from . import time_utils
-from . import import_grid
 from . import met_utils
 
 ## from . import rts_files   # (avoid this extra dependency)
