@@ -2066,6 +2066,12 @@ class met_component( BMI_base.BMI_component ):
                                            self.albedo,
                                            self.dust_atten )
         
+        #-------------------------------------------
+        # 2024-03-06: Fix missing account for albedo 
+        # in net shortwave radiation calcs
+        # Dingman 3rd Edition 2015 Eqn. 6B1.1:
+        # net shortwave = Kin * (1-albedo)
+        #-------------------------------------------
         Qn_SW = K_cs * (1-self.albedo)
         
         if (np.ndim( self.Qn_SW ) == 0):
