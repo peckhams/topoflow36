@@ -167,8 +167,8 @@ class met_component( BMI_base.BMI_component ):
     # just means "liquid_equivalent".
     #---------------------------------------------------------   
     _input_var_names = [ 'snowpack__depth', # h_snow
-                        'glacier_ice__thickness', # rho_snow
-                         'snowpack__z_mean_of_mass-per-volume_density']  # h_ice
+                        'glacier_ice__thickness', # h_ice
+                         'snowpack__z_mean_of_mass-per-volume_density']  # rho_snow
 #         'snowpack__depth' ]                            # h_snow
 #         'snowpack__liquid-equivalent_depth',           # h_swe
 #         'snowpack__melt_volume_flux' ]                 # SM   (MR used for ice?)
@@ -1323,10 +1323,10 @@ class met_component( BMI_base.BMI_component ):
         #-------------------------------------------------
         P_rain = self.P * (self.T_air > self.T_rain_snow)
         
-        if ((np.ndim( self.P_rain ) == 0) & (self.T_air_type.lower() == 'scalar')): # Why is it self.P_rain and not P_rain? LB
+        if ((np.ndim( self.P_rain ) == 0) & (self.T_air_type.lower() == 'scalar')): 
             self.P_rain.fill( P_rain )   #### (mutable scalar)
         else:
-            self.P_rain = P_rain
+            self.P_rain[:] = P_rain
   
         if (self.DEBUG):
             if (self.P_rain.max() > 0):
@@ -1379,7 +1379,7 @@ class met_component( BMI_base.BMI_component ):
         if ((np.ndim( self.P_snow ) == 0) & (self.T_air_type.lower() == 'scalar')):
             self.P_snow.fill( P_snow )   #### (mutable scalar)
         else:
-            self.P_snow = P_snow
+            self.P_snow[:] = P_snow
 
         if (self.DEBUG):
             if (self.P_snow.max() > 0):
@@ -1840,12 +1840,12 @@ class met_component( BMI_base.BMI_component ):
         # Only run this function if T_surf is provided 
         # as a scalar or grid so that it still varies in time
         # -------------------------------------------------
-        if ((self.T_surf_type.lower() == 'scalar') | (self.T_surf_type.lower() == 'grid')):
+        if ((self.T_surf_type.lower() == 'scalar') or (self.T_surf_type.lower() == 'grid')):
         # -------------------------------------------------
         # If snow and/or ice are present,  T_surf cannot
         # exceed 0 deg C
         # -------------------------------------------------
-            T_surf = np.where(((self.h_snow > 0)|(self.h_ice > 0)), # where snow or ice exists
+            T_surf = np.where(((self.h_snow > 0) | (self.h_ice > 0)), # where snow or ice exists
                               np.minimum(self.T_dew, np.float64(0)), # T_surf is either T_dew or 0, whichever is lower 
                               self.T_dew) # everywhere else, T_surf = T_dew
             self.T_surf = T_surf
@@ -1994,7 +1994,7 @@ class met_component( BMI_base.BMI_component ):
     #-------------------------------------------------------------------
     def update_albedo(self, method = 'aging'):
         # Only use this routine if time varying albedo is not supplied as an input:
-        if ((self.albedo_type.lower() == 'scalar') | (self.albedo_type.lower() == 'grid')):
+        if ((self.albedo_type.lower() == 'scalar') or (self.albedo_type.lower() == 'grid')):
             if method == 'aging':
                 albedo = self.albedo
                 #------------------------------------------------

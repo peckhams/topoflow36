@@ -565,9 +565,9 @@ class channels_component( BMI_base.BMI_component ):
         if not(hasattr(self, 'ATTENUATE')):
             self.ATTENUATE = False
 
-        if self.ATTENUATE is True:
-            if not(hasattr(self, 'n_day')):
-                self.n_day = 5
+        if self.ATTENUATE == True:
+            if not(hasattr(self, 'n_days')):
+                self.n_days = 5
 
         #----------------------------------------------------       
         # (2021-07-24) Added min_baseflow_flux to CFG file.
@@ -2076,7 +2076,7 @@ class channels_component( BMI_base.BMI_component ):
         #-------------------------------------------------------------                
         if (self.ATTENUATE):
             self.vol_stored += (self.R * self.da) * dt  # (in place)
-            t_drain = 3600.0 * 24.0 * self.n_day  # (seconds)
+            t_drain = 3600.0 * 24.0 * self.n_days  # (seconds)
             Q_sides = (self.vol_stored / t_drain)   # (m3/s)
             vol_sides = np.minimum( Q_sides * dt, self.vol_stored)
             self.vol += vol_sides
