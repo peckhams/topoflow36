@@ -159,7 +159,7 @@ import xml.dom.minidom
 
 from topoflow.framework import time_interpolation    # (time_interpolator class)
 from topoflow.utils import BMI_base  #####
-from topoflow.utils import hydrofab_tools as hft
+from topoflow.utils.ngen import hydrofab_utils as hfu
 from topoflow.utils import prepare_inputs as prep
 
 # from topoflow.framework import unit_conversion  # (unit_convertor class)
@@ -290,6 +290,8 @@ class comp_data():
 #       initialize_config_vars().
 #-----------------------------------------------------------------------
 class multi_bmi( BMI_base.BMI_component ):
+
+    ngen_dir = '/Users/peckhams/Dropbox/GitHub/ngen/'
 
     #----------------------------------------
     # Define some unit-conversion constants
@@ -432,11 +434,12 @@ class multi_bmi( BMI_base.BMI_component ):
 
         ################################################
         # FOR NEXTGEN: Modify met comp input var names
+        # THIS IS NOT NECESSARY: SEE THE "HOW TO" FILE.
         ################################################
-        NEXTGEN = False
-        if (NEXTGEN):
-            met = self.comp_set[ 'meteorology' ]
-            met._input_var_names.append( 'atmosphere_water__precipitation_leq-volume_flux')
+#         NEXTGEN = False
+#         if (NEXTGEN):
+#             met = self.comp_set[ 'meteorology' ]
+#             met._input_var_names.append( 'atmosphere_water__precipitation_leq-volume_flux')
         
         #--------------------------------
         # Identify the driver component
@@ -1031,7 +1034,7 @@ class multi_bmi( BMI_base.BMI_component ):
         # Note: New DEM name is: cat_id_str + '_rawDEM.tif'
         # This is now called from initialize().
         #-------------------------------------------------
-        c = hft.catchment()
+        c = hfu.catchment()
         # c.print_info( cat_id_str )
         dem = c.get_dem(cat_id_str=cat_id_str,   #########
                 RESAMPLE_ALGO='bilinear',
@@ -1065,9 +1068,10 @@ class multi_bmi( BMI_base.BMI_component ):
         p.out_bounds   = self.out_bounds
         p.out_xres_sec = self.out_xres_sec
         p.out_yres_sec = self.out_yres_sec
-        ### p.test_dir = p.home_dir + 'Dropbox/GitHub/ngen/extern/topoflow36/data/'
-        p.test_dir = p.home_dir + 'Dropbox/GitHub/ngen/data/topoflow/input_files/'
-        #-----------------------------------                
+        p_test_dir = self.ngen_dir + 'data/topoflow/input_files/'
+        p.NGEN_CSV = True  # Set this to use NGEN CSV files
+        p.src_ngen_met_dir = self.ngen_dir + 'data/topoflow/forcing/huc01/'
+        #----------------------------------------------------                
         p.prepare_all_inputs( site_prefix=self.site_prefix,
              case_prefix=self.case_prefix, CLIP_DEM=False,
              NO_SOIL=True, NO_MET=True)
@@ -1076,18 +1080,15 @@ class multi_bmi( BMI_base.BMI_component ):
     #-------------------------------------------------------------------    
     def get_test_cfg_file( self, test='Treynor_June_07_67' ):
  
-        ngen_dir = '/Users/peckhams/Dropbox/GitHub/ngen/'
-        data_dir = ngen_dir + 'data/topoflow/input_files/'
-        ### data_dir = ngen_dir + 'extern/topoflow36/data/'
-
         #------------------------------------        
         # Option to use test='cat-84', etc.
         #------------------------------------
         if (test.startswith('cat-')):
-           cfg_prefix = 'Test1'
-           cfg_dir    = data_dir + test + '/Test1_cfg/'
-           cfg_file   = cfg_dir + cfg_prefix + '_multi-bmi.cfg'
-           return cfg_file
+            cfg_prefix = 'Test1'
+            data_dir = self.ngen_dir + 'data/topoflow/input_files/'
+            cfg_dir    = data_dir + test + '/Test1_cfg/'
+            cfg_file   = cfg_dir + cfg_prefix + '_multi-bmi.cfg'
+            return cfg_file
 
         #------------------------------------------------                    
         # Option to use Treynor Iowa & 1967 storm data
