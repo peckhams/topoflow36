@@ -42,7 +42,7 @@
 
 #-------------------------------------------------------------------
 import numpy as np
-from osgeo import gdal, osr  ## ogr
+import gdal, osr  ## ogr
 import glob, sys
 import os, os.path
 
@@ -173,8 +173,11 @@ def get_raster_cellsize( gdal_unit ):
 #   get_raster_cellsize()
 #-------------------------------------------------------------------
 def read_geotiff(in_file=None, REPORT=True,
-                 MAKE_RTG=False, rtg_file=None, GEO=True ):
- 
+                 MAKE_RTG=False, rtg_file=None, GEO=True,
+                 zres=None, z_units=None, box_units=None,
+                 data_source='Unknown' ):
+                 ###  data_source='SEDAC'):
+
     # Bounds = [ minlon, minlat, maxlon, maxlat ]
 
     if (in_file is None):
@@ -235,20 +238,28 @@ def read_geotiff(in_file=None, REPORT=True,
             pixel_geom = 0
         else:
             pixel_geom = 1
+        if (zres is None):     # User can set to "unknown"
+            zres = 0.01
+        if (z_units is None):  # User can set to "unknown"
+            z_units = 'METERS'
+        if (box_units is None):
+            box_units = 'DEGREES'
+        data_type = rti_files.get_rti_data_type( in_dtype )
+
         rti = rti_files.make_info(grid_file=rtg_path,
                   ncols=in_ncols, nrows=in_nrows,
                   xres=in_xres, yres=in_yres,
                   #--------------------------------------
-                  data_source='SEDAC',
-                  data_type='FLOAT',  ## Must agree with dtype  #######
+                  data_source=data_source,
+                  data_type=data_type,
                   byte_order=rti_files.get_rti_byte_order(),
                   pixel_geom=pixel_geom,
-                  zres=0.001, z_units='unknown',
+                  zres=zres, z_units=z_units,
                   y_south_edge=in_bounds[1],
                   y_north_edge=in_bounds[3],
                   x_west_edge=in_bounds[0],
                   x_east_edge=in_bounds[2],
-                  box_units='DEGREES')
+                  box_units=box_units)
         rti_files.write_info( rtg_path, rti )    
         rtg = rtg_files.rtg_file() 
         OK  = rtg.open_new_file( rtg_path, rti )
@@ -288,8 +299,9 @@ def read_geotiff(in_file=None, REPORT=True,
 #   read_geotiff()
 #-------------------------------------------------------------------
 def regrid_geotiff(in_file=None, out_file=None, 
-                   out_bounds=None,
+                   out_bounds=None, GEO=True,
                    out_xres_sec=None, out_yres_sec=None,
+                   out_xres_m=None, out_yres_m=None,
                    RESAMPLE_ALGO='bilinear', REPORT=True):
                    ##### in_nodata=None, out_nodata=None):
 
@@ -330,21 +342,26 @@ def regrid_geotiff(in_file=None, out_file=None,
         out_file   = test_dir + 'TEST_11sec_DEM.tif'
         out_xres_sec = 11.0
         out_yres_sec = 11.0
+        GEO = True
         # Bounds = [ minlon, minlat, maxlon, maxlat ]
         ## out_bounds = [ 34.22125, 7.3704166666, 36.43791666666, 9.50375]
   
     #-----------------------------------------    
     # Open the input GeoTIFF file & get info
     #-----------------------------------------
-    in_unit     = gdal.Open( in_file, gdal.GA_ReadOnly )
-    (dx, dy)    = get_raster_cellsize( in_unit )
-    in_xres_deg = dx
-    in_yres_deg = dy
-    in_xres_sec = (in_xres_deg * 3600.0)
-    in_yres_sec = (in_yres_deg * 3600.0)
-    in_ncols    = in_unit.RasterXSize
-    in_nrows    = in_unit.RasterYSize
-    in_bounds   = get_raster_bounds( in_unit )   ######
+    in_unit  = gdal.Open( in_file, gdal.GA_ReadOnly )
+    (dx, dy) = get_raster_cellsize( in_unit )
+    if (GEO):
+        in_xres_deg = dx
+        in_yres_deg = dy
+        in_xres_sec = (in_xres_deg * 3600.0)
+        in_yres_sec = (in_yres_deg * 3600.0)
+    else:
+        in_xres_m = dx
+        in_yres_m = dy
+    in_ncols  = in_unit.RasterXSize
+    in_nrows  = in_unit.RasterYSize
+    in_bounds = get_raster_bounds( in_unit )   ######
 
     #-----------------------------
     # Double-check the data type
@@ -383,20 +400,28 @@ def regrid_geotiff(in_file=None, out_file=None,
     # If a spatial resolution has not been specified for output,
     # then assume it is the same as the resolution of the input.
     #-------------------------------------------------------------
-    if (out_xres_sec is not None):
-        out_xres_deg = (out_xres_sec / 3600.0)  # [arcsec] -> [degrees]
+    if (GEO):
+        if (out_xres_sec is not None):
+            out_xres_deg = (out_xres_sec / 3600.0)  # [arcsec] -> [degrees]
+        else:
+            out_xres_deg = in_xres_deg
+            ## out_xres_deg = None    # (will default to in_xres_deg)
+            ## out_xres_sec = in_xres_sec
+            ## out_xres_deg = (out_xres_sec / 3600.0)  # [arcsec] -> [degrees]       
+        #----------------------------------------------------------------------
+        if (out_yres_sec is not None):
+            out_yres_deg = (out_yres_sec / 3600.0)  # [arcsec] -> [degrees]
+        else:
+            out_yres_deg = in_yres_deg
+            ## out_yres_deg = None  # (will default to in_yres_deg)
+            ## out_yres_sec = in_yres_sec
+            ## out_yres_deg = (out_yres_sec / 3600.0)  # [arcsec] -> [degrees]     
     else:
-        out_xres_deg = None    # (will default to in_yres_deg)
-        ## out_xres_sec = in_xres_sec
-        ## out_xres_deg = (out_xres_sec / 3600.0)  # [arcsec] -> [degrees]       
-    #----------------------------------------------------------------------
-    if (out_yres_sec is not None):
-        out_yres_deg = (out_yres_sec / 3600.0)  # [arcsec] -> [degrees]
-    else:
-        out_yres_deg = None  # (will default to in_yres_deg)
-        ## out_yres_sec = in_yres_sec
-        ## out_yres_deg = (out_yres_sec / 3600.0)  # [arcsec] -> [degrees]     
-                
+        if (out_xres_m is None):
+            out_xres_m = in_xres_m
+        if (out_yres_m is None):
+            out_yres_m = in_yres_m
+             
     #------------------------------------------- 
     # Are out_bounds disjoint from in_bounds ?
     #-------------------------------------------
@@ -425,14 +450,22 @@ def regrid_geotiff(in_file=None, out_file=None,
     if (in_nodata is None):
         in_nodata = -9999.0
     ## print('##### in_nodata =', in_nodata)
-    out_unit = gdal.Warp( out_file, in_unit,
-        format = 'GTiff',  # (output format string)
-        outputBounds=out_bounds,
-        xRes=out_xres_deg, yRes=out_yres_deg,
-        srcNodata = in_nodata, #### 2022-05-02
-        # dstNodata = out_nodata,    ## equals in_nodata, by default
-        resampleAlg = resample_algo )
-
+    if (GEO):
+        out_unit = gdal.Warp( out_file, in_unit,
+            format = 'GTiff',  # (output format string)
+            outputBounds=out_bounds,
+            xRes=out_xres_deg, yRes=out_yres_deg,
+            srcNodata = in_nodata, #### 2022-05-02
+            # dstNodata = out_nodata,    ## equals in_nodata, by default
+            resampleAlg = resample_algo )
+    else:
+        out_unit = gdal.Warp( out_file, in_unit,
+            format = 'GTiff',  # (output format string)
+            outputBounds=out_bounds,
+            xRes=out_xres_m, yRes=out_yres_m,
+            srcNodata = in_nodata, #### 2022-05-02
+            # dstNodata = out_nodata,    ## equals in_nodata, by default
+            resampleAlg = resample_algo )
     #-----------------------
     # Get info on new grid
     #-----------------------
@@ -464,8 +497,12 @@ def regrid_geotiff(in_file=None, out_file=None,
         print('   ' + in_file )
         print('   ncols  =', in_ncols )
         print('   nrows  =', in_nrows )
-        print('   xres   =', in_xres_sec, ' [arcsecs]' )
-        print('   yres   =', in_yres_sec, ' [arcsecs]' )
+        if (GEO):
+            print('   xres   =', in_xres_sec, ' [arcsecs]' )
+            print('   yres   =', in_yres_sec, ' [arcsecs]' )
+        else:
+            print('   xres   =', in_xres_m, ' [meters]' )
+            print('   yres   =', in_yres_m, ' [meters]' )        
         print('   bounds =', in_bounds )
         print('   dtype  =', in_dtype )
         # print('   dtype2 =', in_dtype2 )    # for testing
@@ -477,8 +514,12 @@ def regrid_geotiff(in_file=None, out_file=None,
         print('   ' + out_file )
         print('   ncols  =', out_ncols )
         print('   nrows  =', out_nrows )
-        print('   xres   =', out_xres_sec, ' [arcsecs]' )
-        print('   yres   =', out_yres_sec, ' [arcsecs]' ) 
+        if (GEO):
+            print('   xres   =', out_xres_sec, ' [arcsecs]' )
+            print('   yres   =', out_yres_sec, ' [arcsecs]' )
+        else:
+            print('   xres   =', out_xres_m, ' [meters]' )
+            print('   yres   =', out_yres_m, ' [meters]' )         
         print('   bounds =', out_bounds )
         print('   dtype  =', out_dtype )
         print('   nodata =', out_nodata )
