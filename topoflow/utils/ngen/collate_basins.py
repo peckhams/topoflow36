@@ -71,7 +71,7 @@
 #  get_primary_keys()
 #  get_box_center_lon_lat()
 #
-#  collate()                          ##### In progress #####
+#  collate()
 #  get_all_nwis_web_field_names()
 #  get_new_usgs_line()
 #

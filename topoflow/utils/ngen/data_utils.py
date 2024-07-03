@@ -68,12 +68,15 @@ from topoflow.utils.ngen import collate_basins as cb
 # import json, sys, time
 
 #---------------------------------------------------------------------
-def get_repo_dir():
+def get_repo_dir( OLD=True ):
 
     home_dir = os.path.expanduser('~/')
-    repo_dir = home_dir + 'Dropbox/NOAA_NextGen/'
-    repo_dir += '__Combined_River_Basin_Repo/'
-    ### repo_dir = home_dir + 'Combined_River_Basin_Repo/'
+    if (OLD):
+        repo_dir  = home_dir + 'Dropbox/NOAA_NextGen/'
+        repo_dir += '__Combined_River_Basin_Repo/'
+    else:
+        repo_dir  = home_dir + 'Dropbox/GitHub/'
+        repo_dir += 'nextgen_basin_repo/'
     return repo_dir
 
 #   get_repo_dir()

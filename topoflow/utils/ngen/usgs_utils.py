@@ -1242,6 +1242,7 @@ def replace_abbreviations( name ):
     # Other feature abbreviations           
     #------------------------------
     name = name.replace(' BUTE ',   ' BUTTE ')
+    name = name.replace(' CORR ',   ' CORRIDOR ')
     name = name.replace(' ISL ',    ' ISLAND ')   # e.g. Twitchell Isl      
     name = name.replace(' MT ',     ' MOUNT ')    # e.g. MT CLEMENS
     name = name.replace(' MTN ',    ' MOUNTAIN ')
