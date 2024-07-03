@@ -1,6 +1,8 @@
 
-# Copyright (c) 2023, Scott D. Peckham
+# Copyright (c) 2023-2024, Scott D. Peckham
 #
+# Nov 2023. Added Mercator_XY().
+#           Added Lambert_Azimuthal_Equal_Area_XY()
 # Oct 2023. Moved Albers projection code from hydrofab_tools.py.
 #           Add note how Albers_XY differs from Albers_XY2.
 #           Moved Lambert_AEA code from hlr_tools.py. 
@@ -18,6 +20,7 @@
 #  Albers_q()
 #  Albers_XY2()
 #  Lambert_Azimuthal_Equal_Area_XY()
+#  Mercator_XY()
 #
 #---------------------------------------------------------------------
 
@@ -213,6 +216,56 @@ def Lambert_Azimuthal_Equal_Area_XY( lon, lat,
 
 #   Lambert_Azimuthal_Equal_Area_XY()
 #------------------------------------------------------------------------
+def Mercator_XY( lon, lat, lon0=0.0, SPHERE=False):
 
+    #---------------------------------------------
+    # Note: Formulas from Snyder's Book, p. 41.
+    #---------------------------------------------
+    # R = radius of Clarke 1866 Authalic Sphere
+    # Central_Meridian   = lon0 = -100.0
+    #-------------------------------------------------
+    # Equivalent PROJ4 command string:
+    # +proj=merc +lon_0=0 +k=1 +x_0=0 +y_0=0 
+    #    +datum=WGS84 +units=m +no_defs
+    #-------------------------------------------------
+    # Was able to test using this PROJ4 string at:
+    #    https://mygeodata.cloud/cs2cs/
+    # and got perfect agreement.
+    #-------------------------------------------------
+    # EPSG code = 3395, for WGS 84 / World Mercator
+    # (World between 80 deg South and 84 deg North.)
+    #-------------------------------------------------
+    ## R = 6371000.7900    # [meters]  sphere used for WGS 84 ?
+    ## R = 6366707.0195  # [meters]  sphere used for WGS 84 ?
+    R   = 6370997.0   # [meters]  Clarke 1866 Authalic Sphere 
+    d2r = (np.pi / 180.0)
+    lon_rad  = lon  * d2r   # lambda in Snyder
+    lon0_rad = lon0 * d2r
+    lon_diff_rad = (lon_rad - lon0_rad)
+    lat_rad  = lat  * d2r   # phi in Snyder
+    ### lat1_rad = lat1 * d2r
+
+    #----------------------------------------------------------
+    # Note: Origin of map projection is at (lon0, 0.0).
+    #       x is positive to the east of the map origin
+    #       and increases from west to east as it should.
+    #       (-100, 45)   -> (-11131949.079327356, 5591295.918553136)
+    #----------------------------------------------------------
+    if (SPHERE): 
+        x = R * lon_diff_rad
+        y = R * np.log( np.tan( np.pi/4 + lat_rad/2))
+    else:
+        a = 6378137.0       # [meters] semi-major axis
+        b = 6356752.314245  # [meters] semi-minor axis
+        e = np.sqrt(1 - (b/a)**2.0)
+        ## inv_f = 298.257223563
+        factor = (1 - e*np.sin(lat_rad))/(1 + e*np.sin(lat_rad))
+        factor = factor**(e/2)
+        x = a * lon_diff_rad
+        y = a * np.log( np.tan( np.pi/4 + lat_rad/2) * factor)
+    return x,y
+
+#   Mercator_XY()
+#------------------------------------------------------------------------
 
 
