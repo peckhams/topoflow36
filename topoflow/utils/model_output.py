@@ -187,7 +187,7 @@ def open_new_gs_file(self, file_name, info=None,
           "var_name, long_name, units_name, dtype=dtype, " +
           "time_units=time_units, time_res=time_res_min, " +
           "OVERWRITE_OK=self.OVERWRITE_OK)")  # (2022-02-16)
-
+          
     #--------------------------------------------
     # Open new netCDF file to write grid stacks
     # using var_name to build variable names
