@@ -139,22 +139,39 @@ class get_inputs():
 
     def __init__(self, SILENT=False):
 
+        #----------------------------------------------------------   
+        # Set various default options.  These can be changed
+        # immediately after an instance of this class is created.
+        #----------------------------------------------------------
+        # If the NGEN_CSV option is set, self.test_dir should
+        # be set to:  ngen_dir + 'data/topoflow/input_files/'
+        #-------------------------------------------------------    
         self.home_dir    = os.path.expanduser("~") + os.sep
-        ##### NEXT 2 ARE DEFAULTS THAT NOW GET OVER-WRITTEN
         self.test_dir    = self.home_dir + 'basins_TEST' + os.sep   ######
         self.output_dir  = self.home_dir + 'output' + os.sep
+        self.ngen_dir    = self.home_dir + 'Dropbox/GitHub/ngen'
+        self.src_ngen_met_dir = self.ngen_dir + 'data/topoflow/forcing/huc01/'
+        ## self.src_ngen_met_dir = self.home_dir + 'TF_Data/NGEN_AORC/HUC01/csv/'        
+        #-------------------------------------------
         self.site_prefix = 'Unknown'  ###########
         self.case_prefix = 'Test1'
         #----------------------------
         self.SILENT      = SILENT
-        self.NGEN_CSV    = True
-        self.EAST_AFRICA = False   ######
         self.TEST_RAIN   = False
+        #-------------------------------------------------------
+        # Current options for preparing input files are:
+        #   NGEN_CSV and EAST_AFRICA.
+        # For EAST_AFRICA option, can also choose a rainfall
+        #   product by setting CHIRPS, CHIRPS2, GLDAS, or GPM.
+        #-------------------------------------------------------
+        self.NGEN_CSV    = True
+        self.EAST_AFRICA = False
+        #-------------------------
         self.CHIRPS      = False
         self.CHIRPS2     = False
         self.GLDAS       = False
         self.GPM         = False
-     
+
         #--------------------------------------------------------
         # For now, keep these the same for all the river basins
         # They are reasonable defaults.
@@ -204,6 +221,13 @@ class get_inputs():
                            case_prefix='Test1', CLIP_DEM=True,
                            NO_SOIL=True, NO_MET=True ):
 
+        if not(self.NGEN_CSV) and not(self.EAST_AFRICA):
+           print('ERROR in prepare_all_inputs:')
+           print('To use this function, you must currently set')
+           print('either the NGEN_CSV or EAST_AFRICA option to True.')
+           print('This is needed by the set_time_info() function.')
+           print()
+           return
         self.site_prefix = site_prefix
         self.case_prefix = case_prefix
         self.NO_MET      = NO_MET
@@ -296,8 +320,7 @@ class get_inputs():
         #----------------------------------------            
         # Change these directories as necessary      ############
         #----------------------------------------       
-        ## self.data_dir  = self.home_dir + '/Data/'
-        self.data_dir = self.home_dir + '/TF_Data/'
+        self.data_dir = self.home_dir + 'TF_Data/'
         dd = self.data_dir
 
         #------------------------------------
@@ -313,7 +336,7 @@ class get_inputs():
         #--------------------------
         # Source dir for DEM data
         #--------------------------
-        self.src_dem_dir  = self.home_dir + '/DEMs/Horn_of_Africa/'
+        self.src_dem_dir  = self.home_dir + 'DEMs/Horn_of_Africa/'
         self.src_dem_file = 'Horn_of_Africa_MERIT_DEM.tif'      ########
                
         #---------------------------
@@ -324,11 +347,11 @@ class get_inputs():
         #---------------------------
         # Source dirs for met data
         #---------------------------
-        self.src_chirps_dir  = dd + 'CHIRPS_Rain_Africa_6hr_2015-10_to_2018-10_onedir/'
-        self.src_chirps2_dir = dd + 'CHIRPS_Rain_Africa_6hr_2005-01_to_2015-01_onedir/'
-        self.src_gldas_dir   = dd + 'GLDAS_Rain_Baro_2015-10_to_2018-10/'
-        self.src_gpm_dir     = dd + 'GPM_Rain_Ethiopia_30min_2015-10_to_2018-10/'
-        self.src_aorc_dir    = dd + 'NGEN_AORC/HUC01/csv/'
+        self.src_chirps_dir   = dd + 'CHIRPS_Rain_Africa_6hr_2015-10_to_2018-10_onedir/'
+        self.src_chirps2_dir  = dd + 'CHIRPS_Rain_Africa_6hr_2005-01_to_2015-01_onedir/'
+        self.src_gldas_dir    = dd + 'GLDAS_Rain_Baro_2015-10_to_2018-10/'
+        self.src_gpm_dir      = dd + 'GPM_Rain_Ethiopia_30min_2015-10_to_2018-10/'
+        ### self.src_ngen_met_dir = dd + 'NGEN_AORC/HUC01/csv/'
 
         if not(self.SILENT):
             print( 'Home directory          =', self.home_dir )
@@ -1735,7 +1758,7 @@ class get_inputs():
     
         """Subset a NextGen CSV file using a specified date range"""
         sp = self.site_prefix   # (e.g. 'cat-84')
-        in_file  = self.src_aorc_dir + sp + '.csv'
+        in_file  = self.src_ngen_met_dir + sp + '.csv'
         out_file = self.met_dir + self.rain_csv_file
         ## out_file = self.met_dir + sp + '_' + self.date_range_str + '.csv'
         #--------------------------------------
