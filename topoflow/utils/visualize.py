@@ -810,7 +810,7 @@ def plot_time_series(nc_file, output_dir=None, var_index=0,
                      marker=',', REPORT=True, xsize=11, ysize=6,
                      im_file=None, start_date=None, end_date=None,
                      time_interval_hours=6,
-                     start_index=0, end_index=-1):
+                     start_index=None, end_index=None):
 
     # Example nc_files:
     # nc_file = case_prefix + '_0D-Q.nc'
@@ -862,8 +862,21 @@ def plot_time_series(nc_file, output_dir=None, var_index=0,
     t_units   = ts_times.units
 #     values    = ts_values[:]
 #     times     = ts_times[:]
-    values    = ts_values[start_index:end_index]  # 12/05/22
-    times     = ts_times[start_index:end_index]   # 12/05/22
+
+    #-------------------------------------------------------
+    # Note! You don't get all elements if end_index == -1.
+    # Bug fix:  2024-07-05
+    #-------------------------------------------------------
+    if (start_index is None):
+        start_index = 0
+    if (end_index is None):
+        end_index = len(ts_times)
+    values = ts_values[start_index:end_index]  # 12/05/22
+    times  = ts_times[start_index:end_index]   # 12/05/22
+    
+#     print('###### len(values) =', len(values))
+#     print('###### len(times)  =', len(times))
+#     print()
     # values    = np.array( ts_values )
     # times     = np.array( ts_times )
 
@@ -897,13 +910,17 @@ def plot_time_series(nc_file, output_dir=None, var_index=0,
         # Tick labels on x-axis are dates
         #----------------------------------
         times = np.arange(np.datetime64( start_date ),
-                          np.datetime64( end_date),
+                          np.datetime64( end_date ),
                           np.timedelta64( time_interval_hours, 'h'))
         n_times = len(times)
         #-------------------------------------------------------------------
         start_date_obj = dt.datetime.strptime( start_date, '%Y-%m-%d' )
         end_date_obj   = dt.datetime.strptime( end_date,   '%Y-%m-%d' )
         values = values[:n_times]  ########
+#         print('#### len(times)  =', len(times))
+#         print('#### len(values) =', len(values))
+#         print()
+        
         #---------------------------------------------
         plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d')) 
         plt.plot( times, values, marker=marker)

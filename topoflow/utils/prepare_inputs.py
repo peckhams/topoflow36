@@ -89,6 +89,7 @@
 #      copy_outlets_file()
 #      get_outlets_file()         ##### Create good default
 #      -------------------------
+#      get_ngen_dem()
 #      clip_dem_from_source()
 #      read_dem_as_geotiff()
 #      read_dem_as_rtg()
@@ -130,6 +131,8 @@ from topoflow.utils import parameterize
 from topoflow.utils import init_depth
 from topoflow.utils import pedotransfer
 from topoflow.utils import new_slopes
+
+from topoflow.utils.ngen import hydrofab_utils as hfu
 
 from topoflow.components import d8_global
 from topoflow.components import smooth_DEM
@@ -218,7 +221,8 @@ class get_inputs():
     #   __init__()
     #-------------------------------------------------------------------------------
     def prepare_all_inputs(self, site_prefix='Tana_120sec',
-                           case_prefix='Test1', CLIP_DEM=True,
+                           case_prefix='Test1',
+                           CLIP_DEM=True, NGEN_DEM=False,
                            NO_SOIL=True, NO_MET=True ):
 
         if not(self.NGEN_CSV) and not(self.EAST_AFRICA):
@@ -247,6 +251,8 @@ class get_inputs():
         self.copy_cfg_file_templates()
         self.get_cfg_files()
         #------------------------------
+        if (NGEN_DEM):
+            self.get_ngen_dem( cat_id_str=self.site_prefix )  # 2024-07-05
         if (CLIP_DEM):
             # Otherwise, get DEM from S3 bucket/VRT
             # via multi_bmi.get_new_dem(), via hft.get_dem()      
@@ -271,7 +277,8 @@ class get_inputs():
         self.get_init_channel_depth_grid()
         #-------------------------------------
         self.write_simple_rain_file()
-        self.subset_ngen_csv_file()        #################
+        if (self.NGEN_CSV):
+            self.subset_ngen_csv_file()        #################
         if not(NO_SOIL):
             self.get_soil_hydraulic_grids()
         if not(NO_MET):
@@ -1112,7 +1119,29 @@ class get_inputs():
         
         outlets.write_outlet_file(new_file, col, row, area, relief, lon, lat)
           
-    #   get_outlets_file()      
+    #   get_outlets_file()
+    #-------------------------------------------------------------------
+    def get_ngen_dem( self, DEM_out_file=None,
+                     cat_id_str='cat-67',
+                     GEO=True, ALBERS=False ):
+
+        if (DEM_out_file is None):
+            DEM_out_file = self.topo_dir + cat_id_str + '_rawDEM.tif'
+
+        c = hfu.catchment()
+        # c.print_info( cat_id_str )
+        dem = c.get_dem(cat_id_str=cat_id_str,   #########
+                RESAMPLE_ALGO='bilinear',
+                CLIP_GEO=GEO, CLIP_ALBERS=ALBERS,
+                zfactor=100, REPORT=True, SAVE_DEM=True,
+                DEM_out_file=DEM_out_file)
+                
+        self.out_bounds   = c.DEM_bounds
+        self.out_xres_sec = c.DEM_xres  ####################
+        self.out_yres_sec = c.DEM_yres  ####################     
+        # self.out_bounds = c.get_bounding_box( cat_id_str )
+
+    #   get_ngen_dem()      
     #-------------------------------------------------------------------------------
     def clip_dem_from_source(self):
     

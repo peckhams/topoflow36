@@ -3,7 +3,8 @@
 ## January 2009  (converted from IDL)
 ## Nov 2019  get_utm_zone().
 
-import glob   # (for exists())
+# import glob     # (for exists() function)
+import os.path  # (for exists() function)
 import sys    # (for sys.byteorder)
 import numpy as np  # (for things like uint8(), int16(), float64())
 
@@ -202,14 +203,17 @@ def byte_swap_needed( file_name, info=None ):
 #-------------------------------------------------------------------------  
 def exists(RTI_file, SILENT=False):
  
-    # Note:  Could also use os.path.exists().
+    # Note:  Can use os.path.exists() or glob.glob().
     
     #------------------------
     # Does RTI file exist ?
     #------------------------
-    result = glob.glob( RTI_file )
-    count  = len(result)
-    if (count > 0):
+#     result = glob.glob( RTI_file )
+#     count  = len(result)
+#     if (count > 0):
+#         return True
+    #-----------------------------------
+    if (os.path.exists( RTI_file )):
         return True
     else:
         if not(SILENT):
