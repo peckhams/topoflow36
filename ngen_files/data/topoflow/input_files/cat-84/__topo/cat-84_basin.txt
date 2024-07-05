@@ -1,0 +1,30 @@
+--------------------------------------------------
+ Attributes of the cat-84 Basin
+--------------------------------------------------
+ 
+ Outlet x-coordinate:     -69.491883
+ Outlet y-coordinate:     46.398787
+ Outlet pixel column:     122
+ Outlet pixel row:        53
+ Outlet pixel ID:         6959
+ Outlet parent pix. ID:   6960
+ Outlet elevation:        338.890  (m)
+ 
+ Basin area:              31.370367  (km^2)
+ Basin relief:            0.13800000  (km)
+ 
+ Pruning method:            HS Order
+ Pruning threshold:         3.00000
+ Strahler order:            4
+ Network magnitude:         59
+ Network diameter:          28
+ Longest channel length:    12.525388  (km)
+ Total channel length:      55.697906  (km)
+ Drainage density:          1.7754942  (km^-1)
+ Source density:            1.8807558  (km^-2)
+ 
+----------------------------------------------------------------------
+ Note: The last set of attributes depend on
+       the user-selected pruning method.
+----------------------------------------------------------------------
+ 

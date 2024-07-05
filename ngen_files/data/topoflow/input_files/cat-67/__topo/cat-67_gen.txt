@@ -1,0 +1,5 @@
+Side Tributary Matrix for River Tree
+
+    0.70    0.00    0.00
+    4.50    1.00    0.00
+   16.00    8.00    2.00

@@ -1,0 +1,10 @@
+{
+"type": "FeatureCollection",
+"name": "nexus",
+"crs": { "type": "name", "properties": { "name": "urn:ogc:def:crs:EPSG::5070" } },
+"features": [
+{ "type": "Feature", "properties": { "id": "nex-7", "toid": "cat-7" }, "geometry": { "type": "Point", "coordinates": [ -1880138.25905028055422, 1391827.419083889108151 ] } },
+{ "type": "Feature", "properties": { "id": "nex-1", "toid": "cat-1" }, "geometry": { "type": "Point", "coordinates": [ -1876550.975887539098039, 1391940.712074282346293 ] } },
+{ "type": "Feature", "properties": { "id": "tnx-100000004", "toid": null }, "geometry": { "type": "Point", "coordinates": [ -1873965.863139909924939, 1391855.683328028768301 ] } }
+]
+}

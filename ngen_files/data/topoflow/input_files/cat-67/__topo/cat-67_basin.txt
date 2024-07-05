@@ -1,0 +1,30 @@
+--------------------------------------------------
+ Attributes of the cat-67 Basin
+--------------------------------------------------
+ 
+ Outlet x-coordinate:     -69.318501
+ Outlet y-coordinate:     46.542576
+ Outlet pixel column:     69
+ Outlet pixel row:        3
+ Outlet pixel ID:         828
+ Outlet parent pix. ID:   575
+ Outlet elevation:        255.840  (m)
+ 
+ Basin area:              17.736771  (km^2)
+ Basin relief:            0.12100000  (km)
+ 
+ Pruning method:            HS Order
+ Pruning threshold:         3.00000
+ Strahler order:            4
+ Network magnitude:         88
+ Network diameter:          36
+ Longest channel length:    9.4280672  (km)
+ Total channel length:      53.416328  (km)
+ Drainage density:          3.0116153  (km^-1)
+ Source density:            4.9614444  (km^-2)
+ 
+----------------------------------------------------------------------
+ Note: The last set of attributes depend on
+       the user-selected pruning method.
+----------------------------------------------------------------------
+ 

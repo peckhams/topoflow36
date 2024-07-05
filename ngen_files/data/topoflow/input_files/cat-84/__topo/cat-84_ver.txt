@@ -1,0 +1,10 @@
+ 
+--------------------------------------------------
+Architecture:        x86_64
+Operating System:    darwin
+IDL Version:         8.2.3
+RiverTools Version:  4.4
+Creation date/time:  Mon Dec  5 12:01:10 2022
+Max RAM block size:  20 (MB)
+--------------------------------------------------
+ 
