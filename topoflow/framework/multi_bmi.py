@@ -121,7 +121,6 @@ Experimental Modeling Environment for Linking and Interoperability.
 #      --------------------
 #      Non-BMI Functions
 #      --------------------
-#      get_new_dem()
 #      prepare_tf_inputs()
 #      ----------------------
 #      get_test_cfg_file()
@@ -159,7 +158,6 @@ import xml.dom.minidom
 
 from topoflow.framework import time_interpolation    # (time_interpolator class)
 from topoflow.utils import BMI_base  #####
-from topoflow.utils.ngen import hydrofab_utils as hfu
 from topoflow.utils import prepare_inputs as prep
 
 # from topoflow.framework import unit_conversion  # (unit_convertor class)
@@ -398,18 +396,20 @@ class multi_bmi( BMI_base.BMI_component ):
         self.DEBUG = False
         self.initialize_config_vars(READ_GRID_INFO=False)   # uses self.cfg_file
 
-        DEM_out_file = self.topo_directory + self.site_prefix + '_rawDEM.tif'
-        ###############################################################
+        #-----------------------------------------------------
         # If DEM_out_file doesn't exist yet, prepare inputs.
-        ###############################################################
+        #--------------------------------------------------------------
         # Note: Had to edit outlets_file since default was on edge.
-        #--------------------------------------------------------------        
+        #--------------------------------------------------------------
+        topo_dir = self.in_directory + '__topo/'
+        DEM_out_file = topo_dir + self.site_prefix + '_rawDEM.tif'        
         if not(os.path.exists( DEM_out_file )):
-            self.get_new_dem( DEM_out_file=DEM_out_file,
-                              cat_id_str=self.site_prefix )
             self.prepare_tf_inputs()
-        ############################################################### 
-        self.read_grid_info()  # after other 2
+        #--------------------------------------------------------
+        # Note: Can't call read_grid_info before topo directory
+        #       is created and contains the DEM
+        #--------------------------------------------------------
+        self.read_grid_info()
                 
         #-----------------------------------------------------
         # Set self.comp_set_list and self.provider_list
@@ -431,15 +431,6 @@ class multi_bmi( BMI_base.BMI_component ):
         #--------------------------------------------
         for comp_name in self.comp_set_list:
             self.instantiate_comp( comp_name )
-
-        ################################################
-        # FOR NEXTGEN: Modify met comp input var names
-        # THIS IS NOT NECESSARY: SEE THE "HOW TO" FILE.
-        ################################################
-#         NEXTGEN = False
-#         if (NEXTGEN):
-#             met = self.comp_set[ 'meteorology' ]
-#             met._input_var_names.append( 'atmosphere_water__precipitation_leq-volume_flux')
         
         #--------------------------------
         # Identify the driver component
@@ -1022,36 +1013,6 @@ class multi_bmi( BMI_base.BMI_component ):
     
     #-------------------------------------------------------------------
     # Non-BMI Functions 
-    #-------------------------------------------------------------------
-    ## def get_new_dem( self, cat_id_str='cat-29',
-    def get_new_dem( self, DEM_out_file=None,
-                     cat_id_str='cat-67',
-                     GEO=True, ALBERS=False ):
-
-        ## DEM_out_file = self.topo_dir + cat_id_str + '_rawDEM.tif'
-
-        #-------------------------------------------------        
-        # Note: New DEM name is: cat_id_str + '_rawDEM.tif'
-        # This is now called from initialize().
-        #-------------------------------------------------
-        c = hfu.catchment()
-        # c.print_info( cat_id_str )
-        dem = c.get_dem(cat_id_str=cat_id_str,   #########
-                RESAMPLE_ALGO='bilinear',
-                CLIP_GEO=GEO, CLIP_ALBERS=ALBERS,
-                zfactor=100, REPORT=True, SAVE_DEM=True,
-                DEM_out_file=DEM_out_file)
-                
-        self.out_bounds   = c.DEM_bounds
-        self.out_xres_sec = c.DEM_xres  ####################
-        self.out_yres_sec = c.DEM_yres  ####################     
-        # self.out_bounds = c.get_bounding_box( cat_id_str )
-        
-        # Haven't called:  read_grid_info() yet.
-        # self.out_xres_sec = self.grid_info.xres    # [arcseconds]
-        # self.out_yres_sec = self.grid_info.yres    # [arcseconds]
-
-    #   get_new_dem()
     #-------------------------------------------------------------------    
     def prepare_tf_inputs( self ):
 
@@ -1065,16 +1026,22 @@ class multi_bmi( BMI_base.BMI_component ):
         #--------------------------------------------------------        
         p = prep.get_inputs()
         #-----------------------------------
-        p.out_bounds   = self.out_bounds
-        p.out_xres_sec = self.out_xres_sec
-        p.out_yres_sec = self.out_yres_sec
-        p_test_dir = self.ngen_dir + 'data/topoflow/input_files/'
+#         p.out_bounds   = self.out_bounds
+#         p.out_xres_sec = self.out_xres_sec
+#         p.out_yres_sec = self.out_yres_sec
+        p.test_dir = self.ngen_dir + 'data/topoflow/input_files/'
         p.NGEN_CSV = True  # Set this to use NGEN CSV files
         p.src_ngen_met_dir = self.ngen_dir + 'data/topoflow/forcing/huc01/'
         #----------------------------------------------------                
         p.prepare_all_inputs( site_prefix=self.site_prefix,
-             case_prefix=self.case_prefix, CLIP_DEM=False,
+             case_prefix=self.case_prefix,
+             NGEN_DEM=True, CLIP_DEM=False,
              NO_SOIL=True, NO_MET=True)
+        #---------------------------------------------------------
+        # Next line is for when initialize calls read_grid_info.
+        # Otherwise, self.topo_directory = self.in_directory.
+        #---------------------------------------------------------         
+        self.topo_directory = p.topo_dir
     
     #   prepare_tf_inputs()
     #-------------------------------------------------------------------    
