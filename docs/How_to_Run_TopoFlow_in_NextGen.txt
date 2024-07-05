@@ -2,13 +2,45 @@ S.D. Peckham
 October 27-28, 2022
 November 29, 2022 (updated)
 December 3, 2022 (updated)
+July 3, 2024 (updated)
 
 Note: This assumes that the NextGen repo has been installed.
       This work used the NextGen version 0.2 from 2022-07-27.
 
----------------------------------------------------
- Steps to run the TopoFlow 3.6 Package in NextGen
----------------------------------------------------
+---------------
+ Introduction
+---------------
+TopoFlow 3.6 consists of a set of hydrologic process components that
+all expose the BMI interface.  The user chooses which component to use
+for each hydrologic process and these must then somehow be coupled
+together by some model coupling framework.  TopoFlow 3.6 contains its
+own light-weight coupling framework called EMELI in the topoflow/framework
+folder.  But TopoFlow components can also be coupled to create a
+"composite" hydrologic model by the CSDMS framework (based on Python) or
+by the NextGen framework (based on C++).
+
+In order to simplify running the TopoFlow 3.6 model in NextGen, a new
+feature was added in 2022 that allows a set of coupled TopoFlow components
+to be presented to a model coupling framework as a single BMI component.
+The code for this new feature is based on EMELI and is in a module called
+multi_bmi.py, in the topoflow/framework folder of the TopoFlow 3.6 package.   
+That is, the chosen BMI process components are "pre-coupled" by this
+mechanism, so that NextGen sees the coupled set of BMI components
+(or composite model) as a single BMI component.
+
+In addition, the multi_bmi.py module contains a function called:
+"prepare_tf_inputs()" that calls "topoflow/utils/prepare_inputs.py" and
+(1) obtains a DEM for the chosen catchment by subsetting a "hydrofabric"
+    DEM for all of CONUS that exists in an Amazon S3 bucket (This method
+    uses the get_dem() method in the module:
+       topoflow/utils/ngen/hydrofab_utils.py.)
+(2) creates all of the other input files needed to run TopoFlow 3.6.
+Step 2 uses and can subset AORC meteorological forcing files previously
+downloaded in CSV format for the catchment from an Amazon S3 bucket. 
+
+----------------------------------------------------------
+ Steps to Run the TopoFlow 3.6 Python Package in NextGen
+----------------------------------------------------------
 (1) Download the latest TopoFlow 3.6 Python repo from:
     https://github.com/peckhams/topoflow36
 
@@ -17,21 +49,27 @@ Note: This assumes that the NextGen repo has been installed.
 
 (3) Copy the files in the "ngen_files" subfolder into the corresponding
     locations in the ngen project tree (e.g. into ngen/data/topoflow, etc.)
+    This includes input files for some example catchments, e.g. cat-209.
+    The cat-209 catchment was used for my AGU 2022 NextGen poster.
 
-(4) Download CSV forcing files from Amazon S3 bucket for catchments of interest:
-    /formulations-dev/forcings/huc01/csv
+(4) Download CSV forcing files from Amazon S3 bucket for catchments of
+    interest.  Files are in:  /formulations-dev/forcings/huc01/csv
     Time span:  2007-01-01 00:00:00 TO  2019-12-31 23:00:00  
-    Copy files (e.g. "cat-84.csv") into:
-    ngen/data/topoflow/forcing
+    Copy files (e.g. "cat-209.csv") into:  ngen/data/topoflow/forcing
+    See comments in:  topoflow/utils/ngen/hydrofab_utils.py for
+    information on how to access data in an Amazon S3 bucket.
 
-(5) In order to run TopoFlow for a catchment, the following files must exist
-    in ngen/data/topoflow/input_files/cat-**
+(5) In order to run TopoFlow for a catchment, the following files must
+    exist in the folder:  ngen/data/topoflow/input_files/cat-**
 
      Note: These dirs must exist:  __met, __misc, __soil, __topo, Test1_cfg
      Note: Test1_cfg must contain:
            Test1_multi-bmi.cfg   (no need to edit)
            Test1_path_info.cfg   (Edit with correct path info.)
            Test1_time_info.cfg   (Edit with correct time info.)
+     Note: There is a utility in topoflow/utils called prepare_inputs.py
+           that can be used to generate these input files.  See the section
+           below:  "How to Create TopoFlow Input Files for NextGen Catchments".
 
 (6) Open a terminal window and set PYTHONPATH (for this session).
     For example:
@@ -67,26 +105,40 @@ Running timestep 600
 Running timestep 700
 Finished 720 timesteps.
 
-------------------------------------------------------------------
- Notes about TopoFlow input files that are automatically created
-------------------------------------------------------------------
+-------------------------------------------------------------
+ How to Run TopoFlow for NextGen Catchments Without NextGen
+-------------------------------------------------------------
+Note:  This uses the "multi_bmi" approach described in the
+       Introduction, similar to how TopoFlow runs in NextGen.
+       But you can also run TopoFlow in the usual way once
+       you have created all of the input files.
 
-(1) The module: topoflow/utils/prepare_inputs.py
-    is used to automatically create the necessary TopoFlow input files.
-    This module is called from:  topoflow/framework/multi_bmi.py.
+% python
+>>> from topoflow import main2
+>>> main2.run_model( cat_id_str='cat-209', SILENT=False )
 
-(2) First, a DEM for the catchment (e.g. "cat-84") will be created
+------------------------------------------------------------
+ How to Create TopoFlow Input Files for NextGen Catchments
+------------------------------------------------------------
+The easiest way to create the input files needed to run TopoFlow
+for a NextGen catchment is to first run TopoFlow without NextGen,
+using the method described in the previous section. The module:
+topoflow/framework/multi_bmi.py will call the module:
+topoflow/utils/prepare_inputs.py to do this prior to performing
+the model run.  Input files will be created as follows:
+
+(1) First, a DEM for the catchment (e.g. "cat-209") will be created
     by subsetting a hydrofabric DEM for CONUS that is in an Amazon
-    S3 bucket.  This uses:  topoflow/utils/hydrofab_tools.py
+    S3 bucket.  This uses:  topoflow/utils/hydrofab_utils.py
 
-(3) Next, a set of D8 grids will be computed automatically from DEM:
+(2) Next, a set of D8 grids will be computed automatically from the DEM:
         __topo/{{id}}_aspect.rtg,
         __topo/{{id}}_d8_area.rtg,
         __topo/{{id}}_flow.rtg
         __topo/{{id}}_sinu.rtg      #### CHECK
         __topo/{{id}}_slope.rtg
 
-(4) Next, a set of "channel geometry grids" will be computed automatically
+(3) Next, a set of "channel geometry grids" will be computed automatically
     from the TCA (total contributing area) grid.  This uses optional
     cfg_file parameters:
         max_river_width, channel_width_power,
@@ -102,12 +154,16 @@ Finished 720 timesteps.
       Note: Several "nudging factors" are now supported in CFG files:
             nval_factor, slope_factor, width_factor, d_bankfull_factor, etc.
 
-(5) A set of CFG files, one for each TopoFlow process component are also
+(4) A set of CFG files, one for each TopoFlow process component are also
     computed automatically with default values.
 
-----------------------------------------------------
- Notes about realization config files for TopoFlow
-----------------------------------------------------
+---------------------------------------------------------------
+ Notes about realization config files "rc files" for TopoFlow
+---------------------------------------------------------------
+A realization config file for running TopoFlow in NextGen is provided
+in the "ngen_files" folder.  This section provides more information
+about the various settings in that file.
+
 (1) Set "name" in the formulations block to "bmi_python".
 
 (2) Set "python_type" to "topoflow.main2.tf36_bmi",
@@ -147,6 +203,8 @@ Finished 720 timesteps.
 -------------------------------------------------
  Some Error Messages Encountered Before Success
 -------------------------------------------------
+These are merely provided as a historical record.
+
 1st console error message:
 
 NGen Framework 0.1.0
@@ -181,7 +239,7 @@ Importing TopoFlow 3.6 package modules:
 libc++abi.dylib: terminating with uncaught exception of type std::runtime_error: ModuleNotFoundError: No module named 'osgeo'
 
 At:
-  /Users/peckhams/Dropbox/GitHub/ngen/extern/topoflow36/topoflow/utils/hydrofab_tools.py(35): <module>
+  /Users/peckhams/Dropbox/GitHub/ngen/extern/topoflow36/topoflow/utils/hydrofab_utils.py(35): <module>
   <frozen importlib._bootstrap>(219): _call_with_frames_removed
   <frozen importlib._bootstrap_external>(728): exec_module
   <frozen importlib._bootstrap>(677): _load_unlocked
