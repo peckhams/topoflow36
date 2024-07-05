@@ -615,11 +615,11 @@ class topoflow_driver( BMI_base.BMI_component ):
                 ## time_interval_hours=6)   # Assuming CHIRPS 6hr rain.        
                 #### OVERWRITE_OK=self.OVERWRITE_OK)
  
-    #----------------------------------------------------------------   
+    #------------------------------------------------------------------   
     # Note:  There is a Jupyter notebook that can be used after a
     #        successful model run to re-create the indicator and
-    #        media files: TopoFlow_Redo_Indicators_and_Media.ipynb.
-    #----------------------------------------------------------------
+    #        media files: TopoFlow_Create_Indicators_and_Media.ipynb.
+    #------------------------------------------------------------------
                      
     #   finalize()
     #-------------------------------------------------------------            
