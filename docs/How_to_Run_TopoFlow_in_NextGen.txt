@@ -174,7 +174,7 @@ about the various settings in that file.
 
 (4) Set "init_config" as the complete path to a TopoFlow "multi-bmi" config file.
     For example:
-        "./extern/topoflow36/data/{{id}}/Test1_cfg/Test1_multi-bmi.cfg"
+        "./data/topoflow/input_files/{{id}}/Test1_cfg/Test1_multi-bmi.cfg"
     Note: It can contain the regular expression "{{id}}" to match many files.    
 
 (5) Set "main_output_variable" to
