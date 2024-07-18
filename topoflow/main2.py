@@ -29,7 +29,9 @@ def run_model( cfg_file=None, cat_id_str='cat-209',
         print()
         return
     tf = tf36_bmi( SILENT=SILENT )
-    tf.ngen_dir = ngen_dir
+    tf.ngen_dir    = ngen_dir
+    tf.site_prefix = cat_id_str
+    tf.case_prefix = 'Test1'
     
     if (cfg_file is None):
         if (cat_id_str is not None):

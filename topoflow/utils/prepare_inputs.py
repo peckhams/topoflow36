@@ -234,12 +234,13 @@ class get_inputs():
            return
         self.site_prefix = site_prefix
         self.case_prefix = case_prefix
+        ## self.input_directory = self.test_dir + self.site_prefix + '/'
+        #-----------------------------
         self.NO_MET      = NO_MET
         self.NO_SOIL     = NO_SOIL
         #-----------------------------
         # self.get_topoflow_dirs()       
         self.get_source_dirs()         # calls get_topoflow_dirs()
-        ## self.create_output_dirs()
         #-----------------------------
         self.set_basin_info()
         self.set_time_info()

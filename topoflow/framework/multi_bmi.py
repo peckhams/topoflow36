@@ -394,22 +394,37 @@ class multi_bmi( BMI_base.BMI_component ):
 #         print('## cfg_prefix    =', cfg_prefix)
 #         print('## cfg_directory =', cfg_directory)
         self.DEBUG = False
-        self.initialize_config_vars(READ_GRID_INFO=False)   # uses self.cfg_file
+
+        #-----------------------------------------------------------        
+        # Note:  Don't do this here, because CFG files for
+        #        path_info, time_info, etc. maybe not created yet.
+        #        If you do anyway, call self.read_grid_info(),
+        #        which is now commented out below.
+        #-----------------------------------------------------------
+        ## self.initialize_config_vars(READ_GRID_INFO=False)  # uses self.cfg_file
 
         #-----------------------------------------------------
         # If DEM_out_file doesn't exist yet, prepare inputs.
         #--------------------------------------------------------------
+        # Note: This assumes self.site_prefix has already been set.
+        #--------------------------------------------------------------
         # Note: Had to edit outlets_file since default was on edge.
         #--------------------------------------------------------------
+        if not(hasattr(self, 'in_directory')):
+            self.in_directory  = self.ngen_dir + 'data/topoflow/input_files/'
+            self.in_directory += self.site_prefix + '/'
+        if not(os.path.exists( self.in_directory )):
+            os.mkdir( self.in_directory )
         topo_dir = self.in_directory + '__topo/'
         DEM_out_file = topo_dir + self.site_prefix + '_rawDEM.tif'        
         if not(os.path.exists( DEM_out_file )):
             self.prepare_tf_inputs()
+        self.initialize_config_vars()   # uses self.cfg_file
         #--------------------------------------------------------
         # Note: Can't call read_grid_info before topo directory
         #       is created and contains the DEM
         #--------------------------------------------------------
-        self.read_grid_info()
+#         self.read_grid_info()
                 
         #-----------------------------------------------------
         # Set self.comp_set_list and self.provider_list
@@ -1025,12 +1040,9 @@ class multi_bmi( BMI_base.BMI_component ):
         # defined in BMI_base.py.
         #--------------------------------------------------------        
         p = prep.get_inputs()
-        #-----------------------------------
-#         p.out_bounds   = self.out_bounds
-#         p.out_xres_sec = self.out_xres_sec
-#         p.out_yres_sec = self.out_yres_sec
-        p.test_dir = self.ngen_dir + 'data/topoflow/input_files/'
         p.NGEN_CSV = True  # Set this to use NGEN CSV files
+        p.test_dir = self.ngen_dir + 'data/topoflow/input_files/'
+        p.in_directory = self.in_directory
         p.src_ngen_met_dir = self.ngen_dir + 'data/topoflow/forcing/huc01/'
         #----------------------------------------------------                
         p.prepare_all_inputs( site_prefix=self.site_prefix,
@@ -1041,7 +1053,7 @@ class multi_bmi( BMI_base.BMI_component ):
         # Next line is for when initialize calls read_grid_info.
         # Otherwise, self.topo_directory = self.in_directory.
         #---------------------------------------------------------         
-        self.topo_directory = p.topo_dir
+        # self.topo_directory = p.topo_dir  # Not needed now.
     
     #   prepare_tf_inputs()
     #-------------------------------------------------------------------    
