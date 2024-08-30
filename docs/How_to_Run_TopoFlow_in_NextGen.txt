@@ -3,6 +3,7 @@ October 27-28, 2022
 November 29, 2022 (updated)
 December 3, 2022 (updated)
 July 3, 2024 (updated)
+August 30 (updated)
 
 Note: This assumes that the NextGen repo has been installed.
       This work used the NextGen version 0.2 from 2022-07-27.
@@ -53,12 +54,21 @@ downloaded in CSV format for the catchment from an Amazon S3 bucket.
     The cat-209 catchment was used for my AGU 2022 NextGen poster.
 
 (4) Download CSV forcing files from Amazon S3 bucket for catchments of
-    interest.  Files are in:  /formulations-dev/forcings/huc01/csv
-    Time span:  2007-01-01 00:00:00 TO  2019-12-31 23:00:00  
-    Copy files (e.g. "cat-209.csv") into:  ngen/data/topoflow/forcing
-    See comments in:  topoflow/utils/ngen/hydrofab_utils.py for
-    information on how to access data in an Amazon S3 bucket.
-
+    interest.  If you have an account through Lynker, you can login to
+    the AWS console at:
+        https://lynker-aws.signin.aws.amazon.com/console 
+    CSV files for HUC01 catchments are in the bucket: formulations-dev
+    in the subfolder: forcings/huc01/csv.
+    These CSV files provide AORC forcing/met data for the time span:
+        2007-01-01 00:00:00 TO  2019-12-31 23:00:00 
+    You can download a CSV file (e.g. cat-84.csv) from the AWS console
+        and copy it into:   ngen/data/topoflow/forcing
+    You can prepare dot files with your AWS credentials to access
+        files in Lynker S3 buckets from a Python program.
+    See comments in:  topoflow/utils/ngen/hydrofab_utils.py for details
+    As of 2024-08, the module hydrofab_utils.py has new functions for
+        downloading CSV files from the Lynker AWS buckets.
+ 
 (5) In order to run TopoFlow for a catchment, the following files must
     exist in the folder:  ngen/data/topoflow/input_files/cat-**
 
