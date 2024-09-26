@@ -3,14 +3,14 @@ RiverTools Info File
 ;--------------------
 ;Description of Grid
 ;--------------------
-Grid filename:  Wolverine_rawDEM.tif
+Grid filename:  WolverineGlacier_rawDEM.tif
 Grid source:    TopoFlow & GDAL
  
 ;----------------------
 ;Grid dimensions, etc.
 ;----------------------
-Number of columns:  102
-Number of rows:     37
+Number of columns:  51
+Number of rows:     40
 Data type:          FLOAT
 Byte order:         LSB
 
@@ -26,17 +26,17 @@ Z-resolution units:   METERS
 ;--------------------------------------------------
 ;Bounding box coordinates (degrees lat/lon or UTM)
 ;--------------------------------------------------
-South edge y-coordinate:  60.470555777778
-North edge y-coordinate:  60.367778000000
-East  edge x-coordinate:  -148.760555666667
-West  edge x-coordinate:  -149.043889000000
+South edge y-coordinate:  60.343638888889
+North edge y-coordinate:  60.454750000000
+East  edge x-coordinate:  -148.837333333333
+West  edge x-coordinate:  -148.979000000000
 Measurement units:        DEGREES
 
 ;------------------
 ;Min and max value
 ;------------------
-Minimum value:  18.372669219971
-Maximum value:  1627.486938476562
+Minimum value:  111.127105712891
+Maximum value:  1626.074584960938
 
 ;---------
 ;UTM zone

@@ -1,0 +1,71 @@
+RiverTools Info File
+
+;--------------------
+;Description of Grid
+;--------------------
+Grid filename:  WolverineGlacier_rawDEM.tif
+Grid source:    TopoFlow & GDAL
+ 
+;----------------------
+;Grid dimensions, etc.
+;----------------------
+Number of columns:  51
+Number of rows:     40
+Data type:          FLOAT
+Byte order:         LSB
+
+;--------------------
+;Pixel geometry info
+;--------------------
+Pixel geometry code:  0
+Pixel x-resolution:   10.000000000000
+Pixel y-resolution:   10.000000000000
+Pixel z-resolution:   0.010000000000
+Z-resolution units:   METERS
+
+;--------------------------------------------------
+;Bounding box coordinates (degrees lat/lon or UTM)
+;--------------------------------------------------
+South edge y-coordinate:  60.343638888889
+North edge y-coordinate:  60.454750000000
+East  edge x-coordinate:  -148.837333333333
+West  edge x-coordinate:  -148.979000000000
+Measurement units:        DEGREES
+
+;------------------
+;Min and max value
+;------------------
+Minimum value:  111.127105712891
+Maximum value:  1626.074584960938
+
+;---------
+;UTM zone
+;---------
+UTM zone: 6.0
+
+
+;----------------------------------
+;Notes About RiverTools Info Files
+;----------------------------------
+;(1)  RiverTools grid info filenames end with '.rti'.
+;(2)  The first line should be:  RiverTools Info File
+;(3)  Lines starting with a semi-colon are ignored.
+;(4)  Colons are used to delimit labels from values.
+;(5)  The order of the numbers above is important.
+;(6)  Number of rows and columns are required.
+;(7)  Pixel geometry codes are: 0=Fixed-Angle, 1=Fixed-Length.
+;(8)  Pixel x-resolution and y-resolution are required.
+;(9)  Measurement units must be METERS or DEGREES.
+;(10) Elevation data type is required.
+;     Allowed types are BYTE, INTEGER, LONG, LONG64, FLOAT, DOUBLE.
+;(11) Byte order is required; either LSB or MSB.
+;     (LSB = Least Significant Byte = little-endian)
+;     (MSB = Most Significant Byte  = big-endian)
+;(12) For 'fixed-angle' pixels, bounding lats and lons
+;     are required to compute lengths and areas correctly.
+;(13) Latitudes south of equator are negative and
+;     longitudes west of prime meridian are negative.
+;(14) This file is best modified with the View DEM Info
+;     dialog in the File menu.
+
+
