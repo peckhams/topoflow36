@@ -1326,7 +1326,7 @@ class met_component( BMI_base.BMI_component ):
         if ((np.ndim( self.P_rain ) == 0) & (self.T_air_type.lower() == 'scalar')): 
             self.P_rain.fill( P_rain )   #### (mutable scalar)
         else:
-            self.P_rain[:] = P_rain
+            self.P_rain = P_rain
   
         if (self.DEBUG):
             if (self.P_rain.max() > 0):
@@ -1379,7 +1379,7 @@ class met_component( BMI_base.BMI_component ):
         if ((np.ndim( self.P_snow ) == 0) & (self.T_air_type.lower() == 'scalar')):
             self.P_snow.fill( P_snow )   #### (mutable scalar)
         else:
-            self.P_snow[:] = P_snow
+            self.P_snow = P_snow
 
         if (self.DEBUG):
             if (self.P_snow.max() > 0):
