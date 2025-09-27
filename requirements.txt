@@ -76,7 +76,7 @@ six==1.15.0
 terminado==0.9.4
 testpath==0.4.4
 topoflow==3.6
-tornado==6.1
+tornado==6.5
 traitlets==5.0.5
 typing-extensions==3.7.4.3
 urllib3==1.26.4
