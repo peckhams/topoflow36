@@ -1,3 +1,6 @@
+# 2025-09-28.
+# Requirements of the topoflow36 Python package.
+# Created for Docker image that uses Python 3.9.       
 anyio==4.7.0
 appnope==0.1.4
 argon2-cffi==21.3.0
