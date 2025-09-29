@@ -1,6 +1,7 @@
 # 2025-09-28.
 # Requirements of the topoflow36 Python package.
-# Created for Docker image that uses Python 3.9.
+# Created for NGIAB Docker image that uses Python 3.9.
+# NextGen needs numpy>=1,<2
 Brotli==1.0.9
 certifi==2025.8.3
 cftime==1.6.4
