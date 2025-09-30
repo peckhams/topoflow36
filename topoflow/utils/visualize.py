@@ -283,8 +283,9 @@ def read_grid_from_nc_file( nc_file, time_index=0, REPORT=True ):
 #   read_grid_from_nc_file()
 #--------------------------------------------------------------------
 def read_and_show_rtg( rtg_filename, long_name, VERBOSE=True,
-                       rtg_type='FLOAT',
+                       rtg_type='FLOAT', GEO=True,
                        cmap='jet', BLACK_ZERO=False,
+                       LAND_SEA_BACKDROP=False,
                        stretch='hist_equal',
                        a=1, b=2, p=0.5, im_file=None,
                        xsize=8, ysize=8, dpi=None ):
@@ -315,14 +316,15 @@ def read_and_show_rtg( rtg_filename, long_name, VERBOSE=True,
 
     show_grid_as_image( grid, long_name, extent=extent, cmap=cmap,
                         BLACK_ZERO=BLACK_ZERO, stretch=stretch,
-                        a=a, b=b, p=p, im_file=im_file,
+                        LAND_SEA_BACKDROP=LAND_SEA_BACKDROP,
+                        GEO=GEO, a=a, b=b, p=p, im_file=im_file,
                         xsize=xsize, ysize=ysize, dpi=dpi)
                               
 #   read_and_show_rtg()
 #--------------------------------------------------------------------
 def show_grid_as_image( grid, long_name, extent=None,
                         cmap='rainbow', BLACK_ZERO=False,
-                        LAND_SEA_BACKDROP=False,
+                        LAND_SEA_BACKDROP=False, GEO=True,
                         stretch='power3', a=1, b=2, p=0.5,
                         subtitle=None, nodata=-9999.0,  ####
                         ## units='unknown units',
@@ -447,7 +449,11 @@ def show_grid_as_image( grid, long_name, extent=None,
     # Use these
     #------------    
     ## fontsize1 = 10
-    if (xsize >= 4.0):
+    if (xsize >= 6.0):
+        fontsize1 = 12
+        fontsize2 = 8
+        fontsize3 = 8
+    elif (xsize >= 4.0):
         fontsize1 = 8
         fontsize2 = 8
         fontsize3 = 6
@@ -465,10 +471,16 @@ def show_grid_as_image( grid, long_name, extent=None,
     #----------------------------
     # Set up and show the image
     #----------------------------
+    if (GEO):
+        xlabel = 'Longitude [deg]'
+        ylabel = 'Latitude [deg]'
+    else:
+        xlabel = 'Easting [m]'
+        ylabel = 'Northing [m]'
     # figure = plt.figure(1, figsize=(xsize, ysize), dpi=dpi)
     fig, ax = plt.subplots( figsize=(xsize, ysize), dpi=dpi)
-    ax.set_xlabel('Longitude [deg]', fontsize=fontsize2)
-    ax.set_ylabel('Latitude [deg]', fontsize=fontsize2)
+    ax.set_xlabel( xlabel, fontsize=fontsize2)
+    ax.set_ylabel( ylabel, fontsize=fontsize2)
     ax.tick_params(axis='both', labelsize=fontsize2)
 
     #---------------------------------------
@@ -1226,8 +1238,9 @@ def plot_data( x, y, y2=None, y3=None, y4=None, y5=None,
                y6=None, y7=None, y8=None,
                xmin=None, xmax=None, ymin=None, ymax=None,
                x_name='x', x_units='', marker=',', title=None,
-               y_name='y', y_units='',
-               x_size=8,   y_size=4, xticks=None, yticks=None):
+               y_name='y', y_units='', linewidth=1.0,
+               x_size=8,   y_size=4, xticks=None, yticks=None,
+               font_size=10):
 
     figure = plt.figure(1, figsize=(x_size, y_size))
     # fig, ax = plt.subplots( figsize=(x_size, y_size))
@@ -1251,7 +1264,7 @@ def plot_data( x, y, y2=None, y3=None, y4=None, y5=None,
     # x_name2 = x_name.replace('_', ' ').title()
     # y_name2 = y_name.replace('_', ' ').title()
         
-    plt.plot( x, y, marker=marker)
+    plt.plot( x, y, marker=marker, linewidth=linewidth)
     if (y2 is not None):
         plt.plot(x, y2, marker=marker)
     if (y3 is not None):
@@ -1266,7 +1279,29 @@ def plot_data( x, y, y2=None, y3=None, y4=None, y5=None,
         plt.plot(x, y7, marker=marker)
     if (y8 is not None):
         plt.plot(x, y8, marker=marker)
-                        
+
+    #-------------------------------------    
+    # Change font size for all elements:
+    # labels, tick labels, etc.
+    #-------------------------------------
+    plt.rc('font', size=font_size)
+
+    #-------------------------------------------    
+    # Change font size for individual elements
+    #------------------------------------------- 
+#     SMALL_SIZE = 8
+#     MEDIUM_SIZE = 10
+#     BIGGER_SIZE = 12
+#     plt.rc('font', size=SMALL_SIZE)          # controls default text sizes
+#     plt.rc('axes', titlesize=SMALL_SIZE)     # fontsize of the axes title
+#     plt.rc('axes', labelsize=MEDIUM_SIZE)    # fontsize of the x and y labels
+#     plt.rc('xtick', labelsize=SMALL_SIZE)    # fontsize of the tick labels
+#     plt.rc('ytick', labelsize=SMALL_SIZE)    # fontsize of the tick labels
+#     plt.rc('legend', fontsize=SMALL_SIZE)    # legend fontsize
+#     plt.rc('figure', titlesize=BIGGER_SIZE)  # fontsize of the figure title        
+#     plt.xticks(fontsize=12)
+#     plt.yticks(fontsize=12)
+                            
     plt.xlabel( x_name + ' [' + x_units + ']' )
     plt.ylabel( y_name + ' [' + y_units + ']' )
     if (title is not None):

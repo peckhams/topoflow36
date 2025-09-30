@@ -112,7 +112,7 @@
 #      ------------------------------
 #      write_simple_rain_file()
 #      get_rainfall_grid_stack()
-#      subset_ngen_csv_file()
+#      subset_ngen_csv_file()         #########
 #
 #----------------------------------------------------------------------------------
 
@@ -148,14 +148,26 @@ class get_inputs():
         #----------------------------------------------------------
         # If the NGEN_CSV option is set, self.test_dir should
         # be set to:  ngen_dir + 'data/topoflow/input_files/'
-        #-------------------------------------------------------    
+        #--------------------------------------------------------    
         self.home_dir    = os.path.expanduser("~") + os.sep
         self.test_dir    = self.home_dir + 'basins_TEST' + os.sep   ######
         self.output_dir  = self.home_dir + 'output' + os.sep
-        self.ngen_dir    = self.home_dir + 'Dropbox/GitHub/ngen'
-        self.src_ngen_met_dir = self.ngen_dir + 'data/topoflow/forcing/huc01/'
-        ## self.src_ngen_met_dir = self.home_dir + 'TF_Data/NGEN_AORC/HUC01/csv/'        
-        #-------------------------------------------
+        #----------------------------------------------------------
+        # Do not set defaults as shown here.  Instead, they must
+        # now be provided as arguments when the catchment class
+        # is instantiated to avoid an error message.
+        #----------------------------------------------------------        
+        # These are defaults; need to instantiate the "catchment"
+        # class in topoflow/utils/ngen/hydrofab_utils.py.
+        # Catchment & nexus GeoJSON files must be in spatial_dir.
+        # Maybe rename "forcing_dir" to "ngen_met_dir"?
+        #----------------------------------------------------------
+#         self.ngen_dir    = self.home_dir + 'Dropbox/GitHub/ngen/'
+#         self.forcing_dir = self.ngen_dir + 'data/topoflow/forcing/huc01/'
+#         self.spatial_dir = self.ngen_dir + 'data/topoflow/spatial/huc01/'
+#         self.catchment_json_file = 'catchment_data_HUC01.geojson'
+#         self.nexus_json_file     = 'nexus_data_HUC01.geojson'        
+        #----------------------------------------------------------
         self.site_prefix = 'Unknown'  ###########
         self.case_prefix = 'Test1'
         #----------------------------
@@ -163,11 +175,11 @@ class get_inputs():
         self.TEST_RAIN   = False
         #-------------------------------------------------------
         # Current options for preparing input files are:
-        #   NGEN_CSV and EAST_AFRICA.
+        #   NEXTGEN and EAST_AFRICA.
         # For EAST_AFRICA option, can also choose a rainfall
         #   product by setting CHIRPS, CHIRPS2, GLDAS, or GPM.
         #-------------------------------------------------------
-        self.NGEN_CSV    = True
+        self.NEXTGEN     = True
         self.EAST_AFRICA = False
         #-------------------------
         self.CHIRPS      = False
@@ -225,10 +237,10 @@ class get_inputs():
                            CLIP_DEM=True, NGEN_DEM=False,
                            NO_SOIL=True, NO_MET=True ):
 
-        if not(self.NGEN_CSV) and not(self.EAST_AFRICA):
+        if not(self.NEXTGEN) and not(self.EAST_AFRICA):
            print('ERROR in prepare_all_inputs:')
            print('To use this function, you must currently set')
-           print('either the NGEN_CSV or EAST_AFRICA option to True.')
+           print('either the NEXTGEN or EAST_AFRICA option to True.')
            print('This is needed by the set_time_info() function.')
            print()
            return
@@ -253,14 +265,14 @@ class get_inputs():
         self.get_cfg_files()
         #------------------------------
         if (NGEN_DEM):
+            # Get DEM from S3 bucket/VRT via hfu.get_dem()
             self.get_ngen_dem( cat_id_str=self.site_prefix )  # 2024-07-05
         if (CLIP_DEM):
-            # Otherwise, get DEM from S3 bucket/VRT
-            # via multi_bmi.get_new_dem(), via hft.get_dem()      
+            # Get DEM by clipping a local "source DEM"    
             self.clip_dem_from_source()
         self.read_dem_as_geotiff()
-        # self.read_dem_as_rtg()
-        # self.read_dem_as_netcdf()
+        # self.read_dem_as_rtg()     # another option
+        # self.read_dem_as_netcdf()  # another option
         self.write_dem_as_rtg()
         self.replace_negative_vals_in_dem()
         self.fill_pits_in_dem()
@@ -359,7 +371,6 @@ class get_inputs():
         self.src_chirps2_dir  = dd + 'CHIRPS_Rain_Africa_6hr_2005-01_to_2015-01_onedir/'
         self.src_gldas_dir    = dd + 'GLDAS_Rain_Baro_2015-10_to_2018-10/'
         self.src_gpm_dir      = dd + 'GPM_Rain_Ethiopia_30min_2015-10_to_2018-10/'
-        ### self.src_ngen_met_dir = dd + 'NGEN_AORC/HUC01/csv/'
 
         if not(self.SILENT):
             print( 'Home directory          =', self.home_dir )
@@ -470,7 +481,10 @@ class get_inputs():
     #-------------------------------------------------------------------------------
     def set_time_info(self):
  
-        """Set info for time period of interest (& met data)"""   
+        """Set info for time period of interest (& met data)"""
+        #---------------------------------------------------------- 
+        # Collect information to create a default version of the
+        # file Test1_meteorology.cfg.  
         #----------------------------------------------------------
         # Note that the number of minutes in a regular year
         #    = 60 * 24 * 365 = 525600,
@@ -1123,14 +1137,26 @@ class get_inputs():
     #   get_outlets_file()
     #-------------------------------------------------------------------
     def get_ngen_dem( self, DEM_out_file=None,
-                     cat_id_str='cat-67',
-                     GEO=True, ALBERS=False ):
+                     cat_id_str='cat-67', GEO=True, ALBERS=False ):
 
         if (DEM_out_file is None):
             DEM_out_file = self.topo_dir + cat_id_str + '_rawDEM.tif'
 
-        c = hfu.catchment()
+        #------------------------------------------
+        # Set directory & filenames from self:
+        #    ngen_dir, forcing_dir, spatial_dir,
+        #    catchment_json_file, nexus_json_file
+        #------------------------------------------
+        c = hfu.catchment( ngen_dir=self.ngen_dir,
+                forcing_dir=self.forcing_dir,
+                spatial_dir=self.spatial_dir,
+                catchment_json_file=self.catchment_json_file,
+                nexus_json_file=self.nexus_json_file)
         # c.print_info( cat_id_str )
+ 
+        #------------------------------------       
+        # Create a DEM for cat-id catchment
+        #------------------------------------
         dem = c.get_dem(cat_id_str=cat_id_str,   #########
                 RESAMPLE_ALGO='bilinear',
                 CLIP_GEO=GEO, CLIP_ALBERS=ALBERS,
@@ -1141,6 +1167,22 @@ class get_inputs():
         self.out_xres_sec = c.DEM_xres  ####################
         self.out_yres_sec = c.DEM_yres  ####################     
         # self.out_bounds = c.get_bounding_box( cat_id_str )
+
+        #-------------------------------------------------------
+        # Also get a NextGen forcing CSV file for catchment?
+        # Putting this here ot avoid reading hydrofabric files
+        # again, but could instead store "c" in self.
+        #----------------------------------------------------------
+        # NOTE: If this CSV file is listed in the RC file,
+        #       then it must exist before now or NextGen
+        #       throws this error message:
+        #       "Forcing data could not be found for 'cat-11223'"
+        #       So commenting out for now.
+        #----------------------------------------------------------
+#         if (self.NGEN_CSV):
+#             csv_path = self.forcing_dir + cat_id_str + '.csv'
+#             if not(os.path.exists( csv_path )):
+#                 c.get_forcing_csv( cat_id_str=cat_id_str )
 
     #   get_ngen_dem()      
     #-------------------------------------------------------------------------------
@@ -1788,7 +1830,7 @@ class get_inputs():
     
         """Subset a NextGen CSV file using a specified date range"""
         sp = self.site_prefix   # (e.g. 'cat-84')
-        in_file  = self.src_ngen_met_dir + sp + '.csv'
+        in_file  = self.forcing_dir + sp + '.csv'
         out_file = self.met_dir + self.rain_csv_file
         ## out_file = self.met_dir + sp + '_' + self.date_range_str + '.csv'
         #--------------------------------------
@@ -1803,12 +1845,28 @@ class get_inputs():
  
         while (True):
             line = csv_unit.readline()
+            if (line == ''):
+                print('SORRY, The forcing CSV file: ')
+                print('  ' + in_file)
+                print('does not have data for: ' + self.start_date_str)
+                print('NextGen AORC CSV files should span the time range:')
+                print('2007-01-1 to 2019-12-31.')
+                print()
+                return
             if (line.startswith( self.start_date_str)):
                 new_csv_unit.write( line  )
                 break
 
         while (True):
-             line = csv_unit.readline()
+            line = csv_unit.readline()
+            if (line == ''):
+                print('SORRY, The forcing CSV file: ')
+                print('  ' + in_file)
+                print('does not have data for: ' + self.end_date_str)
+                print('NextGen AORC CSV files should span the time range:')
+                print('2007-01-1 to 2019-12-31.')
+                print()
+                return
              if (line.startswith( self.end_date_str)):
                 # Don't write out this line
                 break

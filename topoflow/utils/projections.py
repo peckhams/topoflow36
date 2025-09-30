@@ -14,11 +14,15 @@
 #  >>> from topoflow.utils import projections as proj
 #  >>> x,y = proj.Lambert_Azimuthal_Equal_Area_XY( lon, lat )
 #
+# Can check coordinate transformations using a PROJ4 string at:
+#    https://mygeodata.cloud/cs2cs/
+#
 #---------------------------------------------------------------------
 #
-#  Albers_XY()
-#  Albers_q()
-#  Albers_XY2()
+#  Albers_XY_Sphere()
+#  Albers_q_for_Ellipsoid()
+#  Albers_XY_Ellipsoid()
+#  
 #  Lambert_Azimuthal_Equal_Area_XY()
 #  Mercator_XY()
 #
@@ -27,8 +31,10 @@
 import numpy as np
 
 #---------------------------------------------------------------------
-def Albers_XY( lon_deg, lat_deg, REPORT=True ):
+def Albers_XY_Sphere( lon_deg, lat_deg, REPORT=True ):
 
+    #----------------------------------------------------
+    # Note: This version assumes Earth is a sphere.
     #----------------------------------------------------
     # Note:  Albers_XY(-96, 23) = (0,0).
     # Bounds of conterminous US are:
@@ -49,9 +55,9 @@ def Albers_XY( lon_deg, lat_deg, REPORT=True ):
     lat  = lat_deg * d2r
     lon  = lon_deg * d2r
     
-    #---------------------------------------------
-    # Note: Formulas from Snyder's Book, p. 100.
-    #---------------------------------------------
+    #------------------------------------------------
+    # Note: Formulas from Snyder's Book, p. 99-100.
+    #------------------------------------------------
     R    = 6378137      # (radius of Earth, meters)  (using semi-major axis)
     lat1 = 29.5 * d2r   # (standard parallel 1)
     lat2 = 45.5 * d2r   # (standard parallel 2)
@@ -73,19 +79,24 @@ def Albers_XY( lon_deg, lat_deg, REPORT=True ):
 
     return (x,y)
         
-#   Albers_XY()
+#   Albers_XY_Sphere()
 #------------------------------------------------------------------------
-def Albers_q( lat, e ):
+def Albers_q_for_Ellipsoid( lat, e ):
 
+    #------------------------------------------------------
+    # Note: This function is used by Albers_XY_Ellipsoid.
+    #------------------------------------------------------
     term1 = np.sin(lat) / (1 - (e * np.sin(lat))**2)
     term2 = np.log( (1 - e*np.sin(lat)) / (1 + e*np.sin(lat)) )
     term2 = term2 / (2*e)
     return (1 - e**2) * (term1 - term2)
 
-#   Albers_q
+#   Albers_q_for_Ellipsoid()
 #------------------------------------------------------------------------
-def Albers_XY2( lon_deg, lat_deg, REPORT=True ):
+def Albers_XY_Ellipsoid( lon_deg, lat_deg, REPORT=True ):
 
+    #----------------------------------------------------
+    # Note: This version assumes Earth is an ellipsoid.
     #----------------------------------------------------
     # Note:  Albers_XY2(-96, 23) = (0,0).
     # Bounds of conterminous US are:
@@ -116,9 +127,9 @@ def Albers_XY2( lon_deg, lat_deg, REPORT=True ):
     lat = lat_deg * d2r
     lon = lon_deg * d2r
     
-    #---------------------------------------------
-    # Note: Formulas from Snyder's Book, p. 100.
-    #---------------------------------------------
+    #-------------------------------------------------
+    # Note: Formulas from Snyder's Book, p. 100-101.
+    #-------------------------------------------------
     a    = 6378137      # (Earth ellipsoid semi-major axis)
     f    = (1 / 298.257222101004)  # (Earth flattening)
     e    = np.sqrt( f * (2 - f) )
@@ -129,10 +140,10 @@ def Albers_XY2( lon_deg, lat_deg, REPORT=True ):
     
     m1    = np.cos(lat1) / np.sqrt(1 - (e * np.sin(lat1))**2)
     m2    = np.cos(lat2) / np.sqrt(1 - (e * np.sin(lat2))**2)
-    q     = Albers_q( lat, e )
-    q0    = Albers_q( lat0, e)
-    q1    = Albers_q( lat1, e)
-    q2    = Albers_q( lat2, e)
+    q     = Albers_q_for_Ellipsoid( lat, e )
+    q0    = Albers_q_for_Ellipsoid( lat0, e)
+    q1    = Albers_q_for_Ellipsoid( lat1, e)
+    q2    = Albers_q_for_Ellipsoid( lat2, e)
     n     = (m1**2 - m2**2) / (q2 - q1)    
     C     = (m1**2 + (n * q1))
     rho   = (a / n) * np.sqrt(C - (n * q))
@@ -149,7 +160,7 @@ def Albers_XY2( lon_deg, lat_deg, REPORT=True ):
 
     return x,y
         
-#   Albers_XY2()
+#   Albers_XY_Ellipsoid()
 #-----------------------------------------------------------------------
 def Lambert_Azimuthal_Equal_Area_XY( lon, lat,
             lon0=-100.0, lat1=45.0):

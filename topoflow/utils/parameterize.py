@@ -166,6 +166,9 @@ def get_grid_from_TCA( site_prefix=None, topo_dir=None,
     # Find cells that have TCA = 0 (e.g. edges)
     #--------------------------------------------
     w1 = (A <= 0)  # (array of True or False)
+    w0 = (A < 0)
+    n_neg = w0.sum()
+    print('### n_neg =', n_neg)
             
     #-------------------------------------------
     # Compute the new grid as power law of TCA

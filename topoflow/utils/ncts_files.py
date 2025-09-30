@@ -256,6 +256,9 @@ def get_dtype_map():
     dtype_map = {'float64':'f8', 'float32':'f4',
                  'int64':'i8', 'int32':'i4',
                  'int16':'i2', 'int8':'i1',
+                 ## Added unsigned ints on 2/2/25.  ############
+                 'uint8':'u1',  'uint16':'u2',
+                 'uint32':'u4', 'uint64':'u8',
                  'S|100':'S1'}  # ( ????? )       
     
     #-------------------------------------------------
