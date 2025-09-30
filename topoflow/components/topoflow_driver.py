@@ -182,8 +182,10 @@ class topoflow_driver( BMI_base.BMI_component ):
 ##        'snow:model__time_step' ]
 
     _output_var_names = [
-        'model__time_step' ]   # dt
-
+#         'model__time_step' ]   # dt
+        'model__time_step',
+        'ngen::mass_in', 'ngen::mass_out', 'ngen::mass_stored', 'ngen::mass_leaked']
+        
     _var_name_map = {
         'atmosphere_water__domain_time_integral_of_precipitation_leq-volume_flux': 'vol_P',
         'atmosphere_water__domain_time_integral_of_rainfall_volume_flux':          'vol_PR',
@@ -244,9 +246,15 @@ class topoflow_driver( BMI_base.BMI_component ):
         'river-network_channel_water__initial_volume' :       'vol_chan_sum0',
         'river-network_channel_water__volume':                'vol_chan_sum',
         'land_surface_water__initial_area_integral_of_depth': 'vol_flood_sum0',   
-        'land_surface_water__area_integral_of_depth':         'vol_flood_sum' }       
-
-            
+        'land_surface_water__area_integral_of_depth':         'vol_flood_sum' }
+        #---------------------------------------------------------------      
+        # These output variables are used by NGen mass balance checker
+        #---------------------------------------------------------------
+#         'ngen::mass_in':     'vol_in',
+#         'ngen::mass_out':    'vol_out',
+#         'ngen::mass_stored': 'vol_stored_change', # or vol_stored_final
+#         'ngen::mass_leaked': 'vol_leaked'}
+        
     _var_units_map = {
         'atmosphere_water__domain_time_integral_of_precipitation_leq-volume_flux': 'm3',
         'atmosphere_water__domain_time_integral_of_rainfall_volume_flux':          'm3',
@@ -301,7 +309,15 @@ class topoflow_driver( BMI_base.BMI_component ):
         'river-network_channel_water__initial_volume' : 'm3',
         'river-network_channel_water__volume':          'm3',
         'land_surface_water__initial_area_integral_of_depth': 'm3',
-        'land_surface_water__area_integral_of_depth':         'm3'  }  
+        'land_surface_water__area_integral_of_depth':         'm3', 
+        #---------------------------------------------------------------      
+        # These output variables are used by NGen mass balance checker
+        #---------------------------------------------------------------
+        'ngen::mass_in':     'm3',
+        'ngen::mass_out':    'm3',
+        'ngen::mass_stored': 'm3',
+        'ngen::mass_leaked': 'm3'}
+
     
     #------------------------------------------------    
     # Return NumPy string arrays vs. Python lists ?
@@ -1243,6 +1259,11 @@ class topoflow_driver( BMI_base.BMI_component ):
         vol_stored_final += vol_soil_final
         vol_stored_final += vol_swe_final
         vol_stored_final += vol_flood_final
+        #-------------------------------------------------------
+        # Save this for use by NGen mass balance checking tool
+        # Note: self.vol_stored_change is saved to self below.
+        #-------------------------------------------------------
+        self.vol_stored_final = vol_stored_final
         
         rep = self.report
         rep.append('=======================================================')
@@ -1308,7 +1329,13 @@ class topoflow_driver( BMI_base.BMI_component ):
         vol_in  = self.vol_P.copy()
         vol_out = (self.vol_ET + self.vol_edge)           
         vol_error = (vol_in - vol_out) - self.vol_stored_change
-
+        #-------------------------------------------------------
+        # Save this for use by NGen mass balance checking tool
+        #-------------------------------------------------------
+        self.vol_in  = vol_in
+        self.vol_out = vol_out
+        self.vol_leaked = 0.0
+        
         rep = self.report
         rep.append('=============================================')
         rep.append(' Mass balance check (control volume = DEM):')
