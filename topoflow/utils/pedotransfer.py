@@ -32,7 +32,8 @@
 
 #-------------------------------------------------------------------
 import numpy as np
-import gdal, osr  ## ogr
+from osgeo import gdal, osr
+#### import gdal, osr  # Old way to import gdal
 from scipy.special import gamma
 from . import regrid as rg
 from . import import_grid as ig

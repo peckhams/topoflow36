@@ -27,6 +27,7 @@
 #-------------------------------------------------------------------
 
 from osgeo import gdal, osr
+### import gdal, osr  ## Old way to import gdal
 import os.path
 import numpy as np
 
@@ -396,7 +397,8 @@ def print_gdal_grid_info( filename, grid, ds ):
 #   print_gdal_grid_info()
 #-------------------------------------------------------------------------------
 def make_rti_for_gdal_grid( grid_file, grid, ds, rti_file,
-                            z_units='METERS', box_units='DEGREES'):
+                            z_units='METERS'):
+                            #### box_units='DEGREES'):
     
     #----------------------
     # Get grid dimensions
@@ -431,34 +433,44 @@ def make_rti_for_gdal_grid( grid_file, grid, ds, rti_file,
     lrx = ulx + (ds.RasterXSize * xres)
     lry = uly + (ds.RasterYSize * yres)
 
-    #-------------------------------------------------------
-    # ASSUME for now that grid uses Geographic coordinates
-    # and not a fixed-length projection like UTM
-    #-------------------------------------------------------
-    GEOGRAPHIC = True
+    #--------------------------------------------------------
+    # Is this a Geographic or Projected coordinate system ?
+    # Before 2024-10-15, had GEOGRAPHIC = True below.
+    #--------------------------------------------------------
+    prj = ds.GetProjection()
+    srs = osr.SpatialReference(wkt=prj)
+    GEOGRAPHIC = not(srs.IsProjected)
+    ## GEOGRAPHIC = True
+  
     if (GEOGRAPHIC):
-        pixel_geom   = 0   # (use 1 for fixed-length, like UTM)
+        print('This DEM uses Geographic coordinates.')
+        pixel_geom   = 0   # (fixed-angle, "geographic", unprojected)
         x_west_edge  = ulx
         x_east_edge  = lrx
         y_south_edge = lry
         y_north_edge = uly
+        box_units = 'DEGREES'
         #-----------------------------------------------------------
         # Get UTM zone for the center, but may span multiple zones
         #-----------------------------------------------------------
         mid_lon = (x_west_edge + x_east_edge) / 2.0
         UTM_zone = rti_files.get_utm_zone( mid_lon )   # (string)
     
-        xres_sec = xres * 3600       # [deg] -> [arcsec]
-        yres_sec = abs(yres) * 3600  # [deg] -> [arcsec]
+        xres = xres * 3600        # convert [deg] -> [arcsec]
+        yres = abs(yres) * 3600   # convert [deg] -> [arcsec]
     else:
-        #-------------------------------------------
-        # Will need to do something different here
-        #-------------------------------------------
-        dum = 0
-        return
+        print('This DEM uses Projected coordinates.')
+        pixel_geom   = 1   # ("projected", like UTM)
+        x_west_edge  = ulx
+        x_east_edge  = lrx
+        y_south_edge = lry
+        y_north_edge = uly
+        yres         = abs(yres)
+        box_units    = 'METERS'
+        UTM_zone     = 'unknown'
     
     grid_info = rti_files.make_info(grid_file=grid_file, ncols=ncols, nrows=nrows,
-                  xres=xres_sec, yres=yres_sec, data_source=data_source,
+                  xres=xres, yres=yres, data_source=data_source,
                   byte_order=byte_order, pixel_geom=pixel_geom,
                   data_type=data_type, zres=zres, z_units=z_units,
                   y_south_edge=y_south_edge, y_north_edge=y_north_edge,

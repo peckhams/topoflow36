@@ -42,7 +42,8 @@
 
 #-------------------------------------------------------------------
 import numpy as np
-import gdal, osr  ## ogr
+from osgeo import gdal, osr
+### import gdal, osr ### Old import method
 import glob, sys
 import os, os.path
 
