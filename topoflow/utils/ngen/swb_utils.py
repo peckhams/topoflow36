@@ -47,8 +47,8 @@ def get_swb_class( delta_p, f_s, phi, ORIGINAL=False,
     #       This leaves 1008 of the 1947 basins unclassified.
     #-------------------------------------------------------------
     #       Set ORIGINAL=False and USE_B3=False to use expanded
-    #       class boundaries that span a much larger portion of
-    #       the 3-parameter space, without any overlap.
+    #       class boundaries that close the gaps between cuboids
+    #       in the 3-parameter space, without any overlap.
     #       This results in all 1947 basins being classified.
     #       The 3D parameter space has the following parameters. 
     # 
@@ -93,19 +93,31 @@ def get_swb_class( delta_p, f_s, phi, ORIGINAL=False,
         D2_dp_min = -0.1   # (Berghuijs figure 7 & table 3)
         D3_dp_min = -0.1   # (Berghuijs figure 7 & table 3)
     else:
-        #---------------------------------------------
-        # Helps: 1008 goes down to 953 unclassified.
-        #---------------------------------------------
-        mid_delta_p = -0.2
+        #-----------------------------------------------------------
+        # Note: For mid_delta_p, we can choose any value between
+        #       -0.4 and -0.1 to "close the gap".  At first,
+        #       this midpoint was set to -0.2.  However, when
+        #       applied to all GAGES2 CONUS basins, the counts
+        #          for A1, A2, and A3 were: 444, 188, and 22 &
+        #          for D1, D2, and D3 were: 442, 3345, and 1684.
+        #       To make the counts more equal, we are now 
+        #       setting it to -0.1.  The new counts are:
+        #          A1, A2, A3 = 553, 227, and 25 &
+        #          D1, D2, D3 = 442, 3266, and 1668.
+        #       This also means that C_dp_min is now less negative
+        #       when its value was zero in Berghuis et al. (2014).
+        #-----------------------------------------------------------
+        ###### mid_delta_p = -0.2
+        mid_delta_p = -0.1
         A_dp_max    = mid_delta_p 
         C_dp_min    = mid_delta_p
         D2_dp_min   = mid_delta_p
         D3_dp_min   = mid_delta_p
     
-    #----------------------------------------------------------
-    # The max value of delta_p for all the D classes could be
+    #---------------------------------------------------------
+    # The max value of delta_p for all the D classes can be
     # raised to 1.0 without intersecting any other classes.
-    #----------------------------------------------------------
+    #---------------------------------------------------------
     if (ORIGINAL):
         ###############################################
         ## Currently, d_p = 1.0 often when f_s = 0.0,
@@ -124,7 +136,7 @@ def get_swb_class( delta_p, f_s, phi, ORIGINAL=False,
         D3_dp_max = 1.0
     
     #--------------------------------------------------------------
-    # The min value of phi for classes A1, B1, D1, D2, & D3 could
+    # The min value of phi for classes A1, B1, D1, D2, & D3 can
     # all be lowered to 0 without intersecting any other classes.
     #--------------------------------------------------------------
     if (ORIGINAL):
@@ -240,17 +252,17 @@ def get_swb_class( delta_p, f_s, phi, ORIGINAL=False,
         B3_phi_max = 5.3     # (No B3 in original SWB method)
     else:  
         #----------------------------------------------------------
-        # In the GAGES-II Selected Basins (SB3), after converting
-        # units from mm to cm, the max value of phi is 5.5314.
+        # In the GAGES-II CONUS, after converting units from mm
+        # to cm, the max value of phi is 5.711.
         # The theoretical range is 0 to Infinity.
         # In the Berghuijs (2014) paper, phi max is 5.3, so here
-        # we increase the max allowed to 5.6.
+        # we increase the max allowed to 5.8.
         #---------------------------------------------------------
         # Helps: 1 goes down to 0 unclassified.
         #----------------------------------------
-        A3_phi_max = 5.6
-        C2_phi_max = 5.6
-        B3_phi_max = 5.6
+        A3_phi_max = 5.8
+        C2_phi_max = 5.8
+        B3_phi_max = 5.8
 
     #--------------------------------
     # Check "A" classes for a match
@@ -335,17 +347,17 @@ def get_swb_class( delta_p, f_s, phi, ORIGINAL=False,
 #         if ((0.2 < f_s) and (f_s <= 0.45)):
 #             if ((D3_phi_min < phi) and (phi <= D1_phi_max)):
 #                 swb_class = 'D3'
-    
-    if (REPORT):
-        if (swb_class == 'None'):
+   
+    if (swb_class == 'None'):
+        if (REPORT or (ORIGINAL == False)):
             print('### SORRY, No matching SWB class for:')
             print('    d_p =', d_p)
             print('    f_s =', f_s)
             print('    phi =', phi)
             print()
-        else:
-            print('SWB class =', swb_class)
-            print()
+    elif (REPORT):
+        print('SWB class =', swb_class)
+        print()
 
     return swb_class
 

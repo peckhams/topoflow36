@@ -30,7 +30,9 @@
 #  % conda activate tf36
 #  % python
 #  >>> from topoflow.utils.ngen import rfc_utils as rfc
+#  >>> from topoflow.utils.ngen import data_utils as dtu
 #  >>> rfc.create_rfc_tsv( nf_max=10000 )
+#  >>> dtu.sort_tsv_by_site_id(key='NOAA_via_API')
 #  >>> rfc.create_hads_tsv()
 #  >>> rfc.sort_by_site_code()
 #
@@ -1687,6 +1689,7 @@ def create_hads_tsv( data_dir=None,
     k = 0
     lat_diff_count = 0
     lon_diff_count = 0
+    id_map = dict()
 
     while (True):
         hads_line = hads_unit.readline()
@@ -1706,7 +1709,21 @@ def create_hads_tsv( data_dir=None,
             #--------------------------
             lon_dms = '-' + lon_dms
         loc_name   = vals[6].strip()
-        #-----------------------------------
+
+        #----------------------------------------------        
+        # Save all NWS location IDs associated with
+        # a given USGS ID.  At the end, we'll check
+        # for when multiple NWS IDs map to a USGS ID.
+        # Note that data is *not* sorted by USGS ID.
+        #----------------------------------------------
+        if (usgs_id not in id_map):
+            id_map[ usgs_id ] = list([nws_loc_id])
+        else:
+            id_map[ usgs_id ].append( nws_loc_id )
+
+        #-------------------------------------
+        # Get RFC info for this USGS site ID
+        #-------------------------------------
         try:
             rfc_info = rfc_map[ usgs_id ]
         except:
@@ -1719,26 +1736,9 @@ def create_hads_tsv( data_dir=None,
             rfc_lat = '-999'
         if (rfc_lon == 'NA'):
             rfc_lon = '-999'
-        #-----------------------------------
+        #--------------------------------------------
         lat = dtu.convert_dms_to_dec_deg( lat_dms )
-#         dms_list = lat_dms.split()  # split on white space
-#         D = np.float64( dms_list[0] )
-#         M = np.float64( dms_list[1] )
-#         S = np.float64( dms_list[2] )
-#         if (D < 0):
-#             lat = D - (M/60.0) - (S/3600.0)
-#         else:
-#             lat = D + (M/60.0) + (S/3600.0)
-        #-----------------------------------
         lon = dtu.convert_dms_to_dec_deg( lon_dms )
-#         dms_list = lon_dms.split()  # split on white space
-#         D = np.float64( dms_list[0] )
-#         M = np.float64( dms_list[1] )
-#         S = np.float64( dms_list[2] )
-#         if (D < 0):
-#             lon = D - (M/60.0) - (S/3600.0)
-#         else:
-#             lon = D + (M/60.0) + (S/3600.0)
 
         #---------------------------------
         # Format the lat and lon strings
@@ -1807,6 +1807,20 @@ def create_hads_tsv( data_dir=None,
         tsv_unit.write( line )       
         k += 1
 
+    #-------------------------------------
+    # Print out the NWS location IDs for
+    # each of the repeated USGS IDs
+    #-------------------------------------
+    n_repeated = 0
+    usgs_ids = id_map.keys()
+    for id in usgs_ids:
+        if (len(id_map[id]) > 1):
+            n_repeated += 1
+            print('USGS ID =', id)
+            print('NWS IDs =', id_map[id])
+            print()
+    print('Number of repeated USGS IDs =', n_repeated)
+    
     #------------------ 
     # Close the files
     #------------------

@@ -4,6 +4,9 @@
 # 
 # Jan 2024. Moved general utility functions from other files
 #           to here and modified the "db" key strings.
+# Aug 2024. Added options: USGS_NWIS_Stream_Daily,
+#           USGS_NWIS_Stream_Current, USGS_NWIS_Stream_All to
+#           several of the functions.
 #
 #---------------------------------------------------------------------
 #
@@ -28,8 +31,8 @@
 #  get_n_records()
 #
 #  get_heading_map()   ### New approach
-#  get_id_column2()
-#  get_name_column2()
+#  get_id_column2()    # Not used yet
+#  get_name_column2()  # Not used yet
 
 #  get_id_column()
 #  get_name_column()
@@ -68,7 +71,20 @@ from topoflow.utils.ngen import collate_basins as cb
 # import json, sys, time
 
 #---------------------------------------------------------------------
-def get_repo_dir( OLD=True ):
+def get_harbor_dir():
+
+    #------------------------------------------------
+    # Note: HARBOR = Harmonized Attributes of River
+    #                Basins in One Repo
+    #------------------------------------------------
+    home_dir = os.path.expanduser('~/')
+    harbor_dir  = home_dir + 'Dropbox/GitHub/'
+    harbor_dir += 'nextgen_basin_repo/'
+    return harbor_dir
+        
+#   get_harbor_dir()
+#---------------------------------------------------------------------
+def get_repo_dir( OLD=False ):
 
     home_dir = os.path.expanduser('~/')
     if (OLD):
@@ -81,7 +97,7 @@ def get_repo_dir( OLD=True ):
 
 #   get_repo_dir()
 #---------------------------------------------------------------------
-def get_data_dir( db_str='USGS_NWIS_Web' ):
+def get_data_dir( db_str='USGS_NWIS_Stream_Daily' ):
 
     repo_dir = get_repo_dir()
 
@@ -133,8 +149,16 @@ def get_data_dir( db_str='USGS_NWIS_Web' ):
     #---------------------------------------------------------------
     elif (db_str == 'USGS_NWIS_Web'):
         data_dir = repo_dir + 'USGS_NWIS_Web/Data/'
-    elif (db_str == 'USGS_NWIS_Web_Old'):
-        data_dir = repo_dir + 'USGS_NWIS_Web_Old/Data/'
+    elif (db_str == 'USGS_NWIS_Stream_Daily'):
+        data_dir = repo_dir + 'USGS_NWIS_Web/Data/'
+    elif (db_str == 'USGS_NWIS_Stream_Current'):
+        data_dir = repo_dir + 'USGS_NWIS_Web/Data/'
+    elif (db_str == 'USGS_NWIS_Stream_All'):
+        data_dir = repo_dir + 'USGS_NWIS_Web/Data/'
+    #--------------------------------------
+#     elif (db_str == 'USGS_NWIS_Web_Old'):
+#         data_dir = repo_dir + 'USGS_NWIS_Web_Old/Data/'
+    #---------------------------------------------------------------
     elif (db_str == 'USGS_NWIS_WQP1'):
         data_dir = repo_dir + 'USGS_NWIS_WQP/Data/'  #####
     elif (db_str == 'USGS_NWIS_WQP2'):
@@ -154,7 +178,7 @@ def get_data_dir( db_str='USGS_NWIS_Web' ):
 
 #   get_data_dir()
 #---------------------------------------------------------------------
-def get_new_data_dir( db_str='USGS_NWIS_Web' ):
+def get_new_data_dir( db_str='USGS_NWIS_Stream_Daily' ):
 
     repo_dir = get_repo_dir()
 
@@ -205,8 +229,16 @@ def get_new_data_dir( db_str='USGS_NWIS_Web' ):
     #----------------------------------------------------------  
     elif (db_str == 'USGS_NWIS_Web'):
         data_dir = repo_dir + 'USGS_NWIS_Web/_New/'
-    elif (db_str == 'USGS_NWIS_Web_Old'):
-        data_dir = repo_dir + 'USGS_NWIS_Web_Old/_New/'
+    elif (db_str == 'USGS_NWIS_Stream_Daily'):
+        data_dir = repo_dir + 'USGS_NWIS_Web/_New/'
+    elif (db_str == 'USGS_NWIS_Stream_Current'):
+        data_dir = repo_dir + 'USGS_NWIS_Web/_New/'
+    elif (db_str == 'USGS_NWIS_Stream_All'):
+        data_dir = repo_dir + 'USGS_NWIS_Web/_New/'
+    #-------------------------------------
+#     elif (db_str == 'USGS_NWIS_Web_Old'):
+#         data_dir = repo_dir + 'USGS_NWIS_Web_Old/_New/'
+    #----------------------------------------------------------
     elif (db_str == 'USGS_NWIS_WQP1'):
         data_dir = repo_dir + 'USGS_NWIS_WQP/_New/'
     elif (db_str == 'USGS_NWIS_WQP2'):
@@ -221,7 +253,7 @@ def get_new_data_dir( db_str='USGS_NWIS_Web' ):
 
 #   get_new_data_dir()
 #---------------------------------------------------------------------
-def get_new_tsv_filepath( db_str='USGS_NWIS_Web' ):
+def get_new_tsv_filepath( db_str='USGS_NWIS_Stream_Daily' ):
 
     data_dir = get_data_dir( db_str )
     new_dir  = get_new_data_dir( db_str )
@@ -259,7 +291,8 @@ def get_new_tsv_filepath( db_str='USGS_NWIS_Web' ):
     elif (db_str == 'USGS_FPS'):
         file_path = new_dir + 'FPS_basin_info.tsv'
     elif (db_str == 'USGS_GAGES2_all'):
-        file_path = new_dir + 'new_gages2_all.tsv'
+        file_path = new_dir + 'new_gages2_all_plus.tsv'
+        ### file_path = new_dir + 'new_gages2_all.tsv'
     elif (db_str == 'USGS_GAGES2_ref'):
         file_path = new_dir + 'new_gages2_ref.tsv'
     elif (db_str == 'USGS_GAGES2_SB3'):
@@ -277,9 +310,18 @@ def get_new_tsv_filepath( db_str='USGS_NWIS_Web' ):
     # but apparently most don't measure discharge.
     #----------------------------------------------------------------- 
     elif (db_str == 'USGS_NWIS_Web'):
-        file_path = data_dir + 'NWIS_Stream_Site_Daily_Data.tsv'
-    elif (db_str == 'USGS_NWIS_Web_Old'):
-        file_path = data_dir + 'USGS_stream_gauge_data.tsv'     ############
+        file_path = data_dir + 'NWIS_Stream_Sites_Daily.tsv'
+    #---------
+    elif (db_str == 'USGS_NWIS_Stream_Daily'):
+        file_path = data_dir + 'NWIS_Stream_Sites_Daily.tsv'
+    elif (db_str == 'USGS_NWIS_Stream_Current'):
+        file_path = data_dir + 'NWIS_Stream_Sites_Current.tsv'
+        ## file_path = data_dir + 'NWIS_Streamflow_Site_Data.tsv'
+    elif (db_str == 'USGS_NWIS_Stream_All'):
+        file_path = data_dir + 'NWIS_Stream_Sites_All.tsv'
+    #--------------------------------------
+#     elif (db_str == 'USGS_NWIS_Web_Old'):
+#         file_path = data_dir + 'USGS_stream_gauge_data.tsv'
     #-----------------------------------------------------------------
     # The one for 'USGS_NWIS3' has 145375 "stream-type" records
     # but apparently most don't measure discharge.
@@ -331,12 +373,13 @@ def get_n_records( db_str ):
     elif (db_str == 'USGS_GAGES2_SB3'):
         n_records = 1947
     elif (db_str == 'USGS_HCDN'):
-        n_records = 1703    ### should be 1639 ??
+        n_records = 1703    ### they say it is 1639 ??
     elif (db_str == 'USGS_HLR'):
         n_records = 43391    # Total, correct number
         # n_records = 47479  # w/ repeated VALUEs
     elif (db_str == 'USGS_HLR_outlets'):
         n_records = 9539    # Have outlet info in new_hlr_na_all.csv
+    #--------------------------------------------------------
     elif (db_str == 'USGS_NHDplus_v1'):   # Mostly EPA
         n_records = 19031
     elif (db_str == 'USGS_NHDplus_v2'):   # Mostly EPA
@@ -346,9 +389,20 @@ def get_n_records( db_str ):
     #-----------------------------------------------
 #     elif (db_str == 'USGS_NWIS_Web_Old'):
 #         n_records = 24520
-    #-----------------------------------------------
+    #------------------------------------------------------------
+    # These are for ALL sites of type "Stream", but some may
+    # not measure stage or compute discharge.
+    #------------------------------------------------------------ 
     elif (db_str == 'USGS_NWIS_Web'):
-        n_records = 27915             # Daily Q (via NWIS Web)
+        n_records = 27915             # Daily, via NWIS Web
+    #------------------------------  
+    elif (db_str == 'USGS_NWIS_Stream_Daily'):
+        n_records = 27915             # Daily, via NWIS Web
+    elif (db_str == 'USGS_NWIS_Stream_Current'):
+        n_records = 11215             # Current, via NWIS Web
+    elif (db_str == 'USGS_NWIS_Stream_All'):
+        n_records = 158817            # Inventory, via NWIS Web
+    #------------------------------------------------------------
     elif (db_str == 'USGS_NWIS_WQP1'):
         n_records = 14707             # Daily Q (via WQP)
     elif (db_str == 'USGS_NWIS_WQP2'):
@@ -405,35 +459,28 @@ def get_heading_map():
         'id':None, 'name':None,  # but have Closest_USGS_ID
         'lon':'OUTLON', 'lat':'OUTLAT', 'minlon':'MINLON'}
     #-------------------------------------------------------------
-    h_map['USGS_GAGES2_all'] = {
-        'id':'STAID', 'name':'STANAME',
-        'lon':'LNG_GAGE', 'lat':'LAT_GAGE', 'minlon':'MINLON'}
-    h_map['USGS_GAGES2_ref'] = {
-        'id':'STAID', 'name':'STANAME',
-        'lon':'LNG_GAGE', 'lat':'LAT_GAGE', 'minlon':'MINLON'}  
+    GAGES2_map = {'id':'STAID', 'name':'STANAME',
+                  'lon':'LNG_GAGE', 'lat':'LAT_GAGE', 'minlon':'MINLON'}
+    h_map['USGS_GAGES2_all'] = GAGES2_map
+    h_map['USGS_GAGES2_ref'] = GAGES2_map 
     h_map['USGS_GAGES2_SB3'] = {
         'id':'StnID', 'name':None,
-        'lon':None, 'lat':None, 'minlon':None}      
+        'lon':None, 'lat':None, 'minlon':None}   ### CHECK THIS ############  
     #-------------------------------------------------------------
-    h_map['USGS_NWIS_Web'] = {
-        'id':'site_no', 'name':'site_nm',
-        'lon':'dec_long_va', 'lat':'dec_lat_va', 'minlon':None}      
+    NWIS_map = {'id':'site_no', 'name':'site_nm',
+                'lon':'dec_long_va', 'lat':'dec_lat_va', 'minlon':None}
+    h_map['USGS_NWIS_Web']            = NWIS_map
+    h_map['USGS_NWIS_Stream_Daily']   = NWIS_map
+    h_map['USGS_NWIS_Stream_Current'] = NWIS_map
+    h_map['USGS_NWIS_Stream_All']     = NWIS_map       
     #-------------------------------------------------------------
-    h_map['USGS_NWIS_WQP1'] = {
-        'id':  'MonitoringLocationIdentifier',
-        'name':'MonitoringLocationName',
-        'lon': 'LongitudeMeasure',
-        'lat': 'LatitudeMeasure', 'minlon':None}
-    h_map['USGS_NWIS_WQP2'] = {
-        'id':  'MonitoringLocationIdentifier',
-        'name':'MonitoringLocationName',
-        'lon': 'LongitudeMeasure',
-        'lat': 'LatitudeMeasure', 'minlon':None}
-    h_map['USGS_NWIS_WQP3'] = {
-        'id':  'MonitoringLocationIdentifier',
-        'name':'MonitoringLocationName',
-        'lon': 'LongitudeMeasure',
-        'lat': 'LatitudeMeasure', 'minlon':None}            
+    WQP_map = {'id':  'MonitoringLocationIdentifier',
+               'name':'MonitoringLocationName',
+               'lon': 'LongitudeMeasure',
+               'lat': 'LatitudeMeasure', 'minlon':None}
+    h_map['USGS_NWIS_WQP1'] = WQP_map
+    h_map['USGS_NWIS_WQP2'] = WQP_map
+    h_map['USGS_NWIS_WQP3'] = WQP_map            
     #-------------------------------------------------------------
     h_map['NSF_CZO'] = {
         ##### Will be adding USGS id soon
@@ -517,7 +564,9 @@ def get_id_column( db_str ):
              'NSF_LTER', 'USDA_ARS',
              'USGS_FPS', 'USGS_GAGES2_all', 'USGS_GAGES2_ref',
              'USGS_GAGES2_SB3', 'USGS_HCDN', 'USGS_HLR']
-    list2 = ['NSF_NEON', 'USGS_NWIS_Web']
+#     list2 = ['NSF_NEON', 'USGS_NWIS_Web']
+    list2 = ['NSF_NEON', 'USGS_NWIS_Web', 'USGS_NWIS_Stream_Daily',
+             'USGS_NWIS_Stream_Current', 'USGS_NWIS_Stream_All']
     list3 = ['USGS_NWIS_WQP1', 'USGS_NWIS_WQP2', 'USGS_NWIS_WQP3']
 
     if (db_str in list1):
@@ -568,7 +617,9 @@ def get_name_column( db_str ):
     list1 = ['NOAA_HADS', 'NSF_LTER', 'USGS_FPS',
              'USGS_GAGES2_all', 'USGS_GAGES2_ref', 'USGS_HCDN'  ]
              ########## 'USGS_GAGES2_SB3' ]  # No name given
-    list2 = ['CAMELS', 'MOPEX', 'NSF_NEON', 'USGS_NWIS_Web']
+    list2 = ['CAMELS', 'MOPEX', 'NSF_NEON',
+             'USGS_NWIS_Web', 'USGS_NWIS_Stream_Daily',
+             'USGS_NWIS_Stream_Current', 'USGS_NWIS_Stream_All']    
     list3 = ['USGS_NWIS_WQP1', 'USGS_NWIS_WQP2', 'USGS_NWIS_WQP3']
     list4 = ['USDA_ARS']
     list5 = ['NOAA_via_API']
@@ -626,16 +677,18 @@ def get_lon_column( db_str ):
     #        However, the centroid lat/lon are provided.
     #-------------------------------------------------------
     list1 = ['USGS_GAGES2_all', 'USGS_GAGES2_ref']
-    list2 = ['USGS_NWIS_WQP1', 'USGS_NWIS_WQP2', 'USGS_NWIS_WQP3']   
+    list2 = ['USGS_NWIS_Web', 'USGS_NWIS_Stream_Daily',
+             'USGS_NWIS_Stream_Current', 'USGS_NWIS_Stream_All']
+    list3 = ['USGS_NWIS_WQP1', 'USGS_NWIS_WQP2', 'USGS_NWIS_WQP3']   
     if (db_str in list1):
         lon_col = 7
-    elif (db_str == 'USGS_NWIS_Web'):
+    elif (db_str in list2):
         lon_col = 5
     elif (db_str == 'NOAA_HADS'):
         lon_col = 3
     elif (db_str == 'USGS_HCDN'):
         lon_col = 10
-    elif (db_str in list2):
+    elif (db_str in list3):
         lon_col = 12
     else:
         print('SORRY: No match for:', db_str)
@@ -679,15 +732,16 @@ def get_lat_column( db_str ):
     #        However, the centroid lat/lon are provided.
     #-------------------------------------------------------
     list1 = ['USGS_GAGES2_all', 'USGS_GAGES2_ref']
-    list2 = ['USGS_NWIS_WQP1', 'USGS_NWIS_WQP2', 'USGS_NWIS_WQP3']
-    list3 = ['USGS_NWIS_Web', 'NOAA_HADS']   
+    list2 = ['NOAA_HADS', 'USGS_NWIS_Web', 'USGS_NWIS_Stream_Daily',
+             'USGS_NWIS_Stream_Current', 'USGS_NWIS_Stream_All']
+    list3 = ['USGS_NWIS_WQP1', 'USGS_NWIS_WQP2', 'USGS_NWIS_WQP3']
     if (db_str in list1):
         lat_col = 6
-    elif (db_str in list3):
+    elif (db_str in list2):
         lat_col = 4
     elif (db_str == 'USGS_HCDN'):
         lat_col = 9
-    elif (db_str in list2):
+    elif (db_str in list3):
         lat_col = 11
     else:
         print('SORRY: No match for:', db_str)
@@ -734,7 +788,9 @@ def get_minlon_column( db_str, SILENT=False ):
 #---------------------------------------------------------------------
 def get_header_lines( db_str='USGS_NWIS_Web'):
 
-    if (db_str == 'USGS_NWIS_Web'):
+    list1 = ['USGS_NWIS_Web', 'USGS_NWIS_Stream_Daily',
+             'USGS_NWIS_Stream_Current']   
+    if (db_str in list1):
         #-------------------------------------------------
         # This depends on how many attributes are saved.
         # Get 77 for all attributes on NWIS Web page.
@@ -745,6 +801,11 @@ def get_header_lines( db_str='USGS_NWIS_Web'):
     elif (db_str == 'USGS_FPS'):
         nh_lines = 2
     else:
+        #----------------------------------------------------
+        # For 'USGS_NWIS_Stream_All', all but one of the 77
+        # NWIS header lines was removed due to the need to
+        # download the data in 2 parts.
+        #----------------------------------------------------
         nh_lines = 1
    
     return nh_lines
@@ -759,7 +820,7 @@ def skip_header_lines( file_unit, key='USGS_NWIS_Web'):
     
 #   skip_header_lines()
 #---------------------------------------------------------------------
-def get_basin_ids( db_str='USGS_NWIS_Web' ):
+def get_basin_ids( db_str='USGS_NWIS_Stream_Daily' ):
 
     file_path = get_new_tsv_filepath( db_str )
     file_unit = open( file_path, 'r' )
@@ -795,14 +856,15 @@ def get_basin_ids( db_str='USGS_NWIS_Web' ):
             id = id.replace('USGS-', '')
         if (len(id) == 7):
             id = '0' + id   # Need for NOAA_via_API, others?
-        id_list.append( id )     
+        id_list.append( id )
+        #### print('id =', id)     
 
     file_unit.close()
     return id_list
       
 #   get_basin_ids()
 #---------------------------------------------------------------------
-def compare_basin_ids( db_str1='USGS_NWIS_Web',
+def compare_basin_ids( db_str1='USGS_NWIS_Stream_Daily',
                        db_str2='USGS_GAGES2_all',
                        PRINT_DIFF1_IDs=False, PRINT_DIFF2_IDs=False):
 
@@ -818,7 +880,7 @@ def compare_basin_ids( db_str1='USGS_NWIS_Web',
     # only 7 MOPEX basins are not in USGS_GAGES2_all.
     #-------------------------------------------------------------
     # db_str1='USGS_NWIS_Web', db_str2='MOPEX' shows that:
-    # 1 MOPEX basins is not in USGS_NWIS_Web.
+    # 1 MOPEX basin is not in USGS_NWIS_Web.
     #-------------------------------------------------------------
     # db_str1='USGS_GAGES2_ref', db_str2='CAMELS' shows that:
     # 0 CAMELS basins are not in USGS_GAGES2_ref.
@@ -860,7 +922,7 @@ def compare_basin_ids( db_str1='USGS_NWIS_Web',
 
 #   compare_basin_ids()
 #---------------------------------------------------------------------
-def get_basin_names( db_str='USGS_NWIS_Web', UPPER=True,
+def get_basin_names( db_str='USGS_NWIS_Stream_Daily', UPPER=True,
                      REPLACE_PUNCTUATION=True,
                      REPLACE_ABBREVIATIONS=True,
                      FIX_SPELLINGS=True,
@@ -910,7 +972,7 @@ def get_basin_names( db_str='USGS_NWIS_Web', UPPER=True,
       
 #   get_basin_names()
 #---------------------------------------------------------------------
-def compare_basin_names( db_str1='USGS_NWIS_Web',
+def compare_basin_names( db_str1='USGS_NWIS_Stream_Daily',
                          db_str2='USGS_GAGES2_all'):
 
     name_list1 = get_basin_names( db_str1 )
@@ -944,8 +1006,11 @@ def get_dataset_key_names():
     'USDA_ARS', 'USGS_FPS', 'USGS_GAGES2_all',
     'USGS_GAGES2_ref', 'USGS_GAGES2_SB3', 
     'USGS_HCDN',  ###########################################
-    'USGS_HLR', 'USGS_NWIS_Web', 'USGS_NWIS_WQP1',
-    'USGS_NWIS_WQP2', 'USGS_NWIS_WQP3']
+    'USGS_HLR',
+    'USGS_NWIS_Web',
+#     'USGS_NWIS_Stream_Daily', 'USGS_NWIS_Stream_Current',
+#     'USGS_NWIS_Stream_All', 
+    'USGS_NWIS_WQP1', 'USGS_NWIS_WQP2', 'USGS_NWIS_WQP3']
     return names
 
 #   get_dataset_key_names()

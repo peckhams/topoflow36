@@ -5,7 +5,7 @@ a NextGen "hydrofabric" consisting of 2 GeoJSON files:
    catchment-data.geojson and nexus-data.geojson
 such as geographic bounding box and outlet coordinates.
 The get_dem() method subsets a GDAL VRT DEM to create a DEM for
-a specified catchment.
+a specified catchment.  This version uses built-in json vs. geopandas.
 """
 #------------------------------------------------------------------------
 #
@@ -32,8 +32,22 @@ a specified catchment.
 #        ~/.aws/credentials and  ~/.aws/config.
 #       
 #------------------------------------------------------------------------
-
-from osgeo import gdal, osr
+# 2024-08.  - Changes to get_dem() and get_bounding_box() to support
+#             new hydrofabric JSON files (derived for geopkg files)
+#             that use Albers coordinates for catchment polygons
+#             instead of Geographic (WGS84) coordinates.
+#           - Added these keywords with defaults to get_dem()
+#              out_xres_sec, out_yres_sec, out_xres_m, out_yres_m
+#           - Changes to __init__() to pass files & directories.
+#           - Added get_gdal_version().
+#           - Added checks for GDAL and Hydrofabric versions.
+#           - albers2latlon -> albers2geo; latlon2albers -> geo2albers
+#           - Added many more comments.
+#
+# 2024-07.  Changes to get_dem() to support new location for the
+#           hydrofabric VRT DEM (a new AWS S3 bucket).
+#------------------------------------------------------------------------
+from osgeo import gdal, osr, ogr
 # import glob
 
 # Note: This version uses json (built-in) instead of geopandas
@@ -42,12 +56,15 @@ import numpy as np
 
 #------------------------------------------------------------------------
 #
+#  get_gdal_version()
+#
 #  class catchment()
 #      __init__()
-#      read_data()
+#      read_catchment_data()
 #      get_bounding_box()
 #      get_raster_cellsize()   #####
 #      get_raster_bounds()     #####
+#      get_forcing_csv()   # also available as separate function below
 #      get_dem()
 #      get_outlet_coords()
 #      get_headwater_catchments()  # 11/30/22
@@ -56,34 +73,92 @@ import numpy as np
 #      print_info()
 #
 #  get_hydrofab_dem_info()
-#  Albers_XY()  # (function)
-#  Albers_q()
-#  Albers_XY2()
 #
+#  ### These can be used to check GDAL transformations.
+#  Albers_XY_Sphere()  # (function)
+#  Albers_q_for_Ellipsoid()
+#  Albers_XY_Ellipsoid()
+#
+#  get_forcing_csv()
+#  get_forcing_csv_boto()
+#
+#------------------------------------------------------------------------
+def get_gdal_version():
+
+    #-----------------------------------------------------------
+    # Note:  When using the GDAL Python package version 3.*
+    #        the order of arguments to TransformPoint must be
+    #        flipped (i.e. y,x vs. x,y) as compared to version
+    #        2.*.  This means that most online examples (that
+    #        use version 2.*) are wrong.
+    #        The order of the return values is (x,y) for both.
+    #        See:  https://github.com/OSGeo/gdal/issues/1546
+    #-----------------------------------------------------------
+    print('GDAL version =', gdal.__version__)
+    print()
+
+#   get_gdal_version()
 #------------------------------------------------------------------------
 class catchment:
     #--------------------------------------------------------------------
-    def __init__(self, catchment_data_file=None, nexus_data_file=None,
-                       spatial_dir=None):
+    def __init__(self, ngen_dir=None, forcing_dir=None,
+          spatial_dir=None, catchment_json_file=None,
+          nexus_json_file=None):
 
-        # Rename data_file to json_file ??
-        if (spatial_dir is None):
-            # Relative to the top level of ngen repo folder.
-            # spatial_dir = './data/topoflow/spatial/'
-            spatial_dir = '/Users/peckhams/Dropbox/GitHub/ngen/data/topoflow/spatial/'
-            ## spatial_dir = './'
-        if (catchment_data_file is None):
-            catchment_data_file = 'catchment_data_HUC01.geojson'
-        if (nexus_data_file is None):
-            nexus_data_file     = 'nexus_data_HUC01.geojson'
-        self.catchment_data_file = spatial_dir + catchment_data_file
-        self.nexus_data_file     = spatial_dir + nexus_data_file
-        #------------------
-        self.read_data()
+        if ((ngen_dir is None) or (spatial_dir is None) or
+            (forcing_dir is None) or (catchment_json_file is None) or
+            (nexus_json_file is None)):
+            print('ERROR: When creating an instance of the catchment')
+            print('       class, you must set ngen_dir, spatial_dir')
+            print('       forcing_dir, catchment_json_file, and')
+            print('       nexus_json_file.')
+            print()
+
+#         if (ngen_dir is None):
+#             ngen_dir = '/Users/peckhams/Dropbox/GitHub/ngen/'
+#         #-------------------------------------------------------------
+#         if (spatial_dir is None):
+#             spatial_dir = ngen_dir + 'data/topoflow/spatial/huc01/'
+#         #-------------------------------------------------------------
+#         if (forcing_dir is None):
+#             forcing_dir = ngen_dir + 'data/topoflow/forcing/huc01/'
+#         #-------------------------------------------------------------       
+#         if (catchment_json_file is None):
+#             catchment_json_file = 'catchment_data_HUC01.geojson'
+#         #------------------------------------------------------------- 
+#         if (nexus_json_file is None):
+#             nexus_json_file     = 'nexus_data_HUC01.geojson'
+  
+        #----------------------------------------        
+        # Add path separator to end, if missing  
+        #----------------------------------------     
+        if (ngen_dir[-1] != '/'):
+            ngen_dir += '/'
+        if (spatial_dir[-1] != '/'):
+            spatial_dir += '/' 
+        if (forcing_dir[-1] != '/'):
+            forcing_dir += '/'                                       
+        #-------------------------------------------------
+        # This requires both spatial_dir and forcing_dir
+        # to be child directories of ngen_dir and may be
+        # too restrictive.  But could catch errors.
+        #-------------------------------------------------
+#         if not(spatial_dir.startswith(ngen_dir)):
+#             spatial_dir = ngen_dir + spatial_dir
+#         if not(forcing_dir.startswith(ngen_dir)):
+#             forcing_dir = ngen_dir + forcing_dir
+        #-----------------------------------------------                        
+        self.ngen_dir            = ngen_dir
+        self.spatial_dir         = spatial_dir
+        self.forcing_dir         = forcing_dir
+        self.catchment_json_file = catchment_json_file
+        self.nexus_json_file     = nexus_json_file
+        #-----------------------------------------------
+        self.read_catchment_data()
     
     #   __init__()    
     #--------------------------------------------------------------------
-    def read_data(self):
+    def read_catchment_data(self):
 
         #--------------------------------------------------------------     
         # Note: This version reads the GeoJSON files directly without
@@ -91,8 +166,11 @@ class catchment:
         #       into a "simulated dataframe".
         #--------------------------------------------------------------
         print('Reading catchment info files...')
-        cat_unit = open( self.catchment_data_file, 'r')
-        nex_unit = open( self.nexus_data_file, 'r')
+        cat_path = self.spatial_dir + self.catchment_json_file
+        nex_path = self.spatial_dir + self.nexus_json_file  
+        cat_unit = open( cat_path, 'r')
+        nex_unit = open( nex_path, 'r')
+        
         self.catchment_data = json.load( cat_unit )
         self.nexus_data     = json.load( nex_unit )
         cat_unit.close()
@@ -101,7 +179,7 @@ class catchment:
         print('Read info for', nc, 'catchments.')
         print()
                        
-    #   read_data()   
+    #   read_catchment_data()
     #--------------------------------------------------------------------
     def get_bounding_box(self, cat_id_str, buffer_sec=0, REPORT=False):
 
@@ -113,8 +191,37 @@ class catchment:
         #         Coordinates can be given as Geographic or Albers.
         #--------------------------------------------------------------   
         df = self.catchment_data['features']  # returns list of dictionaries
+
+        #----------------------------------------------------        
+        # Get name of CRS used for catchment polygon coords
+        # Also see Notes in:  get_outlet_coords().
+        #---------------------------------------------------- 
+        # Not used before 2024-08.  Examples include:
+        # "crs": { "type": "name", "properties": { "name":
+        #      "urn:ogc:def:crs:OGC:1.3:CRS84" } },
+        #
+        # "crs": { "type": "name", "properties": { "name":
+        #      "urn:ogc:def:crs:EPSG::5070" } },
+        #----------------------------------------------------
         crs_name = self.catchment_data['crs']['properties']['name']
-        record = next((item for item in df if item["id"] == cat_id_str), False)
+        if (crs_name.endswith('CRS84')):
+            crs_type = 'Geographic'
+        elif (crs_name.endswith('5070')):
+            crs_type = 'Albers'  ## 'Albers Equal Area Conic'
+        else:
+            crs_type = 'Unknown'
+
+        #-----------------------------------------------         
+        # Make sure cat_id occurs in this GeoJSON file
+        #-----------------------------------------------
+        try:
+            # Original GeoJSON structure (used for AGU 2022)
+            hydrofabric_version = '1'       
+            record = next((item for item in df if item["id"] == cat_id_str), False)
+        except:
+            # 2024-08.  New GeoJSON structure (from Lauren)
+            hydrofabric_version = '2'
+            record = next((item for item in df if item["properties"]["divide_id"] == cat_id_str), False)
         if not(record):
             print('SORRY, cat_id not found:', cat_id_str)
             print('Returning.')
@@ -125,12 +232,120 @@ class catchment:
         pairs   = np.array( rgc, dtype='float64')
         xcoords = pairs[:,0]
         ycoords = pairs[:,1]
-        self.minlon = xcoords.min()
-        self.minlat = ycoords.min()
-        self.maxlon = xcoords.max()
-        self.maxlat = ycoords.max()
-        bounds = [self.minlon, self.minlat, self.maxlon, self.maxlat] 
-                
+        xmin    = xcoords.min()
+        ymin    = ycoords.min()
+        xmax    = xcoords.max()
+        ymax    = ycoords.max()
+        #----------------------------------------------
+        # Before 2024-08-29, assumed that coordinates
+        # were Geographic (WGS84) vs. Albers.
+        #----------------------------------------------                
+        if (crs_type == 'Geographic'):
+            #--------------------------------------------
+            # Appears to be Geographic coordinates but
+            # check if all values are in valid range.
+            # bounds = [minlon, minlat, maxlon, maxlat]
+            #--------------------------------------------
+            GEO = ( (np.abs(xmin) < 180) and (np.abs(xmax) < 180) and
+                    (np.abs(ymin) < 90)  and (np.abs(ymax) < 90) )
+            if not(GEO):
+                print('SORRY, crs_type = Geographic, but values')
+                print('are out of range.  Returning.')
+                print()
+                return -1
+            self.minlon = xmin
+            self.minlat = ymin
+            self.maxlon = xmax
+            self.maxlat = ymax
+            bounds = [xmin, ymin, xmax, ymax]
+        elif (crs_type == 'Albers'):
+            #-----------------------------------
+            # Appears to be Albers coordinates
+            #-----------------------------------
+            self.albers_xmin = xmin
+            self.albers_ymin = ymin
+            self.albers_xmax = xmax
+            self.albers_ymax = ymax
+            print('Albers xmin =', xmin)
+            print('Albers xmax =', xmax)
+            print('Albers ymin =', ymin)
+            print('Albers ymax =', ymax)
+            print('Albers xrange =', xmax-xmin, 'meters')
+            print('Albers yrange =', ymax-ymin, 'meters')
+            print()       
+            #----------------------------------------------------
+            # Convert coords from Hydrofabric Albers to lon/lat
+            #----------------------------------------------------
+            # This function is called from get_dem() which
+            # will save wgs84 and albers spatial ref in self.
+            #----------------------------------------------------
+            albers2geo = osr.CoordinateTransformation( self.albers, self.wgs84 )
+            #------------------------------------------------------
+            # NOTE!  GDAL's TransformPoint command has issues
+            # with the order of the arguments and return values,
+            # depending on which version of GDAL is used, and
+            # possibly on which projections are involved.
+            # See Notes for get_gdal_version().
+            #------------------------------------------------------
+            # (1) https://github.com/OSGeo/gdal/issues/1546
+            #     GDAL 2:  (x,y) = TransformPoint(lon,lat)
+            #     GDAL 3:  (x,y) = TransformPoint(lat,lon)
+            #------------------------------------------------------
+            # (2) https://github.com/OSGeo/gdal/issues/1986
+            #     GDAL 3.01, 3.02: (lat,lon) = TransformPoint(x,y)
+            #------------------------------------------------------
+            # (3) https://github.com/OSGeo/gdal/issues/1974         
+            #------------------------------------------------------
+            # The following code works for GDAL version 3.0.2.
+            # Note that:  (lat,lon) = a2g.TransformPoint(x,y)
+            #------------------------------------------------------
+            ul_latlon = albers2geo.TransformPoint( xmin, ymax )
+            ll_latlon = albers2geo.TransformPoint( xmin, ymin )
+            ur_latlon = albers2geo.TransformPoint( xmax, ymax )
+            lr_latlon = albers2geo.TransformPoint( xmax, ymin )
+            #------------------------------------
+            lats = [ul_latlon[0], ll_latlon[0],
+                    ur_latlon[0], lr_latlon[0]]
+            lons = [ul_latlon[1], ll_latlon[1],
+                    ur_latlon[1], lr_latlon[1]]
+
+            #----------------------------------------------------
+            # It is not clear what will work with GDAL versions
+            # 2.0 or 3.0.0.  Once known, this code block can be
+            # finished.
+            #----------------------------------------------------                
+#             if (gdal.__version__.startswith('2')):
+#                 ul_lonlat = albers2geo.TransformPoint( xmin, ymax )
+#                 ll_lonlat = albers2geo.TransformPoint( xmin, ymin )
+#                 ur_lonlat = albers2geo.TransformPoint( xmax, ymax )
+#                 lr_lonlat = albers2geo.TransformPoint( xmax, ymin )
+#             else:
+#                 ul_lonlat = albers2geo.TransformPoint( ymax, xmin )
+#                 ll_lonlat = albers2geo.TransformPoint( ymin, xmin )
+#                 ur_lonlat = albers2geo.TransformPoint( ymax, xmax )
+#                 lr_lonlat = albers2geo.TransformPoint( ymin, xmax )
+            #------------------------------------
+#             lons = [ul_lonlat[1], ll_lonlat[1],
+#                     ur_lonlat[1], lr_lonlat[1]]
+#             lats = [ul_lonlat[0], ll_lonlat[0],
+#                     ur_lonlat[0], lr_lonlat[0]]
+            #------------------------------------
+#             lons = [ul_lonlat[0], ll_lonlat[0],
+#                     ur_lonlat[0], lr_lonlat[0]]
+#             lats = [ul_lonlat[1], ll_lonlat[1],
+#                     ur_lonlat[1], lr_lonlat[1]]
+            #-----------------------------------------------------------
+            minlon = np.min( lons )
+            maxlon = np.max( lons )
+            minlat = np.min( lats )
+            maxlat = np.max( lats )
+            bounds = [minlon, minlat, maxlon, maxlat]
+        else:
+            print('SORRY, Unknown crs_type:', crs_type)
+            print('Returning.')
+            print()
+            return -1 
+        #-----------------------------------------------------------                                                       
         # print('## record["id"] =', record['id'])
         # print('## record["geometry"]["coordinates"][0] =', rgc)
         # print('## type(rgc) =', type(rgc) )  # list
@@ -238,8 +453,124 @@ class catchment:
 
     #   get_raster_bounds()
     #--------------------------------------------------------------------
+    def get_forcing_csv( self, cat_id_str=None, forcing_dir=None):
+ 
+        if (cat_id_str is None):
+            cat_id_str = self.site_prefix   # (e.g. 'cat-84')
+        if (forcing_dir is None):
+            forcing_dir = self.forcing_dir
+
+        #-------------------------------------------------------------  
+        # GDAL can read non-public files from an AWS S3 bucket using
+        # its VSIS3 mechanism (Virtual Server Instance - S3).
+        # It will automatically find your AWS credentials in the
+        # ".aws" folder in your home directory.
+        #-------------------------------------------------------------
+        # Although we could use the boto3 Python package provided
+        # by AWS, this avoids adding that extra dependency to
+        # TopoFlow.  See: get_csv_boto() below.
+        #-------------------------------------------------------------
+        # Pre-signed URLs are another, more-complicated option.
+        #-------------------------------------------------------------     
+        # Note: This uses AWS definitions for bucket & key
+        #-------------------------------------------------------------
+        bucket_name = 'formulations-dev/'  # on Lynker AWS
+        csv_file    = cat_id_str + '.csv'
+        key_name    = 'forcings/huc01/csv/' + csv_file
+        in_csv_path = '/vsis3/' + bucket_name + key_name
+        out_csv_path = forcing_dir + csv_file
+
+        #--------------------------------    
+        # Open input & output CSV files
+        #---------------------------------------------------------
+        # In GDAL, CSV files are considered to have just 1 layer
+        # and the "features" are the rows in the CSV file.
+        # Use the general GDAL pattern for reading CSV files.
+        #---------------------------------------------------------
+        print('Trying to open CSV file in S3 bucket...')
+        driver = ogr.GetDriverByName('CSV')
+        dataSource = driver.Open( in_csv_path, 0)
+        if (dataSource is None):
+            print('SORRY, Could not open CSV file via VSIS3 in GDAL.')
+            print('       Check your AWS credentials.')
+            print()
+            return
+        layer = dataSource.GetLayer()  # CSV files have just 1 layer 
+        out_csv_unit = open( out_csv_path, 'w' )
+
+        print('Copying CSV file from AWS S3 bucket:')
+        print('   ' + bucket_name)
+        print('to: ' + forcing_dir + ' ...')
+        print()
+        n_lines = 0
+
+        #------------------------------------
+        # Get the field names for CSV file
+        # and write header to out_csv_file.
+        #------------------------------------
+        # Method 1:  Simpler than Method 2
+        #------------------------------------
+        field_names = [field.name for field in layer.schema]
+        header = ''
+        n_fields = len(field_names)
+        for k in range(n_fields):
+            header += field_names[k] + ','
+        #------------
+        # Method 2:
+        #------------   
+    #     field_names = list()
+    #     layer_defn = layer.GetLayerDefn()
+    #     n_fields   = layer_defn.GetFieldCount()
+    #     header = ''
+    #     for k in range(n_fields):
+    #         field_defn = layer_defn.GetFieldDefn(k)
+    #         field_name = field_defn.name
+    #         field_names.append( field_name )
+    #         header += field_name + ','
+        #-----------------------------------
+        header = header[:-1] + '\n'
+        out_csv_unit.write( header )
+        #-----------------------------------
+#         print('field_names in CSV file =')
+#         print(field_names)
+#         print()
+        ## print('dir(layer) =')
+        ## print( dir(layer) )
+ 
+        #--------------------------------------   
+        # Write each line to a local CSV file
+        #--------------------------------------
+        for feature in layer:
+            line = ''
+            for name in field_names:
+                value = feature.GetField( name )
+                line += (value + ',')
+            line = line[:-1] + '\n'
+            out_csv_unit.write( line )
+            n_lines += 1
+            ## if (n_lines == 1):
+            ##     print( 'dir(feature0) =')
+            ##     print( dir(feature) )
+      
+        #---------------------------------    
+        # Close input & output CSV files
+        #---------------------------------
+        ## in_csv_unit.close()
+        dataSource = None
+        out_csv_unit.close()
+        print('field_names in CSV file =')
+        print(field_names)
+        print('Wrote', n_lines + 1, 'lines to local CSV file:')
+        print('   ' + out_csv_path)
+        print('Finished.') 
+        print()
+            
+    #   get_forcing_csv()
+    #--------------------------------------------------------------------
     def get_dem( self, cat_id_str='cat-29', RESAMPLE_ALGO='bilinear',
                  CLIP_ALBERS=False, CLIP_GEO=False,
+                 out_xres_sec=3.0, out_yres_sec=3.0,  # (arcsec)
+                 out_xres_m=90.0,  out_yres_m=90.0,   # (meters)
                  zfactor=100, REPORT=True,
                  SAVE_DEM=True, DEM_out_file=None):
 
@@ -254,11 +585,17 @@ class catchment:
         #        length grid cell sizes (e.g. 100 meters).
         #        The original hydrofabric DEM uses this same Albers
         #        projection, but the catchment polygons described
-        #        in the catchment & nexus GeoJSON files use
-        #        Geographic coordinates.
+        #        in the catchment & nexus GeoJSON files can be
+        #        given with Geographic or Albers coordinates.
+        #------------------------------------------------------------
+        # 2024-08.  The latest hydrofabric GeoJSON files give the
+        # coordinates of catchment polygons in Albers coordinates
+        # instead of Geographic.  Modified get_boundin_box() to
+        # support this.
         #------------------------------------------------------------             
         if not(CLIP_ALBERS or CLIP_GEO):
-            CLIP_ALBERS=True
+            CLIP_GEO=True  # (2024-08)
+            ### CLIP_ALBERS=True
         if (SAVE_DEM and (DEM_out_file is None)):
             DEM_out_file = cat_id_str + '_rawDEM.tif'
             # DEM_out_file = cat_id_str + '_DEM.tif'
@@ -416,8 +753,9 @@ class catchment:
         # Note:  get_bounding_box() uses the catchment & nexus
         #        GeoJSON files and returns a geographic bounding
         #        box: minlon, minlat, maxlon, maxlat
-        #---------------------------------------------------------           
-        out_bounds_geo = self.get_bounding_box( cat_id_str, REPORT=True )
+        #---------------------------------------------------------
+        # MOVED AFTER NEXT BLOCK           
+        ## out_bounds_geo = self.get_bounding_box( cat_id_str, REPORT=True )
 
         #--------------------------------------------------------
         # Set the output Spatial Reference System via EPSG code
@@ -447,11 +785,17 @@ class catchment:
         wgs84 = osr.SpatialReference()
         wgs84.ImportFromEPSG( 4326 )
         wkt_albers = vrt_unit.GetProjection()
-        # wkt = wkt.replace('unnamed', 'Albers')  ####
+        # wkt_albers = wkt_albers.replace('unnamed', 'Albers')  ####
+        # print('wkt_albers =', wkt_albers)
         albers = osr.SpatialReference()
         albers.ImportFromWkt( wkt_albers )
-        ### albers.ImportFromEPSG( 5070 )   #####
-       
+        ## albers.ImportFromEPSG( 5070 )   #####
+        #---------------------------------------------------
+        # Save these in self for use by get_bounding_box()
+        #---------------------------------------------------
+        self.wgs84  = wgs84   # (2024-08)
+        self.albers = albers  # (2024-08)
+
         #-------------------------------------------------
         # Option to check the WKT (well known text) info
         #-------------------------------------------------
@@ -468,6 +812,16 @@ class catchment:
 #         print( wkt2 )
 #         print()
 
+        #------------------------------------------
+        #  GDAL bounds  = [ulx, lry, lrx, uly] 
+        #               = [xmin, ymin, xmax, ymax]
+        #---------------------------------------------------------
+        # Note:  get_bounding_box() uses the catchment & nexus
+        #        GeoJSON files and returns a geographic bounding
+        #        box: minlon, minlat, maxlon, maxlat
+        #---------------------------------------------------------           
+        out_bounds_geo = self.get_bounding_box( cat_id_str, REPORT=True )
+        
         #--------------------------------------------------
         # Option to clip using original Albers projection
         # or the similar EPSG:5070 projection
@@ -476,8 +830,8 @@ class catchment:
             #-----------------------------------------------------
             # Transform geographic bounding box to Albers extent
             #---------------------------------------------------------------
-            albers2latlon = osr.CoordinateTransformation( albers, wgs84 )
-            latlon2albers = osr.CoordinateTransformation( wgs84, albers )
+            ## albers2geo = osr.CoordinateTransformation( albers, wgs84 )
+            geo2albers = osr.CoordinateTransformation( wgs84, albers )
             #---------------------------------------------------------------
             minlon = out_bounds_geo[0]
             minlat = out_bounds_geo[1]
@@ -491,10 +845,10 @@ class catchment:
             #        use version 2.*) are wrong.
             #        See:  https://github.com/OSGeo/gdal/issues/1546
             #-----------------------------------------------------------
-            albers_ul_xyz = latlon2albers.TransformPoint( maxlat, minlon )
-            albers_ll_xyz = latlon2albers.TransformPoint( minlat, minlon )
-            albers_ur_xyz = latlon2albers.TransformPoint( maxlat, maxlon )
-            albers_lr_xyz = latlon2albers.TransformPoint( minlat, maxlon )
+            albers_ul_xyz = geo2albers.TransformPoint( maxlat, minlon )
+            albers_ll_xyz = geo2albers.TransformPoint( minlat, minlon )
+            albers_ur_xyz = geo2albers.TransformPoint( maxlat, maxlon )
+            albers_lr_xyz = geo2albers.TransformPoint( minlat, maxlon )
             print('Albers UL xyz:', albers_ul_xyz)
             print('Albers LL xyz:', albers_ll_xyz)
             print('Albers UR xyz:', albers_ur_xyz)
@@ -504,6 +858,9 @@ class catchment:
                      albers_ur_xyz[0], albers_lr_xyz[0]]
             yvals = [albers_ul_xyz[1], albers_ll_xyz[1],
                      albers_ur_xyz[1], albers_lr_xyz[1]]
+            #------------------------------------------------
+            # Round down or up to nearest integer in meters
+            #------------------------------------------------
             xmin = np.floor( np.min( xvals ) )
             xmax = np.ceil( np.max( xvals ) )
             ymin = np.floor( np.min( yvals ) )
@@ -518,8 +875,8 @@ class catchment:
             # For hydrofabric DEM (dem.vrt), xres = yres = 30 m,
             # which is roughly 1 arcsecond at the equator.
             #-----------------------------------------------------
-            out_xres = 90.0    # [meters]   ########
-            out_yres = 90.0    # [meters]   ########
+            out_xres = out_xres_m  # default: 90.0 [meters]
+            out_yres = out_yres_m  # default: 90.0 [meters]
 
             #------------------------------------------
             # Option to compute new DEM cols and rows
@@ -544,25 +901,14 @@ class catchment:
             out_srs = "EPSG:4326"
             out_bounds = out_bounds_geo
             out_xy_units = 'degrees'
+            #----------------------------------------------------
+            # For hydrofabric DEM (dem.vrt), xres = yres = 30 m,
+            # which is roughly 1 arcsecond at the equator.
             # If dstSRS = WGS84, out_xres units must be degrees
-            out_xres = 3.0/3600  # 3 arcseconds -> degrees
-            out_yres = 3.0/3600
-
-        #----------------------------------------
-        # Change/increase the grid cell size ??
-        #----------------------------------------
-        # out_xres = vrt_xres   # no change
-        # out_yres = vrt_yres
-        #-------------------------
-        # out_xres = (2 * vrt_xres)
-        # out_yres = (2 * vrt_yres)
-        #----------------------------------------------------------
-        # For hydrofabric DEM (dem.vrt), xres = yres = 30 meters,
-        # which is roughly 1 arcsecond at the equator.
-        # If dstSRS = WGS84, out_xres units must be degrees
-        #----------------------------------------------------------        
-        # out_xres = 2./3600  # (2 arcseconds -> degrees)
-        # out_yres = 2./3600  # (2 arcseconds -> degrees)
+            # Divide by 3600 to convert arcseconds to degrees.
+            #----------------------------------------------------
+            out_xres = (out_xres_sec / 3600) # default: 3 arcsecs
+            out_yres = (out_yres_sec / 3600) # default: 3 arcsecs
 
         #------------------------------------------------  
         # Resample & clip and write new grid to GeoTIFF
@@ -619,6 +965,18 @@ class catchment:
         ## print('###### Nodata after warp =', VRT_nodata)
         w1 = (dem == VRT_nodata)   # boolean array
         w2 = np.invert( w1 )
+        if (w2.sum() == 0):
+            #-----------------------------------------------
+            # All values are VRT_nodata, perhaps in ocean.
+            #-----------------------------------------------
+            print('SORRY, But all values in the given bounding')
+            print('box are nodata values, perhaps in the ocean.')
+            print('Returning -1.')
+            print()
+            vrt_unit = None   # Close vrt_file
+            out_unit = None   # Close out_file
+            return -1
+        
         out_nodata = -9999.0
         # out_nodata = np.nan
         #----------------------------
@@ -888,17 +1246,19 @@ def get_hydrofab_dem_info():
     
 #   get_hydrofab_dem_info()
 #------------------------------------------------------------------------
-def Albers_XY( lon_deg, lat_deg, REPORT=True ):
+def Albers_XY_Sphere( lon_deg, lat_deg, REPORT=True ):
 
     #----------------------------------------------------
-    # Note:  Albers_XY(-96, 23) = (0,0).
+    # Note: This version assumes Earth is a sphere.
+    #----------------------------------------------------
+    # Note:  Albers_XY_Sphere(-96, 23) = (0,0).
     # Bounds of conterminous US are:
     #     maxlat = 49.382808
     #     minlat = 24.521208
     #     maxlon = -66.945392
     #     minlon = -124.736342
-    # Albers_XY( minlon, maxlat) =
-    # Albers_XY( -124.736342, 49.382808 )
+    # Albers_XY_Sphere( minlon, maxlat) =
+    # Albers_XY_Sphere( -124.736342, 49.382808 )
     #----------------------------------------------------
     # Note: lon,lat of Bellingham, Washington =
     #       -122.485886, 48.769768 
@@ -911,7 +1271,7 @@ def Albers_XY( lon_deg, lat_deg, REPORT=True ):
     lon  = lon_deg * d2r
     
     #---------------------------------------------
-    # Note: Formulas from Snyder's Book, p. 100.
+    # Note: Formulas from Snyder's Book, p. 99.
     #---------------------------------------------
     R    = 6378137      # (radius of Earth, meters)  (using semi-major axis)
     lat1 = 29.5 * d2r   # (standard parallel 1)
@@ -940,21 +1300,23 @@ def Albers_XY( lon_deg, lat_deg, REPORT=True ):
 
     return (x,y)
         
-#   Albers_XY()
+#   Albers_XY_Sphere()
 #------------------------------------------------------------------------
-def Albers_q( lat, e ):
+def Albers_q_for_Ellipsoid( lat, e ):
 
     term1 = np.sin(lat) / (1 - (e * np.sin(lat))**2)
     term2 = np.log( (1 - e*np.sin(lat)) / (1 + e*np.sin(lat)) )
     term2 = term2 / (2*e)
     return (1 - e**2) * (term1 - term2)
 
-#   Albers_q
+#   Albers_q_for_Ellipsoid()
 #------------------------------------------------------------------------
-def Albers_XY2( lon_deg, lat_deg, REPORT=True ):
+def Albers_XY_Ellipsoid( lon_deg, lat_deg, REPORT=True ):
 
     #----------------------------------------------------
-    # Note:  Albers_XY2(-96, 23) = (0,0).
+    # Note: This version assumes Earth is an ellipsoid.
+    #----------------------------------------------------
+    # Note:  Albers_XY_Ellipsoid(-96, 23) = (0,0).
     # Bounds of conterminous US are:
     #     maxlat = 49.382808
     #     minlat = 24.521208
@@ -996,10 +1358,10 @@ def Albers_XY2( lon_deg, lat_deg, REPORT=True ):
     
     m1    = np.cos(lat1) / np.sqrt(1 - (e * np.sin(lat1))**2)
     m2    = np.cos(lat2) / np.sqrt(1 - (e * np.sin(lat2))**2)
-    q     = Albers_q( lat, e )
-    q0    = Albers_q( lat0, e)
-    q1    = Albers_q( lat1, e)
-    q2    = Albers_q( lat2, e)
+    q     = Albers_q_for_Ellipsoid( lat, e )
+    q0    = Albers_q_for_Ellipsoid( lat0, e)
+    q1    = Albers_q_for_Ellipsoid( lat1, e)
+    q2    = Albers_q_for_Ellipsoid( lat2, e)
     n     = (m1**2 - m2**2) / (q2 - q1)    
     C     = (m1**2 + (n * q1))
     rho   = (a / n) * np.sqrt(C - (n * q))
@@ -1036,9 +1398,231 @@ def Albers_XY2( lon_deg, lat_deg, REPORT=True ):
 
     return (x,y)
         
-#   Albers_XY2()
+#   Albers_XY_Ellipsoid()
 #------------------------------------------------------------------------
+# def Albers_lonlat_Ellipsoid( x,y, REPORT=True ):
+# 
+#     #------------------------------------------------
+#     # Note: This gives the inverse transformation.
+#     # Note: Formulas from Snyder's Book, p. 101-102.
+#     #------------------------------------------------
+#     a    = 6378137      # (Earth ellipsoid semi-major axis)
+#     f    = (1 / 298.257222101004)  # (Earth flattening)
+#     e    = np.sqrt( f * (2 - f) )
+#     lat1 = 29.5 * d2r   # (standard parallel 1)
+#     lat2 = 45.5 * d2r   # (standard parallel 2)
+#     lon0 = -96.0 * d2r  # (center lon)
+#     lat0 = 23.0 * d2r   # (center lat)
+# 
+#     m1    = np.cos(lat1) / np.sqrt(1 - (e * np.sin(lat1))**2)
+#     m2    = np.cos(lat2) / np.sqrt(1 - (e * np.sin(lat2))**2)
+#     ## q     = Albers_q_for_Ellipsoid( lat, e )
+#     q0    = Albers_q_for_Ellipsoid( lat0, e)
+#     q1    = Albers_q_for_Ellipsoid( lat1, e)
+#     q2    = Albers_q_for_Ellipsoid( lat2, e)
+#     n     = (m1**2 - m2**2) / (q2 - q1)    
+#     C     = (m1**2 + (n * q1))
+#     ## rho   = (a / n) * np.sqrt(C - (n * q))
+#     rho0  = (a / n) * np.sqrt(C - (n * q0)) 
+#     theta = n * (lon - lon0)
 
+#   Albers_lonlat_Ellipsoid()
+#------------------------------------------------------------------------
+def get_forcing_csv( cat_id_str='cat-84',
+        forcing_dir='/Users/peckhams/Downloads/'): 
+
+    #-------------------------------------------------------------  
+    # GDAL can read non-public files from an AWS S3 bucket using
+    # its VSIS3 mechanism (Virtual Server Instance - S3).
+    # It will automatically find your AWS credentials in the
+    # ".aws" folder in your home directory.
+    #-------------------------------------------------------------
+    # Although we could use the boto3 Python package provided
+    # by AWS, this avoids adding that extra dependency to
+    # TopoFlow.  See: get_csv_boto() below.
+    #-------------------------------------------------------------
+    # Pre-signed URLs are another, more-complicated option.
+    #-------------------------------------------------------------     
+    # Note: This uses AWS definitions for bucket & key
+    #-------------------------------------------------------------
+    bucket_name = 'formulations-dev/'
+    csv_file    = cat_id_str + '.csv'
+    key_name    = 'forcings/huc01/csv/' + csv_file
+    in_csv_path = '/vsis3/' + bucket_name + key_name
+    out_csv_path = forcing_dir + csv_file
+
+    #--------------------------------    
+    # Open input & output CSV files
+    #---------------------------------------------------------
+    # In GDAL, CSV files are considered to have just 1 layer
+    # and the "features" are the rows in the CSV file.
+    # Use the general GDAL pattern for reading CSV files.
+    #---------------------------------------------------------
+    print('Trying to open CSV file in S3 bucket...')
+    driver = ogr.GetDriverByName('CSV')
+    dataSource = driver.Open( in_csv_path, 0)
+    if (dataSource is None):
+        print('SORRY, Could not open CSV file via VSIS3 in GDAL.')
+        print('       Check your AWS credentials.')
+        print()
+        return
+    layer = dataSource.GetLayer()  # CSV files have just 1 layer 
+    out_csv_unit = open( out_csv_path, 'w' )
+
+    print('Copying CSV file from AWS S3 bucket:')
+    print('   ' + bucket_name)
+    print('to: ' + forcing_dir + ' ...')
+    print()
+    n_lines = 0
+
+    #------------------------------------
+    # Get the field names for CSV file
+    # and write header to out_csv_file.
+    #------------------------------------
+    # Method 1:  Simpler than Method 2
+    #------------------------------------
+    field_names = [field.name for field in layer.schema]
+    header = ''
+    n_fields = len(field_names)
+    for k in range(n_fields):
+        header += field_names[k] + ','
+    #------------
+    # Method 2:
+    #------------   
+#     field_names = list()
+#     layer_defn = layer.GetLayerDefn()
+#     n_fields   = layer_defn.GetFieldCount()
+#     header = ''
+#     for k in range(n_fields):
+#         field_defn = layer_defn.GetFieldDefn(k)
+#         field_name = field_defn.name
+#         field_names.append( field_name )
+#         header += field_name + ','
+    #-----------------------------------
+    header = header[:-1] + '\n'
+    out_csv_unit.write( header )
+    #-----------------------------------
+    print('field_names in CSV file =')
+    print(field_names)
+    print()
+    ## print('dir(layer) =')
+    ## print( dir(layer) )
+ 
+    #--------------------------------------   
+    # Write each line to a local CSV file
+    #--------------------------------------
+    for feature in layer:
+        line = ''
+        for name in field_names:
+            value = feature.GetField( name )
+            line += (value + ',')
+        line = line[:-1] + '\n'
+        out_csv_unit.write( line )
+        n_lines += 1
+        ## if (n_lines == 1):
+        ##     print( 'dir(feature0) =')
+        ##     print( dir(feature) )
+      
+    #---------------------------------    
+    # Close input & output CSV files
+    #---------------------------------
+    ## in_csv_unit.close()
+    dataSource = None
+    out_csv_unit.close()
+    print('Wrote', n_lines + 1, 'lines to local CSV file:')
+    print('   ' + out_csv_path)
+    print('Finished.') 
+    print()
+            
+#   get_forcing_csv()
+#--------------------------------------------------------------------
+def get_forcing_csv_boto( cat_id_str='cat-11223', 
+        ngen_dir='/Users/peckhams/Dropbox/GitHub/ngen/'):
+        forcing_dir='/data/topoflow/forcing/huc01/'
+
+    #---------------------------------------------------------                  
+    # Note: This version requires for the AWS package boto3
+    #       to be installed (via "conda install boto3") in 
+    #       the tf36 conda environment.  It has been tested
+    #       with a clone of tf36 called tf36B.
+    #---------------------------------------------------------
+    # Note: The csv files are in an S3 bucket that belongs
+    #       to Lynker and it isn't public.  But boto3 reads
+    #       your AWS credentials from dot files in home dir.
+    #---------------------------------------------------------
+    import boto3
+    # import botocore
+
+    csv_file = cat_id_str + '.csv' 
+    bucket_name = 'formulations-dev'
+    key = 'forcings/huc01/csv/' + csv_file  # got from AWS console
+    s3  = boto3.resource('s3')
+
+    out_csv_path = ngen_dir + forcing_dir + csv_file
+    print('Copying CSV file:')
+    print('   ' + key)
+    print('from AWS S3 bucket: ' + bucket_name)
+    print('to ngen forcing dir: ')
+    print('   ' + forcing_dir + ' ...')
+
+    try:
+        s3.Bucket(bucket_name).download_file(key, out_csv_path)
+    except:
+        print('SORRY, Unable to download file from AWS:')
+        print('  Bucket =', bucket_name)
+        print('  File   =', key)
+        print('  You may not have permission to access it,')
+        print('  or there may be an error in the filepath.')
+        print()  
+    #-------------------------------------------------
+    # Note: botocore is only used for this exception
+    #-------------------------------------------------        
+#     except botocore.exceptions.ClientError as e:
+#         if e.response['Error']['Code'] == "404":
+#             print("The object does not exist.")
+#         else:
+#             raise
+
+    print('Finished.') 
+    print()
+            
+#   get_forcing_csv_boto()
+#--------------------------------------------------------------------
+# def get_forcing_csv2( cat_id_str='cat-11223',
+#               ngen_dir='/Users/peckhams/Dropbox/GitHub/ngen/'):
+# 
+#     #------------------------------------------------------                  
+#     # Note: This version uses the built-in urllib package
+#     #       but may only work for public S3 buckets.
+#     #       Otherwise get "HTTP Error 403: Forbidden".
+#     #------------------------------------------------------    
+#     ## import urllib
+#     from urllib.request import urlopen
+# 
+#     forcing_dir = ngen_dir + 'data/topoflow/forcing/huc01/'
+#     csv_file = cat_id_str + '.csv'
+#     csv_url  = 'https://formulations-dev.s3.us-east-2.amazonaws.com/'
+#     csv_url += 'forcings/huc01/csv/' + csv_file
+# 
+#     bucket_name = 'formulations-dev'
+#     key = 'forcings/huc01/csv/' + csv_file  # got from AWS console
+# 
+#     print('Copying CSV file:')
+#     print('   ' + key)
+#     print('from AWS S3 bucket: ' + bucket_name)
+#     print('to ngen forcing dir: ')
+#     print('   ' + forcing_dir + ' ...')
+#     contents = urlopen( csv_url )
+#     
+#     out_csv_path = forcing_dir + csv_file
+#     out_unit = open( out_csv_path, 'w')
+#     out_unit.write( contents )
+#     out_unit.close()
+#     print('Finished.') 
+#     print()
+#         
+# #   get_forcing_csv2()                    
+#--------------------------------------------------------------------
 
 
       

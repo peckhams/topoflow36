@@ -10,8 +10,10 @@
 #    - Some of the included RFC basins likely have hydrograph type.
 #
 #---------------------------------------------------------------------
-# Copyright (c) 2023-2024, Scott D. Peckham
+# Copyright (c) 2023-2025, Scott D. Peckham
 #
+# Jul 2025. Modified to get SWB Class, Aridity, and Snow fraction
+#           for all 9067 GAGES-II CONUS basins.
 # Mar 2024. Added nws_url, wfo, goes_id, eco_region, pedts_obs,
 #             & hsa to the combined TSV created by collate().
 #           Updated: get_att_key_list, get_heading_list,
@@ -46,7 +48,8 @@
 #  % conda activate tf36  (has gdal package)
 #  % python
 #  >>> from topoflow.utils.ngen import collate_basins as cb
-#  >>> cb.collate()
+#  >>> cb.collate(max_count=1000)   # to test
+#  >>> cb.collate(max_count=32000)  # should get all basins
 #
 #---------------------------------------------------------------------
 #
@@ -370,7 +373,9 @@ def get_att_key_list():
     'long_name', 'closest_site_id', 'closest_site_dist',
     'site_url', 'huc_url', 'nws_url',
     'status', 'start_date', 'end_date',
-    'eco_region', 'hlr_code', 'swb_class', 'hgraph_type' ]
+    'eco_region', 'hlr_code', 'swb_class', 'hgraph_type',
+    'aridity', 'snow_fraction']
+    ### 'precip_timing_index']
 
     return att_key_list
     
@@ -395,7 +400,8 @@ def get_heading_list():
     'Long_Name', 'Closest_Site_ID', 'Closest_Site_Dist',
     'Site_URL', 'HUC_URL', 'NWS_URL',
     'Status_as_FPS', 'Start_Date', 'End_Date',
-    'Eco_Region', 'HLR_Code_Outlet', 'SWB_Class', 'Hgraph_Type' ]
+    'Eco_Region', 'HLR_Code_Outlet', 'SWB_Class', 'Hgraph_Type',
+    'Aridity', 'Snow Fraction' ]   #######
     
     #-------------------------------------------
     # Using "title" doesn't give best results.
@@ -460,7 +466,11 @@ def get_default_att_dict( site_id ):
     att_dict[ 'hlr_code' ]     = '0'
     att_dict[ 'swb_class' ]    = '-'
     att_dict[ 'hgraph_type' ]  = '-'
-    #---------------------------------------    
+    #--------------------------------------- 
+    att_dict[ 'aridity' ]       = '-'
+    att_dict[ 'snow_fraction' ] = '-'
+    ## att_dict[ 'precip_timing_index' ] = '-'
+  
     return att_dict
 
 #   get_default_att_dict()
@@ -561,6 +571,12 @@ def update_attributes( val_list, key, att_dict ):
         if (country_code == '-'):          
             att_dict[ 'country_code'] = 'US'
         #----------------------------------------------------
+        att_dict[ 'swb_class' ] = val_list[25] # (in new_gages2_all_plus.tsv)
+        att_dict[ 'aridity' ]   = val_list[22]
+        att_dict[ 'snow_fraction' ] = val_list[24]
+        ## att_dict[ 'precip_timing_index' ] = val_list[23]
+        #################################################################
+        #----------------------------------------------------        
         UPDATE_ATTS = True
     #------------------------------------------------------
     if (key == 'USGS_GAGES2_REF'):
@@ -570,6 +586,12 @@ def update_attributes( val_list, key, att_dict ):
         pass 
     #------------------------------------------------------
     if (key == 'USGS_GAGES2_SB3'):
+        #---------------------------------------------
+        # 2025-07-10.  Now getting SWB class for all
+        # GAGES-II basins (ref + non-ref) in CONUS
+        #---------------------------------------------
+        pass
+        
         #------------------------------------------------
         # Fully contained in 'USGS_GAGES2_REF', but
         # many more attributes available if needed,
@@ -579,7 +601,7 @@ def update_attributes( val_list, key, att_dict ):
         # All CAMELS basins are in this dataset.
         #-----------------------------------------
         ## att_dict[ 'swb_class' ] = val_list[68] # original SWB  
-        att_dict[ 'swb_class' ] = val_list[69] # extended SWB
+        # att_dict[ 'swb_class' ] = val_list[69] # extended SWB
         ## DON'T NEED UPDATE_ATTS=True HERE.
     #------------------------------------------------------
     if (key == 'NOAA_HADS'):
@@ -715,6 +737,8 @@ def get_box_center_lon_lat( att_dict ):
 def collate( out_tsv_file=None, max_count=1000, DEBUG=False ):
 
     #-------------------------------------------------------------
+    # Note: Set max_count=32000 or higher to get everything.
+    #-------------------------------------------------------------
     # Note that the "USGS_NWIS_Web" dataset includes many gauges
     # that are no longer active. The "USGS_GAGES2_all" dataset
     # is newer and contains both "ref" and "non-ref" basins.
@@ -754,7 +778,10 @@ def collate( out_tsv_file=None, max_count=1000, DEBUG=False ):
     #    to map NWS loc ID to GOES_ID and HSA_ID.
     #    to map NWS loc ID to WFO/CWA
     #----------------------------------------------
-    rfc_dict1  = rfc.get_rfc_dict1()
+    # rfc_dict1 data is from USGS-HADS crosswalk.
+    # rfc_dict2 data is from RFC shapefile
+    #----------------------------------------------    
+    rfc_dict1  = rfc.get_rfc_dict1()  # info from USGS-HADS
     rfc_dict2  = rfc.get_rfc_dict2()  # info from RFC shapefile
     huc12_dict = usgs.get_huc12_dict()
     
@@ -968,7 +995,14 @@ def collate( out_tsv_file=None, max_count=1000, DEBUG=False ):
 #                     att_dict[ 'maxlon' ] = bbox[1]
 #                     att_dict[ 'minlat' ] = bbox[2]
 #                     att_dict[ 'maxlat' ] = bbox[3]
-                #------------------------------------------------------
+                #------------------------------------------------------------
+                # For most datasets, a given USGS site ID only occurs once
+                # in the ID-sorted TSV file for that dataset.  However, in
+                # the file: new_hads_info_sorted.tsv, there are 40 site IDs
+                # that occur 2 or more times.  For repeated site IDs, this
+                # code block causes only the last data row for a given ID
+                # in the dataset to be written or saved.
+                #------------------------------------------------------------
                 while (True):
                     # Note: Only get last data row for repeated IDs
                     line = get_next_line( key, file_units )
@@ -982,23 +1016,11 @@ def collate( out_tsv_file=None, max_count=1000, DEBUG=False ):
                     else:
                         ## n_duplicates[ key ] += 1
                         print('#########################################')
-                        print('### WARNING! duplicate site ID found')
-                        print('### for key =', key)
+                        print('##  WARNING!  Duplicate USGS site ID')
+                        print('##  found for dataset =', key)
+                        print('##  Possible auxiliary gauge.')
                         print('#########################################')
                         print()
-                #------------------------------------------------------                              
-#                 line = get_next_line( key, file_units )
-#                 if (line != ''):
-#                     next_id = get_next_id( line, key, delim )
-#                     if (next_id == db_site_id):
-#                         print('#########################################')
-#                         print('### WARNING! duplicate site ID found')
-#                         print('### for key =', key)
-#                         print('#########################################')
-#                         print()
-#                 
-#                     current_id[ key ]   = next_id
-#                     current_line[ key ] = line
 
         #------------------------------------
         # Expand abbreviations in site_name
@@ -1064,7 +1086,12 @@ def collate( out_tsv_file=None, max_count=1000, DEBUG=False ):
             ## print('###### ASSIGNED WFO USING rfc_dict1')
         else:
             if (nws_id != '-'):
-                print('## nws_id =', nws_id, 'is not in rfc_dict1 or rfc_dict2.')
+                #---------------------------------------------
+                # rfc_dict1 info is from USGS-HADS crosswalk
+                # rfc_dict2 info is from RFC shapefile
+                #---------------------------------------------
+                print('  ## Could not get WFO ID for basin.')
+                print('  ## nws_id =', nws_id, 'is not in rfc_dict1 or rfc_dict2.')
                 print()
 
         #------------------------------------
@@ -1687,10 +1714,10 @@ def add_czo_basins( czo_unit, out_tsv_unit,
         #----------------------------------------------------
         # Get the USGS HLR code for this site via lon & lat
         #----------------------------------------------------
-        print('## In add_czo:')
-        print('## lon =', lon)
-        print('## lat =', lat)
-        print()
+#         print('## In add_czo:')
+#         print('## lon =', lon)
+#         print('## lat =', lat)
+#         print()
         hlr_code = hlr.get_hlr_code_for_point( lon, lat,
             hlr_grid=hlr_code_grid, grid_info=hlr_grid_info )
         att_dict[ 'hlr_code' ] = hlr_code  # as a string         

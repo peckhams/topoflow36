@@ -1,25 +1,39 @@
 
 #---------------------------------------------------------------------
-# Copyright (c) 2023-2024, Scott D. Peckham
+# Copyright (c) 2023-2025, Scott D. Peckham
 #
+# Jul 2025. Wrote combine_tsv_files().
+#           Moved some code from gages2B_utils.py into knoben_utils.py
+#              which are now called by create_tsv_for_climate().
+#           Moved 3 routines from gages2B_utils.py into this file:
+#              get_month_list(), get_gages2_monthly_precip_array(),
+#              and get_gages2_monthly_temp_array().
+# Jun 2025. Modified get_precip_timing_index() to compute temp
+#              range and to work on all GAGES2 CONUS basins and
+#              not just GAGES2 SB3.
+#           Wrote compare_temp_ranges(). 
+# Aug 2024. Discovered an error in the SB3 dataset, where 16 site
+#           IDs that should start with "0" do not.  Modified the
+#           function: merge_SB_info_for_regions() to fix this.
+#           SB3 basins are just the GAGES-II ref basins within CONUS.
 # Jan 2024. Renamed all "ngen/utils" files to end in "_utils.py"
 #           instead of "_tools.py"
 #           Modified to use new data_utils.py.
-# Nov 2023. Wrote get_swb_points to plot points on a map.
+# Nov 2023. Wrote get_swb_points() to plot points on a map.
 # Oct 2023. Moved get_swb_class_names() and get_swb_class() to
 #           swb_utils.py.      
 #           Added merge_SB_info_for_regions(),
-#           get_csv_headings(), compute_swb_classes(),
+#           get_csv_headings(), create_tsv_for_climate(),
 #           get_snow_precip_fraction(), get_precip_timing_index(),
 #           get_aridity_index(), get_swb_class_names(),
-#           get_swb_class().      
+#           get_swb_class().
+# Jul 2023. Added get_gages2_data_dir.      
 # Jun 2023. Started from hlr_utils.py and wrote a more general
 #              set of shapefile functions in shape_utils.py.
 #           Then wrote create_tsv0, create_tsv_from_shapefile,
 #              get_poly_feature_v0, get_poly_feature,
 #              get_gage_ID, check_gage_ID, check_overshoot,
 #              check_bounding_box, check_basin_poly_file.
-# Jul 2023. Added get_basin_repo_dir, get_gages2_data_dir.
 #
 #---------------------------------------------------------------------
 #
@@ -30,12 +44,12 @@
 #  >>> g2.create_tsv_from_shapefile( nf_max=100, tsv_file="TEST2.tsv",
 #         basin_option='ALL')
 #  >>> g2.create_tsv_from_shapefile( nf_max=10000 )
-#  >>> g2.compute_swb_classes(ORIGINAL=False)
+#  >>> g2.create_tsv_for_climate(ORIGINAL=False)
+#  >>> g2.combine_tsv_files()
 #
 #---------------------------------------------------------------------
 #
 #  get_gages2_data_dir()
-#  create_tsv0()          # OBSOLETE?
 #      
 #  create_tsv_from_shapefile()
 #  get_poly_feature()
@@ -45,17 +59,26 @@
 #  check_bounding_box()
 #  check_basin_poly_file()
 #
-#  The following functions are for GAGES-II "Selected Basins":
-#  https://www.sciencebase.gov/catalog/item/5a4e9bcbe4b0d05ee8c6643f
-#  which are a subset of the Reference basins.
-#
-#  merge_SB_info_for_regions()
+#  -----------------------------------------------------------
+#  Functions for the Selected Basin (SB) dataset (CONUS Ref)
+#  -----------------------------------------------------------
+#  get_problem_ids()  # these are missing the leading "0"
 #  get_csv_headings()
-#  compute_swb_classes()
+#  merge_SB_info_for_regions()
+#
+#  get_month_list()
+#  get_gages2_monthly_precip_array()  # read 12 values from GAGES-II
+#  get_gages2_monthly_temp_array()    # read 12 values from GAGES-II
+#
+#  create_tsv_for_climate()
 #     get_snow_precip_fraction()
 #     get_precip_timing_index()
 #     get_aridity_index()
 #  get_swb_points()
+#
+#  compare_temp_ranges()
+#
+#  combine_tsv_files()  # from shapefile & for climate.
 #
 #---------------------------------------------------------------------
 
@@ -63,9 +86,12 @@ import numpy as np
 from osgeo import ogr, osr
 import json, sys, time
 
+from matplotlib import pyplot as plt   # for monthly temp plots
+
 from topoflow.utils.ngen import data_utils as dtu
 from topoflow.utils.ngen import shape_utils as su
 from topoflow.utils.ngen import swb_utils as swb
+from topoflow.utils.ngen import knoben_utils as ku
 
 #---------------------------------------------------------------------
 def get_gages2_data_dir( gtype='root' ):
@@ -83,56 +109,6 @@ def get_gages2_data_dir( gtype='root' ):
     return data_dir
        
 #   get_gages2_data_dir()
-#---------------------------------------------------------------------
-# def create_tsv0( data_dir=None,
-#                  shape_file='gagesII_9322_sept30_2011.shp',                    
-#                  prj_file  ='gagesII_9322_sept30_2011.prj',
-# #                shape_file='bas_ref_all.shp',                    
-# #                prj_file  ='bas_ref_all.prj',
-#                  tsv_file='new_gages2_all.tsv',
-# #                 tsv_file='new_gages2_conus.csv',
-#                  nf_max=50, REPORT=True, basin_option='ALL'):
-# 
-#     #--------------------------------------------------------
-#     # Note:  Attributes in shapefile attribute table for
-#     #        gagesII_9322_sept30_2011.shp are:
-#     # 
-#     # g2_staid      = attributes['STAID']    # station ID  
-#     # g2_staname    = attributes['STANAME']  # station name
-#     # g2_class      = attributes['CLASS']    # Ref or Non-ref
-#     # g2_aggecoregi = attributes['AGGECOREGI'] 
-#     # g2_drain_sqkm = attributes['DRAIN_SQKM'] 
-#     # g2_huc02      = attributes['HUC02'] 
-#     # g2_lat_gage   = attributes['LAT_GAGE'] 
-#     # g2_lng_gage   = attributes['LNG_GAGE'] 
-#     # g2_state      = attributes['STATE'] 
-#     # g2_hcdn_2009  = attributes['HCDN_2009']
-#     # g2_active09   = attributes['ACTIVE09'] 
-#     # g2_flyrs1900  = attributes['FLYRS1900']                        
-#     # g2_flyrs1950  = attributes['FLYRS1950'] 
-#     # g2_flyrs1990  = attributes['FLYRS1990'] 
-#     #--------------------------------------------------------
-#     if (data_dir is None):
-#         data_dir = get_gages2_data_dir()
-# 
-#     insert_key = 'LNG_GAGE'
-#     if (basin_option == 'REF'):
-#         filter_key   = 'CLASS'
-#         filter_value = 'Ref'
-#     elif (basin_option == 'NONREF'):
-#         filter_key   = 'CLASS'
-#         filter_value = 'Non-ref'
-#     elif (basin_option == 'ALL'):
-#         filter_key   = None
-#         filter_value = None
-# 
-#     su.create_tsv_from_shapefile(data_dir=data_dir, shape_file=shape_file,
-#                       prj_file=prj_file, nf_max=nf_max,
-#                       insert_key=insert_key,
-#                       ADD_BOUNDING_BOX=True,
-#                       filter_key=filter_key, filter_value=filter_value)
-# 
-# #   create_tsv0()
 #---------------------------------------------------------------------
 def create_tsv_from_shapefile( data_dir=None, tsv_file=None,
         point_dir=None, polygon_dir=None,
@@ -659,11 +635,46 @@ def check_basin_poly_file():
     
     print('Number of features =', n_features)
 
-#   check_basin_poly_file()   
+#   check_basin_poly_file()
+#---------------------------------------------------------------------
+def get_problem_ids():
+
+    #-----------------------------------------------------  
+    # (2024-08-15)  These IDs should all start with "0",
+    # but they are missing in the original SB3 dataset.
+    #-----------------------------------------------------
+    problem_ids = [
+    '136230002', '142400103', '143400680', '163626650',
+    '204382800', '208111310', '208650112', '21536097',
+    '344894205', '357479650', '423401815', '72632962',
+    '72632971', '72632982', '73274406', '810464660']
+    return problem_ids
+
+#   get_problem_ids()
+#---------------------------------------------------------------------
+def get_csv_headings( csv_unit, delim=',' ):
+
+    #------------------------------------------------------------
+    # Note: Info for "selected basins" (sb) is saved in 19
+    #       CSV files, one for each of 19 "regions".
+    #       Region numbers are 1 to 9, 10L, 10U, & 11 to 18.
+    #       However, not all files have the same col. headings.
+    #       See: SB3_BCs_byRegion.xlsx. for missing columns.  
+    #------------------------------------------------------------ 
+    header   = csv_unit.readline()
+    headings = header.split( delim )
+    for k in range( len(headings) ):
+        headings[k] = headings[k].strip()
+    return headings
+   
+#   get_csv_headings()   
 #---------------------------------------------------------------------
 def merge_SB_info_for_regions( out_csv_file=None, SORT_BY_ID=True,
                                REPORT=False):
 
+    #----------------------------------------------------------------
+    #  GAGES-II "Selected Basins" are the Reference basins in CONUS.
+    #  https://www.sciencebase.gov/catalog/item/5a4e9bcbe4b0d05ee8c6643f
     #----------------------------------------------------------------
     # Note: SB stands for "Selected Basins".  Info for these basins
     #       is saved in 19 different CSV files, for "regions".
@@ -690,7 +701,13 @@ def merge_SB_info_for_regions( out_csv_file=None, SORT_BY_ID=True,
     region_list = ['1','2','3','4','5','6','7','8','9', '10L','10U',
                   '11','12','13','14','15','16','17','18']
     n_basins   = 0
-  
+
+    #-----------------------------------------------------  
+    # (2024-08-15)  These IDs should all start with "0",
+    # but they are missing in the original SB3 dataset.
+    #-----------------------------------------------------
+    problem_ids = get_problem_ids()
+    
     print('Working...')  
     for k in range(19):  
         region_str = region_list[k]   
@@ -728,6 +745,15 @@ def merge_SB_info_for_regions( out_csv_file=None, SORT_BY_ID=True,
             #----------------------------------------
             line = line[:-1]
             values = line.split( delim )
+            #-----------------------------------------------------
+            # Add a leading "0" that is missing from problem IDs
+            #-----------------------------------------------------
+            site_id = values[0]
+            if (site_id in problem_ids):
+                values[0] = '0' + values[0]
+            #--------------------------------------            
+            # Insert region_str as new, 3rd value
+            #--------------------------------------
             values.insert(2, region_str)
             #------------------------------------------------
             # Create a dictionary to map headings to values
@@ -791,55 +817,138 @@ def merge_SB_info_for_regions( out_csv_file=None, SORT_BY_ID=True,
          
 #   merge_SB_info_for_regions()
 #---------------------------------------------------------------------
-def get_csv_headings( csv_unit, delim=',' ):
-
-    #------------------------------------------------------------
-    # Note: Info for "selected basins" (sb) is saved in 19
-    #       CSV files, one for each of 19 "regions".
-    #       Region numbers are 1 to 9, 10L, 10U, & 11 to 18.
-    #       However, not all files have the same col. headings.
-    #       See: SB3_BCs_byRegion.xlsx. for missing columns.  
-    #------------------------------------------------------------ 
-    header   = csv_unit.readline()
-    headings = header.split( delim )
-    for k in range( len(headings) ):
-        headings[k] = headings[k].strip()
-    return headings
-   
-#   get_csv_headings()
 #---------------------------------------------------------------------
-def compute_swb_classes( in_csv_file=None, ORIGINAL=False,
-                         NEW_TSV=False, USE_B3=False, REPORT=False ):
+def get_month_list():
+
+    month_list = [
+    'JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN',
+    'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC']
+    return month_list
+    
+#   get_month_list()
+#---------------------------------------------------------------------
+def get_gages2_monthly_precip_array( gages2_val_dict ):
+
+    #-------------------------------------------
+    # Note: Measurement units are centimeters.
+    #       Make sure PET has the same units.
+    #--------------------------------------------------------
+    #       The mean annual PET given in GAGES-II has units
+    #       of millimeters.  See notes in gages2_utils.py.
+    #--------------------------------------------------------
+    month_list = get_month_list()
+    P_monthly_arr = np.zeros(12, dtype='float32')
+    for k in range(12):
+        P_key = month_list[k] + '_PPT7100_CM'
+        P_month = np.float32(gages2_val_dict[P_key])
+        P_monthly_arr[k] = P_month
+
+    #-------------------------------------------------------------    
+    # Note: In GAGES-II, PPTAVG_BASIN is the average (over many
+    #       years) of the total amount of precip, in cm, for
+    #       a given site.  So it is should equal the sum of
+    #       all the monthly precip values, which are also
+    #       averages over many years. 
+    #-------------------------------------------------------------      
+    TEST = False
+    if (TEST):
+        pptavg_basin = gages2_val_dict['PPTAVG_BASIN']
+        P_sum = P_monthly_vals.sum()
+        print('In GAGES-II, PPTAVG_BASIN =', pptavg_basin)
+        print('Sum of monthly precip values =', P_sum)
+    
+    return P_monthly_arr
+
+#   get_gages2_monthly_precip_array()
+#---------------------------------------------------------------------
+def get_gages2_monthly_temp_array( gages2_val_dict ):
+
+    month_list = get_month_list()
+    T_monthly_arr = np.zeros(12, dtype='float32')
+    for k in range(12):
+        T_key = month_list[k] + '_TMP7100_DEGC'
+        T_month = np.float32(gages2_val_dict[T_key])
+        T_monthly_arr[k] = T_month
+    
+    return T_monthly_arr
+    
+#   get_gages2_monthly_temp_array()
+#---------------------------------------------------------------------
+#---------------------------------------------------------------------
+def create_tsv_for_climate( in_file=None, source='GAGES2_ALL',
+                            ## source='GAGES2_SB3', # original option
+                            NEW_TSV=False, USE_B3=False, REPORT=False ):
 
     #---------------------------------------------------------------
-    # Note: In GAGES-II, extra information is provided for a set
-    #       1947 "Selected Basins".  Recall that the GAGES-II data
-    #       set includes 9322 basins, 2057 of which are classified
-    #       as Reference basins (vs. Non-Reference).
-    #       This function uses the info for the Selected Basins
-    #       to classify these basins using the Seasonal Water
-    #       Balance method described in Berghuijs et al. (2014).
-    #       It uses 3 parameters: precip_timing_index (delta_p), 
-    #       snow_precip_fraction (f_s), and aridity_index (phi).
+    # Note: This function reads data from an existing CSV file,
+    #       computes several new columns of data related to the
+    #       Seasonal Water Balance (SWB) method, and then writes
+    #       both old and new data to a new TSV file.  The
+    #       existing CSV file could either be for the GAGES2_SB3
+    #       dataset (with 1947 basins) or for the GAGES2_ALL
+    #       dataset (with 9322 basins).
+    #       If NEW_TSV=True, an existing file will be overwritten.
+    #---------------------------------------------------------------
+    #       Recall that the SB3 dataset is only for GAGES2 basins
+    #       of Reference-type that are in CONUS. For this dataset,
+    #       the variable JUL_JAN_TMP_DIFF_DEGC is used for the
+    #       temperature range that is needed to compute the SWB
+    #       precip timing index.
+    #       In filenames, "SB" stands for "Selected Basins", and
+    #       "untransf" is short for "untransformed" values of vars.
+    #---------------------------------------------------------------     
+    #       The "GAGES2_ALL" dataset contains both Reference and
+    #       Non-Reference basins, and provides average monthly
+    #       temperature for each month (e.g. JAN_TMP7100_DEGC)
+    #       (and does not provide JUL_JAN_TMP_DIFF_DEGC)
+    #       but only for the 9067 basins in CONUS.  This allows
+    #       the temperature range needed to compute the SWB
+    #       precip timing index to be computed directly.
+    #       GAGES-II has 2057 Reference & 7265 Non-Ref basins.
+    #--------------------------------------------------------------- 
+    #       The Seasonal Water Balance (SWB) method is described
+    #       in Berghuijs et al. (2014). It uses 3 parameters:
+    #           precip_timing_index (delta_p), 
+    #           snow_precip_fraction (f_s), and
+    #           aridity_index (phi).
     #       See the function:  get_swb_class() in swb_utils.py.
-    #--------------------------------------------------------------
-    #  In filenames, "SB" stands for "Selected Basins", and
-    #  "untransf" is short for "untransformed" values of vars.
     #--------------------------------------------------------------
     #  If USE_B3, a new class, B3, is used so that B1, B2, and
     #  B3 "stack up" along phi-axis just as A1, A2, and A3 do.
-    #--------------------------------------------------------------  
-    if (in_csv_file is None):
-        in_csv_file = 'SB3_all_regions_untransfBCs_sorted.csv'
-    delim       = ','   # CSV file
-    new_dir     = dtu.get_new_data_dir( 'USGS_GAGES2_SB3' )
-    in_csv_path = new_dir + in_csv_file
-    in_csv_unit = open( in_csv_path, 'r' )
-    headings    = get_csv_headings( in_csv_unit, delim=delim )
+    #--------------------------------------------------------------
+    delim1 = ','   # CSV file
+    if (source == 'GAGES2_ALL'):
+        range_method = 1  ####
+        in_file = 'conterm_climate.txt'
+        in_dir  = dtu.get_data_dir( 'USGS_GAGES2_all' )
+        in_dir += 'basinchar_and_report_sept_2011/'
+        in_dir += 'spreadsheets-in-csv-format/'
+        new_dir = dtu.get_new_data_dir( 'USGS_GAGES2_all' )
+        #---------------------------------------
+        # This file has LAT_CENT and LONG_CENT
+        # which are needed for plotting.
+        #---------------------------------------
+        in_file2 = 'conterm_bas_morph.txt'  #######
+        in_path2 = in_dir + in_file2
+        in_unit2 = open( in_path2, 'r' )
+        headings2 = get_csv_headings( in_unit2, delim=delim1)
+    else:
+        range_method = 0  ####
+        in_file = 'SB3_all_regions_untransfBCs_sorted.csv'
+        new_dir = dtu.get_new_data_dir( 'USGS_GAGES2_SB3' )
+        in_dir  = new_dir
+    in_path = in_dir + in_file
+    in_unit = open( in_path, 'r' )
+
+    headings = get_csv_headings( in_unit, delim=delim1 )
             
     if (NEW_TSV):
         delim2 = '\t'  # TSV file
-        out_tsv_file = in_csv_file.replace('.csv', '_SWB.tsv')
+        if (source == 'GAGES2_ALL'):
+            out_tsv_file = 'GAGES2_CONUS_climate_indicators.tsv'
+            ### out_tsv_file = in_file.replace('.txt', '_indicators.tsv')
+        else:
+            out_tsv_file = in_file.replace('.csv', '_SWB.tsv')
         out_tsv_path = new_dir + out_tsv_file
         out_tsv_unit = open( out_tsv_path, 'w' )
         #------------------------------------------------------------------
@@ -851,13 +960,20 @@ def compute_swb_classes( in_csv_file=None, ORIGINAL=False,
         # Headings to add:
         # PRECIP_TIMING_INDEX, ARIDITY_INDEX, SWB_CLASS, SWB2_CLASS
         #------------------------------------------------------------------
-        headings2 = headings + ['PRECIP_TIMING_INDEX', 'ARIDITY_INDEX',
-                        'SNOW_PRECIP_FRACTION', 'SWB1_CLASS', 'SWB2_CLASS']
+        swb_headings = ['PRECIP_TIMING_INDEX', 'ARIDITY_INDEX',
+                        'SNOW_PRECIP_FRACTION', 'SWB1_CLASS', 'SWB2_CLASS',
+                        'KNOBEN_ARIDITY', 'KNOBEN_SEASONALITY',
+                        'KNOBEN_SNOW_FRAC']
+        out_headings = headings.copy()
+        if (source == 'GAGES2_ALL'):
+            out_headings += ['LONG_CENT', 'LAT_CENT']
+        out_headings += swb_headings
+                        
         #---------------------------------
         # Write header for new TSV file
         #---------------------------------
         tsv_header = ''
-        for heading in headings2:
+        for heading in out_headings:
             tsv_header += (heading + delim2)
         tsv_header = tsv_header[:-1] + '\n' # remove delim, add newline
         out_tsv_unit.write( tsv_header )
@@ -883,14 +999,14 @@ def compute_swb_classes( in_csv_file=None, ORIGINAL=False,
         class_count2[ name ] = 0
 
     while (True):
-        line = in_csv_unit.readline()
+        line = in_unit.readline()
         if (line == ''):
             break   # (reached end of file)
         #----------------------------------------
         # Need to remove the newline char first
         #----------------------------------------
         line = line[:-1]
-        values = line.split( delim )
+        values = line.split( delim1 )
         #------------------------------------------------
         # Create a dictionary to map headings to values
         #------------------------------------------------
@@ -898,17 +1014,38 @@ def compute_swb_classes( in_csv_file=None, ORIGINAL=False,
         for j in range(len(headings)):
             val_dict[ headings[j] ] = values[j]
 
+        #----------------------------------
+        # Get lon and lat for GAGES2_ALL
+        #----------------------------------
+        if (source == 'GAGES2_ALL'):
+            line2 = in_unit2.readline()
+            line2 = line2[:-1]
+            values2 = line2.split( delim1 )
+            val_dict2 = dict()
+            for j in range(len(headings2)):
+                val_dict2[ headings2[j] ] = values2[j]
+            if (val_dict['STAID'] != val_dict2['STAID']):
+                print('ERROR: Input files out of sync.')
+                sys.exit()
+        
         #---------------------------------------------------
         # Note: Using results from Berghuijs et al. paper:
         #       delta_p = precip_timing_index
         #       f_s     = snow_precip_fraction
         #       phi     = aridity_index
         #---------------------------------------------------
+        ### PLOT = (n_basins > 4000) and (n_basins < 4020)
+        
+        ## PLOT = True
+        ## print('n_basins =', n_basins)
+        PLOT = False
         f_s     = get_snow_precip_fraction( val_dict, UNITS='none',
                                             REPORT=REPORT )
-        delta_p = get_precip_timing_index( val_dict, f_s, REPORT=REPORT )
+        delta_p = get_precip_timing_index( val_dict, f_s, 
+                             range_method=range_method,
+                             REPORT=REPORT, PLOT=PLOT )
         phi     = get_aridity_index( val_dict, REPORT=REPORT )
- 
+                 
         #---------------------------------  
         # Count extreme cases of delta_p
         #---------------------------------
@@ -925,12 +1062,13 @@ def compute_swb_classes( in_csv_file=None, ORIGINAL=False,
         # Save both SWB versions in the new TSV file
         #---------------------------------------------       
         swb1_class = swb.get_swb_class( delta_p, f_s, phi,
-                                   ORIGINAL=True, USE_B3=USE_B3)                                   
+                                 ORIGINAL=True, USE_B3=USE_B3)                                   
         swb2_class = swb.get_swb_class( delta_p, f_s, phi,
-                                   ORIGINAL=False, USE_B3=USE_B3)
+                                 ORIGINAL=False, USE_B3=USE_B3)
         class_count1[ swb1_class ] += 1   # (swb_class may be 'None')
         class_count2[ swb2_class ] += 1   # (swb_class should never be 'None')               
         n_basins += 1
+        print('n_basins =', n_basins)
         
         dp_min  = np.minimum( dp_min, delta_p )
         dp_max  = np.maximum( dp_max, delta_p )
@@ -939,6 +1077,25 @@ def compute_swb_classes( in_csv_file=None, ORIGINAL=False,
         phi_min = np.minimum( phi_min, phi )
         phi_max = np.maximum( phi_max, phi )
 
+        #----------------------------------------------        
+        # Compute the Knoben et al. (2018) indicators
+        #----------------------------------------------
+#         if (site_id not in usgs_site_info_dict):
+#             print('## site_id not in dictionary =', site_id)
+#             continue
+#         site_info = usgs_site_info_dict[ site_id ]
+#         longitude = np.float32(site_info['lon'])
+#         latitude  = np.float32(site_info['lat'])
+#         B_aridity, K_aridity, K_seasonality, K_snow_frac = \
+#             ku.calc_knoben_indicators( latitude, val_dict )
+
+        #----------------------------------------------        
+        # Compute the Knoben et al. (2018) indicators
+        #----------------------------------------------            
+        latitude = np.float32( val_dict2['LAT_CENT'] )  ###########
+        B_aridity, K_aridity, K_seasonality, K_snow_frac = \
+            ku.calc_knoben_indicators( latitude, val_dict )
+            
         #--------------------------------------------
         # Add new heading/value pairs to dictionary
         #---------------------------------------------------
@@ -946,22 +1103,34 @@ def compute_swb_classes( in_csv_file=None, ORIGINAL=False,
         # Use: "SNOW_PRECIP_FRACTION" vs "SNOW_PCT_PRECIP"
         #---------------------------------------------------
         if (NEW_TSV):
+            if (source == 'GAGES2_ALL'):
+                val_dict['LONG_CENT'] = val_dict2['LONG_CENT']
+                val_dict['LAT_CENT']  = val_dict2['LAT_CENT']
+            #---------------------------------------------------  
             dp_str  = '{x:.6f}'.format(x=delta_p)  # 6 decimal accuracy
             fs_str  = '{x:.6f}'.format(x=f_s)
             phi_str = '{x:.6f}'.format(x=phi)
-            #----------------------------------------------       
+            #---------------------------------------------------       
             val_dict['PRECIP_TIMING_INDEX']  = dp_str
             val_dict['SNOW_PRECIP_FRACTION'] = fs_str
             val_dict['ARIDITY_INDEX']        = phi_str
             val_dict['SWB1_CLASS']           = swb1_class
             val_dict['SWB2_CLASS']           = swb2_class
-        
+            #---------------------------------------------------  
+            Ka_str  = '{x:.6f}'.format(x=K_aridity)  # 6 decimal accuracy
+            Ks_str  = '{x:.6f}'.format(x=K_seasonality)  
+            Ksf_str = '{x:.6f}'.format(x=K_snow_frac)                          
+            #--------------------------------------------------- 
+            val_dict['KNOBEN_ARIDITY']     = Ka_str
+            val_dict['KNOBEN_SEASONALITY'] = Ks_str
+            val_dict['KNOBEN_SNOW_FRAC']   = Ksf_str
+             
             #----------------------------------------
-            # For each heading in headings2,
+            # For each heading in out_headings,
             # write corresponding value to new file
             #----------------------------------------
             out_line = ''
-            for h in headings2:
+            for h in out_headings:
                 value = val_dict[h]
                 out_line += value + delim2
             out_line = out_line[:-1] + '\n'
@@ -970,7 +1139,9 @@ def compute_swb_classes( in_csv_file=None, ORIGINAL=False,
     #-------------------
     # Close both files
     #-------------------
-    in_csv_unit.close()
+    in_unit.close()
+    if (source == 'GAGES2_ALL'):
+        in_unit2.close()
     if (NEW_TSV):
         out_tsv_unit.close()
     #---------------------------
@@ -1002,7 +1173,7 @@ def compute_swb_classes( in_csv_file=None, ORIGINAL=False,
     print('Finished.')
     print()
 
-#   compute_swb_classes()
+#   create_tsv_for_climate()
 #---------------------------------------------------------------------
 def get_snow_precip_fraction( val_dict, UNITS='none', REPORT=False ):
 
@@ -1034,13 +1205,17 @@ def get_snow_precip_fraction( val_dict, UNITS='none', REPORT=False ):
 
 #   get_snow_precip_fraction()
 #---------------------------------------------------------------------
-def get_precip_timing_index( val_dict, f_s, REPORT=False ):
+def get_precip_timing_index( val_dict, f_s, SB3=False,
+                             range_method=1,
+                             REPORT=False, PLOT=False ):
 
     #------------------------------------------------
     # Uses equation (6a) in Berghuijs et al. (2014)
     #  from Woods (2009).
     # delta_p should range from -1 to 1.
     #------------------------------------------------
+    if (SB3):
+        range_method = 0
 
     #----------------------------------------------------
     # Compute T_bar_star = T_bs = (T_avg - T0) / T_amp
@@ -1048,10 +1223,6 @@ def get_precip_timing_index( val_dict, f_s, REPORT=False ):
     #-----------------------------------------------------
     # T_amp is "seasonal amplitude, degrees C", under
     # the assumption that temp. varies as sine function.
-    # This code block ASSUMES July is hottest month and
-    # January is coldest month, everywhere in the USA,
-    # so that difference can be used to get amplitude.
-    # Need to check this assumption.  ###########
     #-----------------------------------------------------
     # From Woods (2009), near equation (5):
     # T_bs >  1 => climate is above freezing all year.
@@ -1061,9 +1232,57 @@ def get_precip_timing_index( val_dict, f_s, REPORT=False ):
     T0    = 1.0  # [deg C]
     T_avg = val_dict[ 'T_AVG_BASIN' ]  # [deg C]
     T_avg = np.float32( T_avg )
-    T_rng = np.float32( val_dict[ 'JUL_JAN_TMP_DIFF_DEGC'] )
-    T_amp = np.abs( T_rng ) / 2.0
-    T_bs  = (T_avg - T0) / T_amp
+    if (range_method == 0):
+        #-----------------------------------------------------
+        # This method only works with the SB3 dataset.
+        # This code block ASSUMES July is hottest month and
+        # January is coldest month, everywhere in the USA,
+        # so that difference can be used to get amplitude.
+        # This was checked and is not always true.
+        #-----------------------------------------------------
+        T_rng = np.float32( val_dict[ 'JUL_JAN_TMP_DIFF_DEGC'] )
+    elif (range_method == 1):
+        #-----------------------------------
+        # This works better than method 2.
+        # See compare_temp_ranges().
+        # Added this on 2025-07-09.
+        #-----------------------------------
+        T_vals = get_gages2_monthly_temp_array( val_dict)
+        T_max  = T_vals.max()
+        T_min  = T_vals.min()
+        T_rng  = (T_max - T_min)
+        T_sum  = T_vals.sum()
+        T_avg  = (T_sum / 12)  ## Use this T_avg vs. 'T_AVG_BASIN'
+        #--------------------------
+        months = get_month_list()
+        warmest_month = months[ np.argmax(T_vals) ]
+        coldest_month = months[ np.argmin(T_vals) ]
+        #----------------------------------------------
+        if (PLOT):
+            T_vals2 = (T_vals + T_vals)
+            fig_config = {'figsize': (6, 4)}
+            fig = plt.figure(**fig_config)
+            ## ax = plt.gca()
+            ## plt.xlim(xmin, xmax)
+            ## plt.ylim(ymin, ymax)
+            x = np.arange(24, dtype='float32')
+            plt.plot(x, T_vals2, clip_on=True, color='black')
+            amp = (T_rng / 2.0)
+            y = amp * np.sin( ((x-3)/12.0) * 2 * np.pi ) + T_avg
+            plt.plot(x, y, color='blue')
+            plt.show(block=False)
+            plt.pause(0.2)
+            plt.close('all')
+    elif (range_method == 2):
+        #-------------------------------------------------
+        # Added this on 2025-04-30 but it doesn't agree
+        # with range_method == 1 for some reason.
+        #-------------------------------------------------
+        T_max = np.float32( val_dict[ 'T_MAX_BASIN'])
+        T_min = np.float32( val_dict[ 'T_MIN_BASIN'])
+        T_rng = (T_max - T_min)
+    T_amp = np.abs( T_rng ) / 2.0  # amplitude of sine curve fit
+    T_bs  = (T_avg - T0) / T_amp   # T_bs = "T bar star"
      
     #----------------------------------------------------------
     # Solve equation (13) in Woods (2009) for delta_p to
@@ -1202,17 +1421,22 @@ def get_aridity_index( val_dict, REPORT=False ):
 
 #   get_aridity_index()
 #---------------------------------------------------------------------
-def get_swb_points( in_tsv_file=None, ORIGINAL=False ):
+def get_swb_points( in_tsv_file=None, source='GAGES2_ALL',
+                    ORIGINAL=False ):
 
     #--------------------------------------------------------
     # Note: This is used to plot points on a CONUS map as
     #       circles where color is determined by SWB class.
     #--------------------------------------------------------
-    if (in_tsv_file is None):
+    if (source == 'GAGES2_ALL'):
+        in_tsv_file = 'GAGES2_CONUS_climate_indicators.tsv'
+        new_dir  = dtu.get_new_data_dir( 'USGS_GAGES2_all')
+        n_basins = dtu.get_n_records( 'USGS_GAGES2_all' )
+    else:
         in_tsv_file = 'SB3_all_regions_untransfBCs_sorted_SWB.tsv'
-
+        new_dir  = dtu.get_new_data_dir( 'USGS_GAGES2_SB3')
+        n_basins = dtu.get_n_records( 'USGS_GAGES2_SB3' )
     delim       = '\t'  # TSV file
-    new_dir     = dtu.get_new_data_dir( 'USGS_GAGES2_SB3')
     in_tsv_path = new_dir + in_tsv_file
     in_tsv_unit = open( in_tsv_path, 'r' )
 
@@ -1230,7 +1454,6 @@ def get_swb_points( in_tsv_file=None, ORIGINAL=False ):
     #------------------------------------  
     # Numpy arrays to store values into
     #------------------------------------
-    n_basins = dtu.get_n_records( 'USGS_GAGES2_SB3' )
     x_g2 = np.zeros(n_basins, dtype='float32') 
     y_g2 = np.zeros(n_basins, dtype='float32')
     c_g2 = np.zeros(n_basins, dtype='<U4')
@@ -1260,6 +1483,328 @@ def get_swb_points( in_tsv_file=None, ORIGINAL=False ):
 
 #   get_swb_points()
 #---------------------------------------------------------------------
+def compare_temp_ranges(NEW_TSV=False, REPORT=False ):
+
+    #---------------------------------------------------------------
+    # Note: This function computes the annual temperature range
+    #       for GAGES-II basins by 3 different methods.
+    #       For GAGES2_SB3, it uses JUL_JAN_TMP_DIFF_DEGC.
+    #       For GAGES2_ALL, it uses (1) the difference between
+    #       T_MAX_BASIN and T_MIN_BASIN, and (2) then difference
+    #       between the max and min of all monthly average
+    #       temperature values.
+    #---------------------------------------------------------------     
+    #       The "GAGES2_ALL" dataset contains both Reference and
+    #       Non-Reference basins, and provides the variables:
+    #       T_MAX_BASIN, T_MIN_BASIN, T_MAX_SITE, and T_MIN_SITE,
+    #       (and does not provide JUL_JAN_TMP_DIFF_DEGC)
+    #       but only for the 9067 basins in CONUS.
+    #       GAGES-II has 2057 Reference & 7265 Non-Ref basins.
+    #--------------------------------------------------------------- 
+    delim1 = ','   # CSV file
+    new_dir1 = dtu.get_new_data_dir( 'USGS_GAGES2_SB3' )
+    in_file1 = 'SB3_all_regions_untransfBCs_sorted.csv'
+    in_dir1  = new_dir1
+    in_path1 = in_dir1 + in_file1
+    in_unit1 = open( in_path1, 'r' )
+    headings1 = get_csv_headings( in_unit1, delim=delim1 )
+#     print('headings1 =')
+#     print(headings1)
+    #------------------------------------------------------------
+    delim2 = '\t'  # TSV file    
+    new_dir2 = dtu.get_new_data_dir( 'USGS_GAGES2_all' )
+    in_file2 = 'conterm_climate_SWB.tsv'
+    in_dir2  = dtu.get_new_data_dir( 'USGS_GAGES2_all' )
+#     in_dir2 += 'basinchar_and_report_sept_2011/'
+#     in_dir2 += 'spreadsheets-in-csv-format/'
+    in_path2 = in_dir2 + in_file2
+    in_unit2 = open( in_path2, 'r' )
+    headings2 = get_csv_headings( in_unit2, delim=delim2 )
+#     print('headings2 =')
+#     print(headings2)
+    #------------------------------------------------------------ 
+    n_basins = 0
+             
+    if (NEW_TSV):
+        out_tsv_file = 'new_gages2_sb3_temp_ranges.tsv'
+        out_tsv_path = new_dir2 + out_tsv_file
+        out_tsv_unit = open( out_tsv_path, 'w' )
+        #------------------------------------------------------------------
+        out_headings = ['STAID', 'LONG_CENT', 'LAT_CENT',
+            'COLDEST_MO', 'WARMEST_MO',
+            'JUL_JAN_TMP_DIFF_DEGC',
+            'T_RANGE1_BASIN', 'T_RANGE2_BASIN',
+            'SWB1_CLASS', 'SWB2_CLASS']
+                        
+        #---------------------------------
+        # Write header for new TSV file
+        #---------------------------------
+        tsv_header = ''
+        for heading in out_headings:
+            tsv_header += (heading + delim2)
+        tsv_header = tsv_header[:-1] + '\n' # remove delim, add newline
+        out_tsv_unit.write( tsv_header )
+
+    while (True):
+        #---------------------------------
+        # Read line from GAGES2_SB3 file
+        #---------------------------------
+        line1 = in_unit1.readline()
+        if (line1 == ''):
+            break   # (reached end of file)
+        #----------------------------------------
+        # Need to remove the newline char first
+        #----------------------------------------
+        line1 = line1[:-1]
+        values1 = line1.split( delim1 )
+        #------------------------------------------------
+        # Create a dictionary to map headings to values
+        #------------------------------------------------
+        val_dict1 = dict()
+        for j in range(len(headings1)):
+            val_dict1[ headings1[j] ] = values1[j]
+        ## site_id1 = val_dict1['StnID']
+        #--------------------------------------------
+        # Note: "\ufeff" is a Byte Order Mark (BOM)
+        #--------------------------------------------
+        site_id1 = val_dict1['\ufeffStnID']   ############
+        
+        while (True):
+            #----------------------------------
+            # Read lines from GAGES2_ALL file
+            # until site_id2 == site_id1.
+            #----------------------------------
+            line2 = in_unit2.readline()
+            if (line2 == ''):
+                break
+            line2 = line2[:-1]
+            values2 = line2.split( delim2 )
+            val_dict2 = dict()
+            for j in range(len(headings2)):
+                val_dict2[ headings2[j] ] = values2[j]
+            site_id2 = val_dict2['STAID']
+            if (site_id2 == site_id1):
+                break            
+
+        #--------------------------------------------
+        # Add new heading/value pairs to dictionary
+        #--------------------------------------------
+        if (NEW_TSV):
+            #-------------------------
+            # Compute T_RANGE1_BASIN
+            #-------------------------
+            T_max = np.float32( val_dict2['T_MAX_BASIN'])
+            T_min = np.float32( val_dict2['T_MIN_BASIN'])
+            T_rng = (T_max - T_min)
+            T_rng_str = '{x:.2f}'.format(x=T_rng)  # 2 decimal accuracy
+            val_dict1['T_RANGE1_BASIN'] = T_rng_str
+            
+            #--------------------------------------------
+            # Compute T_RANGE2_BASIN (This one is best)
+            #--------------------------------------------
+            T_vals = get_gages2_monthly_temp_array( val_dict2 )
+            T_max  = T_vals.max()
+            T_min  = T_vals.min()
+            T_rng  = (T_max - T_min)
+#             T_sum  = T_vals.sum()
+#             T_avg  = (T_sum / 12)
+            #--------------------------
+            months = get_month_list()
+            warmest_month = months[ np.argmax(T_vals) ]
+            coldest_month = months[ np.argmin(T_vals) ]
+            T_rng_str = '{x:.2f}'.format(x=T_rng)  # 2 decimal accuracy
+            val_dict1['T_RANGE2_BASIN'] = T_rng_str
+
+            #--------------------------------------------------   
+            # Add LONG_CENT, LAT_CENT, SWB1_CLASS, SWB2_CLASS
+            #--------------------------------------------------
+            val_dict1['STAID']      = val_dict2['STAID']
+            val_dict1['LONG_CENT']  = val_dict2['LONG_CENT']
+            val_dict1['LAT_CENT']   = val_dict2['LAT_CENT']
+            val_dict1['COLDEST_MO'] = coldest_month
+            val_dict1['WARMEST_MO'] = warmest_month
+            val_dict1['SWB1_CLASS'] = val_dict2['SWB1_CLASS']
+            val_dict1['SWB2_CLASS'] = val_dict2['SWB2_CLASS']
+            
+            #----------------------------------------
+            # For each heading in out_headings,
+            # write corresponding value to new file
+            #----------------------------------------
+            out_line = ''
+            for h in out_headings:
+                value = val_dict1[h]
+                out_line += value + delim2
+            out_line = out_line[:-1] + '\n'
+            out_tsv_unit.write( out_line )
+            n_basins += 1
+
+    #-------------------
+    # Close both files
+    #-------------------
+    in_unit1.close()
+    in_unit2.close()
+    if (NEW_TSV):
+        out_tsv_unit.close()
+    #-------------------------
+    print()
+    print('Number of basins =', n_basins)
+    if (NEW_TSV):
+        print('Wrote info to new TSV file: ')
+        print('   ' + out_tsv_file)
+    print('Finished.')
+    print()
+
+#   compare_temp_ranges()
+#---------------------------------------------------------------------
+def combine_tsv_files(REPORT=False):
+
+    #-------------------------------------------------------------
+    # Note:  This function combines all columns of info from a
+    #        first TSV file, and certain columns of info from a
+    #        second TSV file to create a new TSV file.
+    #-------------------------------------------------------------
+    # Note:  get_csv_headings() works with TSV files, as long as
+    #        the delim keyword is set to '\t' (tab).
+    #-------------------------------------------------------------     
+    delim = '\t'   # TSV files
+    in_dir  = dtu.get_new_data_dir( 'USGS_GAGES2_all' )
+    #------------------------------------------------------
+    in_file1 = 'new_gages2_all.tsv'
+    in_path1 = in_dir + in_file1
+    in_unit1 = open( in_path1, 'r' )
+    headings1 = get_csv_headings( in_unit1, delim=delim )
+    n_basins_in1 = 0
+    #------------------------------------------------------
+    in_file2 = 'GAGES2_CONUS_climate_indicators.tsv'
+    in_path2 = in_dir + in_file2
+    in_unit2 = open( in_path2, 'r' )
+    headings2 = get_csv_headings( in_unit2, delim=delim )
+    n_basins_in2 = 0
+    #------------------------------------------------------
+    out_file = 'new_gages2_all_plus.tsv'
+    out_path = in_dir + out_file
+    out_unit = open( out_path, 'w' )
+    n_basins_out = 0
+    #------------------------------------------------------ 
+    new_headings = ['LONG_CENT', 'LAT_CENT',
+        #### 'COLDEST_MO', 'WARMEST_MO',
+        'ARIDITY_INDEX', 'PRECIP_TIMING_INDEX',
+        'SNOW_PRECIP_FRACTION', 'SWB2_CLASS',  ## 'SWB1_CLASS',
+        'KNOBEN_ARIDITY', 'KNOBEN_SEASONALITY',
+        'KNOBEN_SNOW_FRAC']
+    out_headings = headings1 + new_headings
+
+    #---------------------------------------------------------   
+    # Create dictionary with default values for new headings
+    #---------------------------------------------------------
+    default_dict = dict()
+    for heading in new_headings:
+        default_dict[ heading ] = '-'
+      
+    #---------------------------------
+    # Write header for new TSV file
+    #---------------------------------
+    tsv_header = ''
+    for heading in out_headings:
+        tsv_header += (heading + delim)
+    tsv_header = tsv_header[:-1] + '\n' # remove delim, add newline
+    out_unit.write( tsv_header )
+
+    #-------------------------------------
+    # Read first line from in_file2 that
+    # has only the GAGES2 CONUS basins
+    #-------------------------------------
+    line2 = in_unit2.readline()
+    n_basins_in2 += 1
+    line2 = line2[:-1]
+    values2 = line2.split( delim )
+    val_dict2 = dict()
+    for j in range(len(headings2)):
+        val_dict2[ headings2[j] ] = values2[j]
+    site_id2 = val_dict2['STAID']
+
+    while (True):
+        #-------------------------------------------------
+        # Read line from in_file1 with all GAGES2 basins
+        #-------------------------------------------------
+        line1 = in_unit1.readline()
+        if (line1 == ''):
+            break   # (reached end of file)
+        n_basins_in1 += 1
+        line1 = line1[:-1]   # (remove newline first)
+        values1 = line1.split( delim )
+
+        #------------------------------------------------
+        # Create a dictionary to map headings to values
+        #------------------------------------------------
+        val_dict1 = dict()
+        for j in range(len(headings1)):
+            val_dict1[ headings1[j] ] = values1[j]
+        site_id1 = val_dict1['STAID']
+
+        #----------------------------------------------------
+        # For each heading in headings1, copy corresponding
+        # value from in_file1 to out_line, for new file.
+        #---------------------------------------------------- 
+        out_line = ''
+        for h in headings1:
+            value = val_dict1[h]
+            out_line += value + delim
+
+        #-------------------------------------------------------
+        # If (site_id2 == site_id1), then for each heading in
+        # new_headings, copy corresponding value from in_file2
+        # to out_line.  Otherwise, copy default values.
+        #--------------------------------------------------------
+        for h in new_headings:
+            if (site_id2 == site_id1):
+                value = val_dict2[h]
+            else:
+                value = default_dict[h]
+            out_line += value + delim 
+
+        #----------------------------------        
+        # Write out_line to new TSV file
+        #----------------------------------
+        out_line = out_line[:-1] + '\n'  # remove tab, add newline
+        out_unit.write( out_line )
+        n_basins_out += 1
+ 
+        #--------------------------------
+        # Read next line from in_file2
+        # if there are any lines left.
+        #--------------------------------                    
+        if (site_id2 == site_id1):
+            line2 = in_unit2.readline()
+            if (line2 != ''):
+                n_basins_in2 += 1
+                line2 = line2[:-1]
+                values2 = line2.split( delim )
+                val_dict2 = dict()
+                for j in range(len(headings2)):
+                    val_dict2[ headings2[j] ] = values2[j]
+                site_id2 = val_dict2['STAID']
+
+    #-------------------
+    # Close all files
+    #-------------------
+    in_unit1.close()
+    in_unit2.close()
+    out_unit.close()
+    #-------------------------
+    print()
+    print('Number of basins in file 1   =', n_basins_in1)
+    print('Number of basins in file 2   =', n_basins_in2)
+    print('Number of basins in new file =', n_basins_out)
+    print('Wrote info to new TSV file: ')
+    print('   ' + out_file)
+    print('Finished.')
+    print()
+
+#   combine_tsv_files()
+#---------------------------------------------------------------------
+
+
 
 
     

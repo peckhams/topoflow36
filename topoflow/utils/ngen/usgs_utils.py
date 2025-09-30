@@ -17,6 +17,7 @@
 # Jul 2023. Utils to work with USGS site info.
 #           Moved several functions here from collate_basins.py.
 #           These are now called from collate_basins.py.
+# Aug 2024. Wrote get_nwis_stream_site_subset().
 #
 #---------------------------------------------------------------------
 #
@@ -33,6 +34,8 @@
 #  get_n_records()
 #
 #  get_wqp_site_subset()
+#  get_nwis_stream_site_subset()    # Aug 2024
+#
 #  get_site_type_dict()    ###
 #  get_huc12_dict()
 #
@@ -209,7 +212,95 @@ def get_wqp_site_subset(agency='USGS', site_type='stream',
     
 #   get_wqp_site_subset()
 #---------------------------------------------------------------------
-def get_site_type_dict( in_tsv_file='WQP_All_Site_Info.tsv',
+def get_nwis_stream_site_subset(
+                    in_tsv_file='NWIS_All_Stream_Site_Data.tsv', 
+                    out_tsv_file=None):
+
+    #-----------------------------------------------------------------
+    # Note: The TSV file:  NWIS_All_Stream_Site_Data.tsv contains
+    #       records for every USGS site with the site type "Stream".
+    #       This file contains info for 158,817 sites.
+    #       It is assumed that this file is in: USGS_NWIS_Web/Data.
+    #       However, only some of these sites measure "stage" data,
+    #       and presumably discharge can be computed for any of
+    #       these from a stage-discharge rating curve for that site.
+    #       Stage data may be (or once was) collected continuously,
+    #       or may be (or once was) collected intermittently.
+    #       RDB files downloaded from the USGS NWIS website will
+    #       have a column with the header "data_types_cd".  Entries
+    #       in this column will be 30-character strings that contain
+    #       one of the letters, A, I, O, or N in each position.
+    #         A=Active, I=Inactive, O=Inventory, and N=Never?
+    #       The 1st letter refers to continuous stage data, and the
+    #       2nd letter refers to intermittent stage data.
+    #       If stage data was ever collected for a given site, then
+    #       either the 1st or 2nd letter should be A or I.
+    #       The first 2 letters must then be one of:
+    #         AA, AI, AN, AO, IA, II, IN, IO, NA, or NI.
+    #       If it is NN, NO, or ON, then stage was never measured.
+    #-----------------------------------------------------------------
+    #       It is possible that the "data_types_cd" is not accurate.
+    #       For USGS site ID: 13298500, which is in MOPEX, HCDN,
+    #       and GAGES-II Non-Ref, the 1st 2 letters are NN.
+    #-----------------------------------------------------------------
+    #       The purpose of this function is to create a new TSV file
+    #       that only contains records for sites at which stage ---
+    #       continuous or intermittent --- is measured, or once was
+    #       measured.
+    #-----------------------------------------------------------------    
+    delim = '\t'   # tab character
+    print('Working...')
+    in_count  = 0
+    out_count = 0
+
+    if (out_tsv_file is None):
+        out_tsv_file  = 'NWIS_Stream_Sites_with_Stage_Ever.tsv'
+                  
+    #------------------------------
+    # Open input and output files
+    #------------------------------
+    nwis_dir     = dtu.get_data_dir( 'USGS_NWIS_Web' )
+    in_tsv_path  = nwis_dir + in_tsv_file
+    out_tsv_path = nwis_dir + out_tsv_file
+    in_tsv_unit  = open(in_tsv_path,  'r')
+    out_tsv_unit = open(out_tsv_path, 'w')
+
+    #--------------------------    
+    # Process the header line
+    #--------------------------
+    header = in_tsv_unit.readline()
+    out_tsv_unit.write( header )
+   
+    while (True):
+        line = in_tsv_unit.readline()
+        if (line == ''):
+            break  # (reached end of file)
+        values = line.split( delim )
+        in_count += 1
+
+        site_id_str   = values[2].strip()
+        data_type_str = values[26].strip().upper()
+        
+        first2 = data_type_str[:2]
+        if ('A' in first2) or ('I' in first2):
+            out_tsv_unit.write( line )
+            out_count += 1         
+                               
+        if ((in_count % 10000) == 0):
+            print('  in_count =', in_count)
+
+    #-------------------------------   
+    # Close input and output files
+    #-------------------------------
+    in_tsv_unit.close()
+    out_tsv_unit.close()
+    print('Total in  count =', in_count)
+    print('Total out count =', out_count)
+    print('Finished.')
+    
+#   get_nwis_site_subset()
+#---------------------------------------------------------------------
+def get_site_type_dict( in_tsv_file='WQP_Stream_Site_Info.tsv',
                         SAVE_TO_FILE=True ): 
 
     #------------------------------------------------------------

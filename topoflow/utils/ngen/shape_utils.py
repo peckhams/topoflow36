@@ -1,6 +1,11 @@
 
 # Copyright (c) 2023-2024, Scott D. Peckham
 #
+# Aug 2024. Moved original "plot_shapefile" function, which actually
+#           created an SWB scatter plot, to plot_utils.py.  There it
+#           has been renamed to "create_swb_scatter_plot". Removed
+#           SWB-related code from "plot_shapefile" here so that it
+#           now just plots a shapefile, such as US state boundaries. 
 # Jan 2024. Renamed all "ngen/utils" files to end in "_utils.py"
 #           instead of "_tools.py"
 #           Modified to use new data_utils.py.
@@ -35,6 +40,7 @@
 #---------------------------------------------------------------------
 import numpy as np
 from osgeo import ogr, osr
+# from osgeo import gdal
 import json, time
 
 from topoflow.utils import projections as proj
@@ -45,8 +51,6 @@ from matplotlib import pyplot as plt   # for plot_shapefile()
 from matplotlib import patches
 
 # from mpl_toolkits.basemap import Basemap  ## not installed
-
-# from osgeo import gdal
 
 #---------------------------------------------------------------------
 def open_shapefile( shape_path ):
@@ -59,14 +63,17 @@ def open_shapefile( shape_path ):
 def plot_shapefile( data_dir=None, shape_file=None,
                     fig_xsize=10, fig_ysize=6,
                     marker_size=7, font_size=12,
-                    SWB1=False, SWAP_XY=False,
+                    SWAP_XY=False,
                     TIGER_2012=True, CENSUS_2014=False,
-                    CONVERT=False, SAVE_PNG=False ):
+                    CONVERT=False, SAVE_PNG=False,
+                    png_file='New_Figure.png' ):
 
     #-----------------------------------------------------------
     # Note: This function currently plots US state boundaries
-    #       and then plots points using SWB classes.
-    #       A more general version will be given later.
+    #       from either the TIGER_2012 or CENSUS_2014 dataset.
+    #       This can be used as a backdrop for another plot.
+    #       See create_swb_scatter_plot() in plot_utils.py
+    #       for an example of this.
     #-----------------------------------------------------------
     # Note: This function uses only Python packages that are
     #       already used by TopoFlow and that are available
@@ -76,10 +83,6 @@ def plot_shapefile( data_dir=None, shape_file=None,
     #       Other packages such as shapely, geopandas, and
     #       descartes could be used but are unnecessary and
     #       add extra dependencies.
-    #-----------------------------------------------------------
-    # Set SWB1 to True to use original SWB class ranges,
-    #    which results in many unclassified basins.
-    #    These will plot as white dots.
     #-----------------------------------------------------------
     # marker size for matplotlib.pyplot.plot is in points.
     # dot size (s) for matplotlib.pyplot.scatter is points^2.
@@ -200,167 +203,6 @@ def plot_shapefile( data_dir=None, shape_file=None,
             plt.plot(x1, y1, clip_on=True, color='black')
         #------------------------------------------        
         ## plt.plot(x2, y2, clip_on=False)
-
-    #-----------------------------------------------
-    # Read LONG_CENT, LAT_CENT, SWB2_CLASS for all
-    # GAGES-II Selected Basins v3.
-    #--------------------------------------------------
-    # See: https://matplotlib.org/stable/api/_as_gen/
-    #              matplotlib.pyplot.plot.html
-    #--------------------------------------------------        
-    x_g2, y_g2, swb_g2 = g2.get_swb_points( ORIGINAL=SWB1 )
-    x_g2 = np.float64(x_g2)
-    y_g2 = np.float64(y_g2)  # Needed for convert_coords?   #################
-    print('min(x_g2), max(x_g2) =', min(x_g2), ',', max(x_g2))
-    print('min(y_g2), max(y_g2) =', min(y_g2), ',', max(y_g2))
-        
-    #--------------------------------------------------
-    # Convert coordinates from Geographic to Mercator
-    #--------------------------------------------------
-    # EPSG = 4326 is WGS 84 (Geographic coords)
-    # EPSG = 3395 is WGS 84 / World Mercator
-    #--------------------------------------------------
-    x_g2m, y_g2m = proj.Mercator_XY( x_g2, y_g2 )    
-#     x_g2m, y_g2m = convert_coords(x_g2,y_g2, inEPSG=4326,
-#                                   ### inPRJfile=prj_path,
-#                                   ### outPRJfile=prj_path,
-#                                   outEPSG=3395,
-#                                   SWAP_XY=True, PRINT=False)
-    print('min(x_g2m), max(x_g2m) =', min(x_g2m), ',', max(x_g2m))
-    print('min(y_g2m), max(y_g2m) =', min(y_g2m), ',', max(y_g2m))
-    
-    #--------------------------------------
-    # Assign colors to the 10 SWB classes
-    #--------------------------------------
-    color_map = {
-    'A1':'red',     'A2':'orange', 'A3':'yellow',
-    'B1':'lime',    'B2':'green',  'B3':'olive',  # B3 doesn't occur?
-    ## 'C1':'purple',  'C2':'magenta',
-    'C1':'pink',    'C2':'magenta',
-    'D1':'cyan',    'D2':'cornflowerblue', 'D3':'blue',
-    ##'D1':'cyan',    'D2':'blue',   'D3':'darkblue',
-    'None':'white'}  # "invisible" on a white background
-
-    #----------------------------------------
-    # If swb_g2 is an ndarray, you can use:
-    #----------------------------------------------------------
-    # For an even faster method see:
-    # https://stackoverflow.com/questions/16992713/
-    # translate-every-element-in-numpy-array-according-to-key
-    #----------------------------------------------------------
-    swb_colors = np.vectorize(color_map.get)(swb_g2)
-    print('swb_colors[0:10]', swb_colors[0:10])
-
-    #------------------------------------    
-    # If swb_g2 is a list, you can use:
-    #------------------------------------
-    # swb_colors = list(map(color_dict.get, swb_g2))
-    
-    #-------------------------------------------
-    # Now add a circle for each GAGES2 site.
-    # Convert xy to another CRS, if necessary.
-    #-----------------------------------------------------------
-    # For matplotlib.pyplot.plot, markersize units are points.
-    # For matplotlib.pyplot.scatter, s units are points^2.    
-    # 1 point = 1/72 inch
-    #-----------------------------------------------------------
-    dot_size = marker_size**2  # See Notes above.
-    ax.scatter(x_g2m, y_g2m, s=dot_size, color=swb_colors, marker='o',
-               linewidths=0.5, edgecolors='black')
-               ## linewidths=1.5, edgecolors='face')  # defaults
-
-    #-----------------------------
-    # TEST: Plot a single circle
-    #-----------------------------
-#     if (CONVERT):
-#         x0 =  -106.0
-#         y0 =  39.0
-#     else:
-#         x0 = -11800000.0  # Mercator bounding box
-#         y0 = 4700000.0
-#     plt.plot(x0,y0, marker='o', markersize=5, color='red')
-    #------------------------------------------------------------------
-    # for each in site_list:
-    #     circle = plt.Circle((x, y), radius, color='r')
-    #     ax.add_patch(circle)
-    #     OR: plt.plot(x,y, marker='o', markersize=7, color='red')
-
-    #---------------------------------------
-    # Add a legend. Can change x_L and y_T
-    # and everything else will adjust.
-    #---------------------------------------
-    fs = font_size   # set by keyword
-    ms = marker_size
-    mkr = 'o'  # circle
-    # mkr = 's'  # square
-    mec = 'black'  # mec = markeredgecolor for plot command
-    mew = 0.5      # mew = markeredgewidth for plot command
-    dx_text = 150000.0
-    dx = 500000.0
-    dy = 180000.0
-    #---------------------
-#     x_L  = -14000000.0  # left bottom
-#     y_T  = 3500000.0
-    #---------------------
-    x_L  = -8500000.0   # right bottom
-    y_T  = 3700000.0
-    #----------------------
-    x_L2 = x_L + dx_text
-    x_M  = x_L + dx
-    x_M2 = x_M + dx_text
-    #--------------------------------------------------------------------------
-    plt.plot(x_L,  y_T,    marker=mkr, markersize=ms, color=color_map['A1'],
-             mec=mec, mew=mew)
-    plt.text(x_L2, y_T,    'A1', fontsize=fs, ha='left', va='center')
-    #--------------------------------------------------------------------------
-    plt.plot(x_L,  y_T-dy, marker=mkr, markersize=ms, color=color_map['A2'],
-             mec=mec, mew=mew)           
-    plt.text(x_L2, y_T-dy, 'A2', fontsize=fs, ha='left', va='center')
-    #--------------------------------------------------------------------------
-    plt.plot(x_L,  y_T-2*dy, marker=mkr, markersize=ms, color=color_map['A3'],
-             mec=mec, mew=mew)           
-    plt.text(x_L2, y_T-2*dy, 'A3', fontsize=fs, ha='left', va='center')
-    #--------------------------------------------------------------------------
-    plt.plot(x_L,  y_T-3*dy, marker=mkr, markersize=ms, color=color_map['B1'],
-             mec=mec, mew=mew)           
-    plt.text(x_L2, y_T-3*dy, 'B1', fontsize=fs, ha='left', va='center')
-    #--------------------------------------------------------------------------
-    plt.plot(x_L,  y_T-4*dy, marker=mkr, markersize=ms, color=color_map['B2'],
-             mec=mec, mew=mew)           
-    plt.text(x_L2, y_T-4*dy, 'B2', fontsize=fs, ha='left', va='center')
-    #-----------------------
-    # Right half of legend
-    #-----------------------
-    plt.plot(x_M,  y_T,    marker=mkr, markersize=ms, color=color_map['C1'],
-             mec=mec, mew=mew)
-    plt.text(x_M2, y_T,    'C1', fontsize=fs, ha='left', va='center')
-    #--------------------------------------------------------------------------
-    plt.plot(x_M,  y_T-dy, marker=mkr, markersize=ms, color=color_map['C2'],
-             mec=mec, mew=mew)           
-    plt.text(x_M2, y_T-dy, 'C2', fontsize=fs, ha='left', va='center')
-    #--------------------------------------------------------------------------
-    plt.plot(x_M,  y_T-2*dy, marker=mkr, markersize=ms, color=color_map['D1'],
-             mec=mec, mew=mew)           
-    plt.text(x_M2, y_T-2*dy, 'D1', fontsize=fs, ha='left', va='center')
-    #--------------------------------------------------------------------------
-    plt.plot(x_M,  y_T-3*dy, marker=mkr, markersize=ms, color=color_map['D2'],
-             mec=mec, mew=mew)           
-    plt.text(x_M2, y_T-3*dy, 'D2', fontsize=fs, ha='left', va='center')
-    #--------------------------------------------------------------------------
-    plt.plot(x_M,  y_T-4*dy, marker=mkr, markersize=ms, color=color_map['D3'],
-             mec=mec, mew=mew)           
-    plt.text(x_M2, y_T-4*dy, 'D3', fontsize=fs, ha='left', va='center')
-
-    #------------------------------------- 
-    # Draw a rectangle around the legend
-    #-------------------------------------
-    width  = 1100000.0
-    height = 1050000.0
-    x0     = (x_L - 120000.0)
-    y0     = y_T - 5*dy 
-    rect = patches.Rectangle((x0,y0), width, height,
-                   linewidth=1, edgecolor='black', facecolor='none')
-    ax.add_patch(rect)
        
     #--------------------------
     # Show the completed plot
@@ -372,7 +214,7 @@ def plot_shapefile( data_dir=None, shape_file=None,
     # Save figure to image file
     #----------------------------
     if (SAVE_PNG):
-        fig.savefig(data_dir + 'SWB_GAGES2_CONUS.png')
+        fig.savefig(data_dir + png_file)
 
     #--------------------------------
     # Print info, close files, etc.

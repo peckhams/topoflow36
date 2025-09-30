@@ -4,7 +4,7 @@ a NextGen "hydrofabric" consisting of 2 GeoJSON files:
    catchment-data.geojson and nexus-data.geojson
 such as geographic bounding box and outlet coordinates.
 The get_dem() method subsets a GDAL VRT DEM to create a DEM for
-a specified catchment.
+a specified catchment.  This version uses geopandas (gpd).
 """
 #------------------------------------------------------------------------
 #

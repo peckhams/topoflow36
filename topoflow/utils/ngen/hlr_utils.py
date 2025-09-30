@@ -174,13 +174,12 @@
 import numpy as np
 import os, os.path, pickle  # to save dictionary
 
-from osgeo import ogr, osr
+from osgeo import gdal, ogr, osr
 import json, time
 
 from matplotlib import pyplot as plt   # for plot_shapefile()
 from matplotlib import patches
 
-from osgeo import gdal
 from topoflow.utils.ngen import shape_utils as su
 from topoflow.utils.ngen import data_utils as dtu
 from topoflow.utils.ngen import usgs_utils as usgs
@@ -1718,10 +1717,9 @@ def get_hlr_code_for_point( lon, lat, hlr_grid=None, grid_info=None,
     in_yrange = (y > ymin) and (y < ymax)
     if not( in_xrange and in_yrange ):
         if (WARNINGS):
-            print('### WARNING: Computed x,y falls outside of grid.')
-            print('###          Returning hlr_code = 0.')
-            print('### lon =', lon)
-            print('### lat =', lat)
+            print('## NOTE: Computed x,y falls outside of CONUS grid.')
+            print('##       Returning hlr_code = 0.')
+            print('##       lon =', lon, ', ', 'lat =', lat)
             #--------------------------------------------
             # Note: These are Lambert_Azimuthal coords.
             #--------------------------------------------
