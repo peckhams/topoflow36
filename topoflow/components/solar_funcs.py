@@ -369,7 +369,9 @@ def ET_Radiation_Flux( lat_deg, Julian_day, th ):
     term1 = np.cos(delta) * np.cos(lat_rad) * np.cos(omega * th)
     term2 = np.sin(delta) * np.sin(lat_rad)
     K_ET  = I_sc * E0 * (term1 + term2)
- 
+    if (K_ET.size == 1):
+        K_ET = np.array( K_ET )   ######## 2024-10-16
+
     TEST = False
     if (TEST):
         print('Julian day =', Julian_day )
@@ -387,6 +389,10 @@ def ET_Radiation_Flux( lat_deg, Julian_day, th ):
     #     At equator (lat_deg=0), this occurs at th<-6 and th>6.
     #     When negative, return zero as shown.
     #-------------------------------------------------------------
+#     print('K_ET =', K_ET)
+#     print('#### type(K_ET) =', type(K_ET))
+#     print('#### K_ET.dtype =', K_ET.dtype)
+#     print('#### K_ET.size =', K_ET.size)
     np.maximum( K_ET, 0.0, K_ET )    # in-place
     return K_ET    # [Watts / m^2]
 
@@ -521,7 +527,7 @@ def Optical_Air_Mass( lat_deg, declination, th ):
 
     Z = Zenith_Angle(lat_deg, declination, th)  # [radians]
     Z_deg = Z * (180 / np.pi)  # [degrees]
-    gamma = (90.0 - Z_deg)     # [degrees]
+    gamma = (90.0 - Z_deg)     # [degrees]  elevation angle
     #------------------------------------------------------
     # NB!  Zenith angle = pi/2 (or 90 degrees) at sunrise
     #      and sunset and is > 90 degrees at night.
@@ -858,21 +864,23 @@ def ET_Radiation_Flux_Slope( lat_deg, Julian_day, th, alpha, beta ):
     K_ET = np.maximum( K_ET, 0 )
     
     return K_ET    # [Watts / m^2]
-    
+
 #   ET_Radiation_Flux_Slope()
 #------------------------------------------------------------------------
 def Clear_Sky_Radiation( lat_deg, Julian_day, W_p,
                          TSN_offset, alpha, beta,
-                         albedo, gamma_dust ):
+                         albedo, gamma_dust, REPORT=False ):
 
-    #--------------------------------------------------------
-    # Notes:  I think K_cs is the same as the Qnet required
-    #         for the energy-balance routines in TopoFlow.
-    #         Both have units of Watts/m^2.
-    #--------------------------------------------------------
+    #--------------------------------------------------------------
+    # Notes:  The net incoming solar radiation, Q_SW, is computed
+    #         from the clear-sky radiation using equation 7-25,
+    #         given on page 281 in Dingman (2002).  That is,
+    #             Q_SW = K_cs * (1 - albedo)
+    #         Q_SW and K_cs both have units of Watts/m^2.
+    #--------------------------------------------------------------
     #** if (n_elements(gamma_dust) eq 0) then $
     #**     gamma_dust = Dust_Attenuation()
-    #--------------------------------------------------------
+    #----------------------------------------------
     tau   = Atmospheric_Transmissivity(lat_deg, Julian_day,
                                        W_p, TSN_offset,
                                        gamma_dust)
@@ -888,8 +896,7 @@ def Clear_Sky_Radiation( lat_deg, Julian_day, W_p,
     #----------------
     # For debugging
     #----------------
-    TEST = False
-    if (TEST):
+    if (REPORT):
         print( 'min(alpha), max(alpha) =', alpha.min(), alpha.max() )
         print( 'min(beta),  max(beta)  =', beta.min(),  beta.max() )
         print( 'min(tau),   max(tau)   =', tau.min(),   tau.max() )
@@ -897,6 +904,10 @@ def Clear_Sky_Radiation( lat_deg, Julian_day, W_p,
         print( 'min(K_dif), max(K_dif) =', K_dif.min(), K_dif.max() )
         print( 'min(K_bs),  max(K_bs)  =', K_bs.min(),  K_bs.max() )
         print( 'min(K_cs),  max(K_cs)  =', K_cs.min(),  K_cs.max() )
+        print( 'K_ET.shape  =', K_ET.shape )
+        print( 'K_dif.shape =', K_dif.shape )
+        print( 'K_bs.shape  =', K_bs.shape )
+        print( 'K_cs.shape  =', K_cs.shape )
         print()
     
     #-----------------------------------------------
@@ -1341,7 +1352,8 @@ def True_Solar_Noon( Julian_day, longitude, GMT_offset=None,
     #        Solar Noon occurs, since some of our equations
     #        depend on the time offset in hours from True Solar
     #        Noon. Note that TE may be negative or positive.
-
+    #        TSN = True_Solar_Noon.
+    #
     #        The GMT_offset at the location of interest
     #        should be entered as an integer between 0 and 12,
     #        with negative values for locations west of the
