@@ -1867,10 +1867,10 @@ class get_inputs():
                 print('2007-01-1 to 2019-12-31.')
                 print()
                 return
-             if (line.startswith( self.end_date_str)):
+            if (line.startswith( self.end_date_str)):
                 # Don't write out this line
                 break
-             new_csv_unit.write( line )
+            new_csv_unit.write( line )
              
         #-------------------                
         # Close both files
