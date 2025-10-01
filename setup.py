@@ -12,5 +12,5 @@ setup(
     url="https://github.com/peckhams/topoflow36",
     include_package_data=True,
     packages=find_packages("."),
-    install_requires=["numpy", "scipy", "h5py", "netCDF4", "cfunits"],
+    install_requires=["numpy", "scipy", "netCDF4", "cfunits"],
 )
