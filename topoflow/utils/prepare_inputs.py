@@ -1867,6 +1867,7 @@ class get_inputs():
                 print('2007-01-1 to 2019-12-31.')
                 print()
                 return
+            
             if (line.startswith( self.end_date_str)):
                 # Don't write out this line
                 break
