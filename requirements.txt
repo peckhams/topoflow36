@@ -2,6 +2,7 @@
 # Requirements of the topoflow36 Python package.
 # Created for NGIAB Docker image that uses Python 3.9.
 # NextGen needs numpy>=1,<2
+# Commented out GDAL line.  Installed via python3-gdal before this.
 Brotli==1.0.9
 certifi==2025.8.3
 cftime==1.6.4
@@ -9,7 +10,7 @@ cfunits==3.3.7
 contourpy==1.2.1
 cycler==0.11.0
 fonttools==4.55.3
-GDAL==3.4.3
+# GDAL==3.4.3
 imageio==2.37.0
 imageio-ffmpeg==0.6.0
 importlib_resources==6.4.0
