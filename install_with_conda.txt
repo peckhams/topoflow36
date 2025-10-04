@@ -1,0 +1,63 @@
+S.D. Peckham
+2025-09-28
+
+==================================================
+Steps to install TopoFlow in a conda environment
+==================================================
+
+1. Create and activate a conda environment:
+   % conda create -n tf36
+   % conda activate tf36
+   This environment must stay activated for all remaining steps.
+
+Note: To install in a Docker image, you may need to specify a
+      particular Python version with a command like:
+      % conda create -n tf36 python=3.9
+
+2. Check which python version got installed:
+   % python  (will show version at start)
+
+3. Install required packages in tf36 environment:
+   % conda install gdal
+   % conda install matplotlib
+   % conda install scipy
+   % conda install imageio
+   % conda install -c conda-forge imageio-ffmpeg
+   % conda install -c conda-forge cfunits
+   % conda install -c conda-forge netcdf4
+
+Note: Installing gdal will install system-level binary files.
+
+4. (Optional) Install 2 more packages.
+   % conda install -c conda-forge nb_conda
+   % conda install -c conda-forge jupyterlab
+
+Note: These are helpful for running TopoFlow in a Jupyter notebook
+      but are not needed otherwise.
+
+Note: On a Mac, the package jupyterlab will install Mac-specific dependencies
+      such as "pyobjc-core" and "pyobjc-framework-Cocoa", which are not
+      supported in a Linux (e.g. Docker) environment.  But nb_conda and
+      jupyterlab are likely not needed in such an environment.
+
+Note: numpy and many other packages get installed as dependencies
+      of the above packages.
+
+Note: pip was also installed in this environment:
+   % which pip
+     /Applications/anaconda3/envs/tf36/bin/pip
+
+5. Download the TopoFlow Python Package from:
+   github.com/peckhams/topoflow36
+   
+6. Install the TopoFlow Python package.
+   Let TF36_DIR be the directory where the package was installed
+   % pip install -e TF36_DIR
+
+7. (Optional) Create a requirements.txt file (for pip) for this conda environment:
+   % pip list --format=freeze > requirements.txt
+
+
+
+
+
