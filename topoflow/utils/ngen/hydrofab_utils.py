@@ -1537,8 +1537,8 @@ def get_forcing_csv( cat_id_str='cat-84',
 #   get_forcing_csv()
 #--------------------------------------------------------------------
 def get_forcing_csv_boto( cat_id_str='cat-11223', 
-        ngen_dir='/Users/peckhams/Dropbox/GitHub/ngen/'):
-        forcing_dir='/data/topoflow/forcing/huc01/'
+        ngen_dir='/Users/peckhams/Dropbox/GitHub/ngen/',
+        forcing_dir='/data/topoflow/forcing/huc01/'):
 
     #---------------------------------------------------------                  
     # Note: This version requires for the AWS package boto3
