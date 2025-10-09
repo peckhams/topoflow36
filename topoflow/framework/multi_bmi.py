@@ -159,6 +159,7 @@ import numpy as np
 import xml.dom.minidom
 
 from topoflow.framework import time_interpolation    # (time_interpolator class)
+from topoflow.framework import nextgen
 from topoflow.utils import BMI_base  #####
 from topoflow.utils import prepare_inputs as prep
 
@@ -351,6 +352,7 @@ class multi_bmi( BMI_base.BMI_component ):
             print('ERROR: The "cfg_file" argument is required')
             print('       and must be a complete file path to')
             print('       a file: <cfg_prefix>_nextgen.cfg or')
+            print('       <cfg_prefix>_ngiab.cfg or')
             print('       <cfg_prefix>_multi-bmi.cfg')
             return
         self.cfg_file = cfg_file
@@ -369,125 +371,18 @@ class multi_bmi( BMI_base.BMI_component ):
         
         path_parts = cfg_file.split( os.sep )
         filename   = path_parts[-1]
-        self.NEXTGEN = ('_nextgen' in filename)
-        if (self.NEXTGEN):
-            cfg_prefix = filename[0:-12]   # remove "_nextgen.cfg"
-            self._att_map['cfg_extension'] = '_nextgen.cfg'
+
+        #---------------------------       
+        # Determine the "run_mode"
+        #---------------------------
+        if (filename.endswith('_nextgen.cfg')):
+            run_mode = 'nextgen'
+            nextgen.initialize_nextgen(self, filename)
+        elif (filename.endswith('_ngiab.cfg')):
+            run_mode = 'ngiab'
+            nextgen.initialize_ngiab(self, filename)
         else:
-            cfg_prefix = filename[0:-14]   # remove "_multi-bmi.cfg"
-            self._att_map['cfg_extension'] = '_multi-bmi.cfg'
-        cfg_directory = cfg_file.replace(filename, '')
-        ## print('   cfg_directory =', cfg_directory)
-
-        #--------------------------------------------------------------------
-        # 2024-09-10.  TopoFlow can be run with the "multi BMI" option
-        # either when called by NextGen or when started using "main2.py".
-        #--------------------------------------------------------------------
-        # The only thing we get when TopoFlow is called by NextGen is the
-        # full path to a cfg_file (init_config).  It is set in the RC file
-        # (RC = realization config), a JSON file, via "init_config" as:
-        # "./data/topoflow/input_files/{{id}}/Test1_cfg/Test1_nextgen.cfg"
-        #--------------------------------------------------------------------
-        # For more info on RC files, see these wiki pages:
-        #    https://github.com/NOAA-OWP/ngen/wiki/Realization-Config
-        #    https://github.com/NOAA-OWP/ngen/wiki/Formulations-and-BMI
-        # The latter includes this line:
-        # "variables_names_map": 
-        #      {"model_variable_name": "standard_variable_name"}
-        # However, a BMI-enabled model may use a short name like "Q" in
-        # its code, but a CSDMS standard name in its get_input_var_names().
-        # It is unclear which of these NextGen considers to be the
-        # "model_variable_name".  Nels mentioned that the name used in an
-        # input file, such as those in the header of the AORC CSV forcing
-        # files, will also work, as the "standard_variable_name"(?).
-        #--------------------------------------------------------------------
-        # For more info on "standard" variable names that NextGen knows,
-        # to help with the "variables_names_map" in the RC file, see:
-        #    ngen/include/formulations/catchment/Bmi_Formulation.hpp
-        #--------------------------------------------------------------------
-        if (self.NEXTGEN):
-            #------------------------------------------------------
-            # This only works when launching TopoFlow via NextGen
-            # Now setting it in "_nextgen.cfg" file instead.
-            # Could use "os.sep" instead of '/' throughout.
-            #------------------------------------------------------
-            ## self.ngen_dir = os.getcwd() + '/'
-
-            #-----------------------------------------------------
-            # 2024-09-10.  Read new "_nextgen.cfg" file for info
-            #-----------------------------------------------------
-            # If we're running multi-bmi TF from main_ngen.py,
-            # then we no longer need to set this info there aftere
-            # the tf36_bmi object has been instantiated. 
-            #-----------------------------------------------------     
-            self.read_config_file()
-            #-------------------------------------------------------
-            self.NGEN_CSV = (self.forcing_type == 'local_aorc_csv')
-            #-------------------------------------------------------
-            if (self.spatial_dir[:5] == 'ngen/'):
-                self.spatial_dir = self.spatial_dir[5:]
-            if (self.spatial_dir[-1] != '/'):
-                self.spatial_dir += '/'           
-            self.spatial_dir = (self.ngen_dir + self.spatial_dir)
-            #-------------------------------------------------------
-            if (self.forcing_dir[:5] == 'ngen/'):
-                self.forcing_dir = self.forcing_dir[5:]
-            if (self.forcing_dir[-1] != '/'):
-                self.forcing_dir += '/'  
-            self.forcing_dir = (self.ngen_dir + self.forcing_dir)
-            #-------------------------------------------------------        
-            if (self.rc_dir[:5] == 'ngen/'):
-                self.rc_dir = self.rc_dir[5:]
-            if (self.rc_dir[-1] != '/'):
-                self.rc_dir += '/'  
-            self.rc_dir = (self.ngen_dir + self.rc_dir)
-            #-------------------------------------------------------  
-            self.catchment_json_file = self.catchment_file
-            self.nexus_json_file     = self.nexus_file
-            ## self.case_prefix  = cfg_prefix
-
-            #--------------------------------------------------
-            # Expand things like ".." and "~" in dir names ??
-            #--------------------------------------------------
-            self.ngen_dir    = os.path.expanduser( self.ngen_dir )
-            self.spatial_dir = os.path.expanduser( self.spatial_dir )
-            self.forcing_dir = os.path.expanduser( self.forcing_dir )
-            self.rc_dir      = os.path.expanduser( self.rc_dir )
-
-            #-------------------------------------------------------
-            # Try to get info without reading "_nextgen.cfg" file
-            #-------------------------------------------------------
-            # Assume "init_config", set in the NextGen realization
-            # config file (or RC file), has the form:
-            # "./data/topoflow/input_files/{{id}}/Test1_cfg/Test1_multi-bmi.cfg"
-            # If it is set like this, then we can determine case_prefix,
-            # site_prefix, ngen_dir, forcing_dir, & spatial dir as follows.
-            #-------------------------------------------------------
-#             self.ngen_dir     = os.getcwd() + '/'
-#             self.case_prefix  = cfg_prefix
-#             self.site_prefix  = path_parts[-3]  # cat-id-str, {{id}} above.
-#             #-----------------------------------------------------
-#             # Read the NextGen RC file (json) to get forcing_dir
-#             # Assume spatial_dir is named similarly.
-#             #-----------------------------------------------------
-#             self.rc_dir  = self.ngen_dir + 'data/topoflow/rc_files/'
-#             self.rc_file = self.rc_dir + 'tf36_realization_config.json'
-#             rc_unit = open( self.rc_file, 'r')
-#             rc_data = json.load( rc_unit )
-#             rc_unit.close()
-#             ## formulation = rc_data["global"]["formulations"][0]
-#             forcing_dir = rc_data["global"]["forcing"]["path"]
-#             forcing_dir = self.ngen_dir + forcing_dir[2:]  # remove leading "./"
-#             ## time_data   = rc_data["time"]
-#             self.forcing_dir = forcing_dir
-#             self.spatial_dir = forcing_dir.replace('forcing', 'spatial')
-#             #---------------------------------------------------------
-#             # But now how do we get catchment & nexus geojson files?
-#             # Here they are just hard-coded.
-#             #---------------------------------------------------------
-#             self.catchment_json_file = 'catchment_data_HUC01.geojson'
-#             self.nexus_json_file     = 'nexus_data_HUC01.geojson'
-        else:
+            run_mode = 'multi-bmi'
             #----------------------------------------------------
             # 2024-09-10.  Read "_multi-bmi".cfg" file for info
             # Currently, this file only has "comp_status".
@@ -504,18 +399,19 @@ class multi_bmi( BMI_base.BMI_component ):
         if not(self.SILENT):
             print('   case_prefix    =', self.case_prefix)
             print('   site_prefix    =', self.site_prefix)
-            if (self.NEXTGEN):
+            #### if (self.NEXTGEN):
+            if (run_mode != 'multi-bmi'):
                 print('   ngen_dir       =', self.ngen_dir)
                 print('   spatial_dir    =', self.spatial_dir)
                 print('   forcing_dir    =', self.forcing_dir)
-                print('   catchment_file =', self.catchment_json_file)
-                print('   nexus_file     =', self.nexus_json_file)
-                            
+                print('   catchment_file =', self.catchment_file)
+                print('   nexus_file     =', self.nexus_file)
+
         #--------------------------------------------------
         # (11/4/13) Expand things like ".." and "~", then
         # check if need to add path separator at the end.
         #--------------------------------------------------
-        cfg_directory = os.path.expanduser( cfg_directory )
+        cfg_directory = os.path.expanduser( self.cfg_directory )
         ## cfg_directory = os.path.realpath( cfg_directory )  ### TOOK OUT 10/24//22
         # cfg_directory = cfg_directory + os.sep     #########
         if not(self.SILENT):
@@ -1202,8 +1098,8 @@ class multi_bmi( BMI_base.BMI_component ):
         p.NGEN_CSV    = self.NGEN_CSV  # Use NGEN CSV files?
         p.forcing_dir = self.forcing_dir
         p.spatial_dir = self.spatial_dir
-        p.catchment_json_file = self.catchment_json_file
-        p.nexus_json_file     = self.nexus_json_file  
+        p.catchment_file = self.catchment_file
+        p.nexus_file     = self.nexus_file  
         #----------------------------------------------------                
         p.prepare_all_inputs( site_prefix=self.site_prefix,
              case_prefix=self.case_prefix,
