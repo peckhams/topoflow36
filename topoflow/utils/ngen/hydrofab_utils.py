@@ -32,23 +32,27 @@ a specified catchment.  This version uses built-in json vs. geopandas.
 #        ~/.aws/credentials and  ~/.aws/config.
 #       
 #------------------------------------------------------------------------
-# 2024-08.  - Changes to get_dem() and get_bounding_box() to support
+# 2025-10-08  Added support for hydrofabric GPKG files.
+#             Wrote read_catchment_data_from_gpkg().
+#             Wrote get_crs_type(), get_divide_bounds().
+# 2024-08---  Changes to get_dem() and get_bounding_box() to support
 #             new hydrofabric JSON files (derived for geopkg files)
 #             that use Albers coordinates for catchment polygons
 #             instead of Geographic (WGS84) coordinates.
-#           - Added these keywords with defaults to get_dem()
+#             Added these keywords with defaults to get_dem()
 #              out_xres_sec, out_yres_sec, out_xres_m, out_yres_m
-#           - Changes to __init__() to pass files & directories.
-#           - Added get_gdal_version().
-#           - Added checks for GDAL and Hydrofabric versions.
-#           - albers2latlon -> albers2geo; latlon2albers -> geo2albers
-#           - Added many more comments.
-#
-# 2024-07.  Changes to get_dem() to support new location for the
-#           hydrofabric VRT DEM (a new AWS S3 bucket).
+#             Changes to __init__() to pass files & directories.
+#             Added get_gdal_version().
+#             Added checks for GDAL and Hydrofabric versions.
+#             albers2latlon -> albers2geo; latlon2albers -> geo2albers
+#             Added many more comments.
+# 2024-07--- Changes to get_dem() to support new location for the
+#            hydrofabric VRT DEM (a new AWS S3 bucket).
 #------------------------------------------------------------------------
 from osgeo import gdal, osr, ogr
 # import glob
+
+import geopandas as gpd
 
 # Note: This version uses json (built-in) instead of geopandas
 import json
@@ -60,21 +64,29 @@ import numpy as np
 #
 #  class catchment()
 #      __init__()
-#      read_catchment_data()
+#      read_catchment_data_from_json()   # uses json built-in vs. geopandas
+#      read_catchment_data_from_gpkg()
+#      get_crs_type()
+#      get_divide_bounds()
 #      get_bounding_box()
 #      get_raster_cellsize()   #####
 #      get_raster_bounds()     #####
 #      get_forcing_csv()   # also available as separate function below
 #      get_dem()
 #      get_outlet_coords()
-#      get_headwater_catchments()  # 11/30/22
 #      get_area_sqkm()
-#      ocean_outlet_count()
 #      print_info()
+#      ------------------------
+#      Next 2 aren't used yet
+#      ------------------------
+#      get_headwater_catchments()  # 11/30/22
+#      ocean_outlet_count()
 #
 #  get_hydrofab_dem_info()
 #
-#  ### These can be used to check GDAL transformations.
+#  --------------------------------------------------
+#  These can be used to check GDAL transformations.
+#  --------------------------------------------------
 #  Albers_XY_Sphere()  # (function)
 #  Albers_q_for_Ellipsoid()
 #  Albers_XY_Ellipsoid()
@@ -102,16 +114,15 @@ def get_gdal_version():
 class catchment:
     #--------------------------------------------------------------------
     def __init__(self, ngen_dir=None, forcing_dir=None,
-          spatial_dir=None, catchment_json_file=None,
-          nexus_json_file=None):
+          spatial_dir=None, catchment_file=None, nexus_file=None):
 
         if ((ngen_dir is None) or (spatial_dir is None) or
-            (forcing_dir is None) or (catchment_json_file is None) or
-            (nexus_json_file is None)):
+            (forcing_dir is None) or (catchment_file is None) or
+            (nexus_file is None)):
             print('ERROR: When creating an instance of the catchment')
             print('       class, you must set ngen_dir, spatial_dir')
-            print('       forcing_dir, catchment_json_file, and')
-            print('       nexus_json_file.')
+            print('       forcing_dir, catchment_file, and')
+            print('       nexus_file.')
             print()
 
 #         if (ngen_dir is None):
@@ -123,11 +134,11 @@ class catchment:
 #         if (forcing_dir is None):
 #             forcing_dir = ngen_dir + 'data/topoflow/forcing/huc01/'
 #         #-------------------------------------------------------------       
-#         if (catchment_json_file is None):
-#             catchment_json_file = 'catchment_data_HUC01.geojson'
+#         if (catchment_file is None):
+#             catchment_file = 'catchment_data_HUC01.geojson'
 #         #------------------------------------------------------------- 
-#         if (nexus_json_file is None):
-#             nexus_json_file     = 'nexus_data_HUC01.geojson'
+#         if (nexus_file is None):
+#             nexus_file     = 'nexus_data_HUC01.geojson'
   
         #----------------------------------------        
         # Add path separator to end, if missing  
@@ -148,17 +159,30 @@ class catchment:
 #         if not(forcing_dir.startswith(ngen_dir)):
 #             forcing_dir = ngen_dir + forcing_dir
         #-----------------------------------------------                        
-        self.ngen_dir            = ngen_dir
-        self.spatial_dir         = spatial_dir
-        self.forcing_dir         = forcing_dir
-        self.catchment_json_file = catchment_json_file
-        self.nexus_json_file     = nexus_json_file
-        #-----------------------------------------------
-        self.read_catchment_data()
-    
+        self.ngen_dir       = ngen_dir
+        self.spatial_dir    = spatial_dir
+        self.forcing_dir    = forcing_dir
+        self.catchment_file = catchment_file
+        self.nexus_file     = nexus_file
+
+        #----------------------------------        
+        # Read the catchment & nexus data
+        #----------------------------------
+        if (catchment_file.endswith('.json')):
+            self.file_type = 'json'
+            self.read_catchment_data_from_json()
+        if (catchment_file.endswith('.gpkg')):
+            self.file_type = 'gpkg'
+            self.read_catchment_data_from_gpkg()
+
+        #-------------------------------------------    
+        # Get the crs_type (Geographic or Albers?)
+        #-------------------------------------------
+        self.get_crs_type()
+
     #   __init__()    
     #--------------------------------------------------------------------
-    def read_catchment_data(self):
+    def read_catchment_data_from_json(self):
 
         #--------------------------------------------------------------     
         # Note: This version reads the GeoJSON files directly without
@@ -166,20 +190,180 @@ class catchment:
         #       into a "simulated dataframe".
         #--------------------------------------------------------------
         print('Reading catchment info files...')
-        cat_path = self.spatial_dir + self.catchment_json_file
-        nex_path = self.spatial_dir + self.nexus_json_file  
+#         cat_path = self.spatial_dir + self.catchment_file
+#         nex_path = self.spatial_dir + self.nexus_file 
+        cat_path = self.spatial_dir + self.catchment_file
+        nex_path = self.spatial_dir + self.nexus_file  
         cat_unit = open( cat_path, 'r')
         nex_unit = open( nex_path, 'r')
         
-        self.catchment_data = json.load( cat_unit )
-        self.nexus_data     = json.load( nex_unit )
+        self.catchment_json = json.load( cat_unit )
+        self.nexus_json     = json.load( nex_unit )
         cat_unit.close()
         nex_unit.close()
-        nc = len(self.catchment_data['features'])
+        nc = len(self.catchment_json['features'])
         print('Read info for', nc, 'catchments.')
         print()
                        
-    #   read_catchment_data()
+    #   read_catchment_data_from_json()
+    #--------------------------------------------------------------------
+#     % conda activate geopandas
+#     % python
+#     >>> import os
+#     >>> cwd = os.getcwd()
+#     >>> print(cwd)
+#     /Users/peckhams/NextGen/ngen-data/topoflow/gage-01011000_2012-06/config
+#     >>> import geopandas as gpd
+#     >>> pkg_path = cwd + '/gage-01011000_subset.gpkg'
+#     >>> print(pkg_path)
+#     /Users/peckhams/NextGen/ngen-data/topoflow/gage-01011000_2012-06/config/gage-01011000_subset.gpkg
+#     >>> gdf = gpd.read_file(pkg_path)
+#     /Applications/anaconda3/envs/geopandas/lib/python3.13/site-packages/pyogrio/geopandas.py:265:
+#     UserWarning: More than one layer found in 'gage-01011000_subset.gpkg': 'flowpaths' (default),
+#     'divides', 'lakes', 'hydrolocations', 'nexus', 'pois', 'flowpath-attributes',
+#     'flowpath-attributes-ml', 'network', 'divide-attributes'.
+#     Specify layer parameter to avoid this warning.      
+    #--------------------------------------------------------------------
+    def read_catchment_data_from_gpkg(self):
+
+        #-------------------------------------------------------------
+        # Note: "catchments/divides" & "nexus" are in the same file.
+        #-------------------------------------------------------------
+        print('Reading catchment info files...')
+        cat_path = self.spatial_dir + self.catchment_file
+        nex_path = self.spatial_dir + self.nexus_file
+
+        self.catchment_gdf = gpd.read_file(cat_path, layer='divides')
+        self.nexus_gdf     = gpd.read_file(nex_path, layer='nexus')
+
+#         divide_ids = self.catchment_gdf['divide_id']
+#         to_ids     = self.catchment_gdf['toid']
+#         areas_sqkm = self.catchment_gdf['tot_drainage_areasqkm']
+#         geometries = self.catchment_gdf['geometry']
+                       
+        #--------------------------
+        # Open files: GDAL option
+        #--------------------------        
+#         cat_ds = gdal.OpenEx(cat_path, gdal.OF_VECTOR)
+#         nex_ds = gdal.OpenEx(nex_path, gdal.OF_VECTOR)
+
+        #---------------------------
+        # Close files: GDAL option
+        #---------------------------
+#         cat_ds = None  # (close dataset)
+#         nex_ds = None  # (close dataset)
+
+        #----------------
+        # Print message
+        #----------------
+        divide_ids = self.catchment_gdf['divide_id']
+        nc = len(divide_ids)
+        print('Read info for', nc, 'catchments.')
+        print()
+
+    #   read_catchment_data_from_gpkg()
+    #--------------------------------------------------------------------
+    def get_crs_type(self):
+
+        #----------------------------------------------------        
+        # Get name of CRS used for catchment polygon coords
+        # Also see Notes in:  get_outlet_coords().
+        #---------------------------------------------------- 
+        # Not used before 2024-08.  JSON examples include:
+        # "crs": { "type": "name", "properties": { "name":
+        #      "urn:ogc:def:crs:OGC:1.3:CRS84" } },
+        #
+        # "crs": { "type": "name", "properties": { "name":
+        #      "urn:ogc:def:crs:EPSG::5070" } },
+        #----------------------------------------------------   
+        if (self.file_type == 'json'):
+            #-------------------------
+            # Get crs_type from json
+            #-------------------------
+            crs_name = self.catchment_json['crs']['properties']['name']
+            if (crs_name.endswith('CRS84')):
+                crs_type = 'Geographic'
+            elif (crs_name.endswith('5070')):
+                crs_type = 'Albers'  ## 'Albers Equal Area Conic'
+            else:
+                crs_type = 'Unknown'        
+        elif (self.file_type == 'gpkg'):
+            #-------------------------
+            # Get crs_type from gpkg
+            #-------------------------
+            crs = self.catchment_gdf.crs
+            crs_name = crs.name
+            #------------------------------------------------------
+            # Note: This crs object has many attributes, such as:
+            #       name, srs, is_geographic, is_projected, etc.
+            #------------------------------------------------------
+            if (crs.is_geographic):
+                crs_type = 'Geographic'            
+            elif (crs_name == 'NAD83 / Conus Albers'):
+            ### if (crs.srs == 'EPSG:5070')
+                crs_type = 'Albers'  ## 'Albers Equal Area Conic'
+            else:
+                crs_type = 'Unknown'
+
+        self.crs_type = crs_type
+        self.crs_name = crs_name
+
+    #   get_crs_type()
+    #--------------------------------------------------------------------
+    def get_divide_bounds(self, cat_id_str):
+    
+        if (self.file_type == 'json'):
+            df = self.catchment_json['features']  # returns list of dictionaries
+    
+            #-----------------------------------------------         
+            # Make sure cat_id occurs in this GeoJSON file
+            #-----------------------------------------------
+            try:
+                # Original GeoJSON structure (used for AGU 2022)
+                hydrofabric_version = '1'       
+                record = next((item for item in df if item["id"] == cat_id_str), False)
+            except:
+                # 2024-08.  New GeoJSON structure (from Lauren)
+                hydrofabric_version = '2'
+                record = next((item for item in df if item["properties"]["divide_id"] == cat_id_str), False)
+            if not(record):
+                print('SORRY, cat_id not found:', cat_id_str)
+                print('Returning.')
+                print()
+                return -1
+    
+            rgc   = record['geometry']['coordinates'][0]
+            pairs = np.array( rgc, dtype='float64')
+            xcoords = pairs[:,0]
+            ycoords = pairs[:,1]        
+            xmin = xcoords.min()
+            ymin = ycoords.min()
+            xmax = xcoords.max()
+            ymax = ycoords.max()
+               
+        elif (self.file_type == 'gpkg'):
+            #----------------------------------------------
+            # Bounds of all divides in the gpkg file_type
+            #----------------------------------------------
+            ## xmin, ymin, xmax, ymax = self.catchment_gdf.total_bounds
+
+            #---------------------------------------------            
+            # Bounds of a particular catchment or divide
+            # What if cat_id_str is not in divide_ids?  ############
+            #---------------------------------------------
+            divide_ids = list( self.catchment_gdf['divide_id'] )
+            cat_index  = divide_ids.index(cat_id_str)
+            cat_geom   = catchment_gdf.loc[cat_index, 'geometry']
+            xmin, ymin, xmax, ymax = cat_geom.bounds
+
+#         self.xmin = xmin
+#         self.xmax = xmax
+#         self.ymin = ymin
+#         self.ymax = ymax
+
+        return xmin, ymin, xmax, ymax
+    
+    #   get_divide_bounds() 
     #--------------------------------------------------------------------
     def get_bounding_box(self, cat_id_str, buffer_sec=0, REPORT=False):
 
@@ -189,58 +373,14 @@ class catchment:
         #         Polygon coordinates are stored in:
         #            catchment-data.geojson (POLYGON type geometry)
         #         Coordinates can be given as Geographic or Albers.
-        #--------------------------------------------------------------   
-        df = self.catchment_data['features']  # returns list of dictionaries
+        #--------------------------------------------------------------
+        xmin, ymin, xmax, ymax = self.get_divide_bounds(cat_id_str)
 
-        #----------------------------------------------------        
-        # Get name of CRS used for catchment polygon coords
-        # Also see Notes in:  get_outlet_coords().
-        #---------------------------------------------------- 
-        # Not used before 2024-08.  Examples include:
-        # "crs": { "type": "name", "properties": { "name":
-        #      "urn:ogc:def:crs:OGC:1.3:CRS84" } },
-        #
-        # "crs": { "type": "name", "properties": { "name":
-        #      "urn:ogc:def:crs:EPSG::5070" } },
-        #----------------------------------------------------
-        crs_name = self.catchment_data['crs']['properties']['name']
-        if (crs_name.endswith('CRS84')):
-            crs_type = 'Geographic'
-        elif (crs_name.endswith('5070')):
-            crs_type = 'Albers'  ## 'Albers Equal Area Conic'
-        else:
-            crs_type = 'Unknown'
-
-        #-----------------------------------------------         
-        # Make sure cat_id occurs in this GeoJSON file
-        #-----------------------------------------------
-        try:
-            # Original GeoJSON structure (used for AGU 2022)
-            hydrofabric_version = '1'       
-            record = next((item for item in df if item["id"] == cat_id_str), False)
-        except:
-            # 2024-08.  New GeoJSON structure (from Lauren)
-            hydrofabric_version = '2'
-            record = next((item for item in df if item["properties"]["divide_id"] == cat_id_str), False)
-        if not(record):
-            print('SORRY, cat_id not found:', cat_id_str)
-            print('Returning.')
-            print()
-            return -1
-
-        rgc = record['geometry']['coordinates'][0]
-        pairs   = np.array( rgc, dtype='float64')
-        xcoords = pairs[:,0]
-        ycoords = pairs[:,1]
-        xmin    = xcoords.min()
-        ymin    = ycoords.min()
-        xmax    = xcoords.max()
-        ymax    = ycoords.max()
         #----------------------------------------------
         # Before 2024-08-29, assumed that coordinates
         # were Geographic (WGS84) vs. Albers.
         #----------------------------------------------                
-        if (crs_type == 'Geographic'):
+        if (self.crs_type == 'Geographic'):
             #--------------------------------------------
             # Appears to be Geographic coordinates but
             # check if all values are in valid range.
@@ -258,7 +398,7 @@ class catchment:
             self.maxlon = xmax
             self.maxlat = ymax
             bounds = [xmin, ymin, xmax, ymax]
-        elif (crs_type == 'Albers'):
+        elif (self.crs_type == 'Albers'):
             #-----------------------------------
             # Appears to be Albers coordinates
             #-----------------------------------
@@ -341,7 +481,7 @@ class catchment:
             maxlat = np.max( lats )
             bounds = [minlon, minlat, maxlon, maxlat]
         else:
-            print('SORRY, Unknown crs_type:', crs_type)
+            print('SORRY, Unknown crs_type:', self.crs_type)
             print('Returning.')
             print()
             return -1 
@@ -1058,62 +1198,147 @@ class catchment:
         #            catchment-data.geojson, e.g. 'nex-26' for cat-29
         #         Then, get coords from 'geometry' (POINT type)   
         #--------------------------------------------------------------
-        crs_name = self.catchment_data['crs']['properties']['name']
-        
-        df1 = self.catchment_data['features']    # list of dict 
-        record1 = next((item for item in df1 if item["id"] == cat_id_str), False)
-        if not(record1):
-            print('SORRY, cat_id not found:', cat_id_str)
-            print('Returning.')
-            print()
-            return -1
-        nexus_id_str = record1['properties']['toid']
-        self.nexus_id_str = nexus_id_str
+        if (self.file_type == 'json'):
+            df1 = self.catchment_json['features']    # list of dict 
+            record1 = next((item for item in df1 if item["id"] == cat_id_str), False)
+            if not(record1):
+                print('SORRY, cat_id not found:', cat_id_str)
+                print('Returning.')
+                print()
+                return -1
+            nexus_id_str = record1['properties']['toid']
+            self.nexus_id_str = nexus_id_str
+    
+            df2 = self.nexus_json['features']        # list of dict
+            record2 = next((item for item in df2 if item["id"] == nexus_id_str), False)
+            if not(record2):
+                print('SORRY, nexus_id not found:', nexus_id_str)
+                print('Returning.')
+                print()
+                return -1
+    
+            nexus_type = record2['properties']['nexus_type']
+            if (nexus_type != 'junction'):
+                print( 'WARNING: nexus_type =', nexus_type )
+    
+            rgc = record2['geometry']['coordinates']
+            coords = np.array( rgc , dtype='float64' )
+            self.outlet_x = coords[0]
+            self.outlet_y = coords[1]
+    
+        elif (self.file_type == 'gpkg'):
+            nexus_id_str = cat_id_str.replace('cat', 'nex')
+            self.nexus_id_str = nexus_id_str
+            nexus_ids  = list(self.nexus_gdf['id'])
+            geometries = self.nexus_gdf['geometry']
+            try:
+                nex_index = nexus_ids.index(nexus_id_str)
+            except:
+                print('SORRY, nexus_id not found:', nexus_id_str)
+                print('Returning.')
+                print()
+                return -1            
+            nex_geom  = geometries[nex_index]
+            nex_geom  = nexus_gdf.loc[nex_index, 'geometry']
+            self.outlet_x = nex_geom.x
+            self.outlet_y = nex_geom.y       
 
-        df2 = self.nexus_data['features']        # list of dict
-        record2 = next((item for item in df2 if item["id"] == nexus_id_str), False)
-        if not(record2):
-            print('SORRY, nexus_id not found:', nexus_id_str)
-            print('Returning.')
-            print()
-            return -1
-
-        nexus_type = record2['properties']['nexus_type']
-        if (nexus_type != 'junction'):
-            print( 'WARNING: nexus_type =', nexus_type )
-
-        rgc = record2['geometry']['coordinates']
-        coords = np.array( rgc , dtype='float64' )
-        self.outlet_x = coords[0]
-        self.outlet_y = coords[1]
-
-        if (crs_name.endswith('CRS84')):
+        if (self.crs_type == 'Geographic'):
             self.outlet_lon = self.outlet_x
             self.outlet_lat = self.outlet_y
-            crs_type = 'Geographic'
-        elif (crs_name.endswith('5070')):
-            crs_type = 'Albers Equal Area Conic'
-        else:
-            crs_type = 'Unknown'
-
+        elif (self.crs_type == 'Albers'):
+            #-------------------------------------------------------
+            # NOTE!  See earlier notes regarding issues with order
+            #        of arguments in GDAL's TransformPoint comand
+            #-------------------------------------------------------
+            albers2geo = osr.CoordinateTransformation( self.albers, self.wgs84 )
+            latlon = albers2geo.TransformPoint( self.outlet_x, self.outlet_y )
+            self.outlet_lon = latlon[1]
+            self.outlet_lat = latlon[0]
         if (REPORT):
             print('Outlet coords for: ' + cat_id_str)
-            print('  x, y =', self.outlet_x, ',', self.outlet_y )
-            print('  crs_name =', crs_name )
-            print('  crs_type =', crs_type)
+            print('  x, y     =', self.outlet_x, ',', self.outlet_y )
+            print('  lon, lat =', self.outlet_lon, ',', self.outlet_lat)
+            print('  crs_name =', self.crs_name )
+            print('  crs_type =', self.crs_type)
             print()
-            
-        return coords
+        
+        return (self.outlet_x, self.outlet_y)    
+        ### return coords
         
     #   get_outlet_coords()
+
+    #--------------------------------------------------------------------    
+    def get_area_sqkm(self, cat_id_str, REPORT=False):    
+
+        if (self.file_type == 'json'):
+            crs_name = self.catchment_json['crs']['properties']['name']
+            df = self.catchment_json['features']
+            record = next((item for item in df if item["id"] == cat_id_str), False)
+            if not(record):
+                print('SORRY, cat_id not found:', cat_id_str)
+                print('Returning.')
+                print()
+                return -1       
+            self.area_sqkm = np.float64( record['properties']['area_sqkm'] )
+        elif (self.file_type == 'gpkg'):
+            cat_areas = list( self.catchment_gdf['tot_drainage_areasqkm'] )
+            try:
+                cat_index = cat_areas.index(cat_id_str)
+            except:
+                print('SORRY, cat_id not found:', cat_id_str)
+                print('Returning.')
+                print()
+                return -1   
+            self.area_sqkm = cat_areas[ cat_index ]
+           
+        if (REPORT):
+            print('Area for: ' + cat_id_str + ' [km2] =')
+            print('  ', self.area_sqkm )
+            print('  crs_name       =', self.crs_name )
+            print('  crs_type       =', self.crs_type )
+            print()
+                       
+        return self.area_sqkm
+             
+    #   get_area_sqkm()
+    #--------------------------------------------------------------------     
+    def print_info(self, cat_id_str='cat-29'):
+   
+        print('Extracting catchment info...') 
+        area_sqkm = self.get_area_sqkm( cat_id_str )
+        if (area_sqkm == -1):
+            print('Catchment not found:', cat_id_str)
+            return
+
+        outlet_coords = self.get_outlet_coords( cat_id_str )
+        bounds        = self.get_bounding_box( cat_id_str )
+         
+        print('Info for catchment: ' + cat_id_str)
+        print('   catchment ID   = ', cat_id_str )
+        print('   outlet lon,lat = ', outlet_coords )
+        print('   area_sqkm =', area_sqkm, '[km2]' )
+        print('   minlon    =', bounds[0] )
+        print('   minlat    =', bounds[1] )
+        print('   maxlon    =', bounds[2] )
+        print('   maxlat    =', bounds[3] )
+        print('   nexus_ID  =', self.nexus_id_str )
+        print()
+        
+    #   print_info()
     #--------------------------------------------------------------------
     def get_headwater_catchments(self, REPORT=False):
+
+        #-------------------------------------------------------------
+        # Note: This only works if self.file_type == 'json' so far.
+        #       But this isn't used anywhere.
+        #-------------------------------------------------------------
 
         #----------------------    
         # Get list of "toids"
         #----------------------
         # features -> properties -> toid
-        df = self.catchment_data['features']    # list of dict
+        df = self.catchment_json['features']    # list of dict
         toid_num_list = list() 
         for record in df:
             toid_str = record['properties']['toid']
@@ -1156,41 +1381,15 @@ class catchment:
         return head_ids
         
     #   get_headwater_catchments()
-    #--------------------------------------------------------------------    
-    def get_area_sqkm(self, cat_id_str, REPORT=False):    
-
-        crs_name = self.catchment_data['crs']['properties']['name']
-        df = self.catchment_data['features']
-        record = next((item for item in df if item["id"] == cat_id_str), False)
-        if not(record):
-            print('SORRY, cat_id not found:', cat_id_str)
-            print('Returning.')
-            print()
-            return -1       
-
-        self.area_sqkm = np.float64( record['properties']['area_sqkm'] )
-
-        if (crs_name.endswith('CRS84')):
-            crs_type = 'Geographic'
-        elif (crs_name.endswith('5070')):
-            crs_type = 'Albers Equal Area Conic'
-        else:
-            crs_type = 'Unknown'
-            
-        if (REPORT):
-            print('Area for: ' + cat_id_str + ' [km2] =')
-            print('  ', self.area_sqkm )
-            print('  crs_name       =', crs_name )
-            print('  crs_type       =', crs_type )
-            print()
-                       
-        return self.area_sqkm
-             
-    #   get_area_sqkm()
     #--------------------------------------------------------------------
     def ocean_outlet_count(self, REPORT=False):
  
-        df    = self.catchment_data['features']     
+        #-------------------------------------------------------------
+        # Note: This only works if self.file_type == 'json' so far.
+        #       But this isn't used anywhere.
+        #-------------------------------------------------------------
+        
+        df    = self.catchment_json['features']
         recs  = [item for item in df if item['properties']['toid'] == 'nex-0']
         count = len(recs)
         self.ocean_outlet_count = count
@@ -1200,30 +1399,6 @@ class catchment:
         return count
 
     #   ocean_outlet_count()
-    #--------------------------------------------------------------------     
-    def print_info(self, cat_id_str='cat-29'):
-   
-        print('Extracting catchment info...') 
-        area_sqkm = self.get_area_sqkm( cat_id_str )
-        if (area_sqkm == -1):
-            print('Catchment not found:', cat_id_str)
-            return
-
-        outlet_coords = self.get_outlet_coords( cat_id_str )
-        bounds        = self.get_bounding_box( cat_id_str )
-         
-        print('Info for catchment: ' + cat_id_str)
-        print('   catchment ID   = ', cat_id_str )
-        print('   outlet lon,lat = ', outlet_coords )
-        print('   area_sqkm =', area_sqkm, '[km2]' )
-        print('   minlon    =', bounds[0] )
-        print('   minlat    =', bounds[1] )
-        print('   maxlon    =', bounds[2] )
-        print('   maxlat    =', bounds[3] )
-        print('   nexus_ID  =', self.nexus_id_str )
-        print()
-        
-    #   print_info()
     #--------------------------------------------------------------------
     
 #---------------------------------------------------------------------
