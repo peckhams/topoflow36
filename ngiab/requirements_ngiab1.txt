@@ -13,7 +13,7 @@ cftime==1.6.4
 cfunits==3.3.7
 contourpy==1.2.1
 cycler==0.11.0
-fonttools==4.55.3
+fonttools==4.43.0
 ## GDAL==3.4.3
 imageio==2.37.0
 imageio-ffmpeg==0.6.0
